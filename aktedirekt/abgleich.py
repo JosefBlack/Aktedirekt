@@ -12,7 +12,7 @@ und liest zweitens zu jedem Fall den Sachstand.
 from __future__ import annotations
 
 import os
-from datetime import date, datetime
+from datetime import date
 
 from aktedirekt.aufnahme import Aufnahme, kurzrubrum
 from aktedirekt.domain import Einwilligung, Fall, Herkunft, Sachstand
@@ -111,10 +111,11 @@ def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerlis
 
 
 if __name__ == "__main__":
+    from aktedirekt import zeit
     ergebnis = alles_abgleichen(
         Speicher(os.environ.get("AKTEDIREKT_DATEN", ".aktedirekt-daten")),
         JurNodes(os.environ["AKTEDIREKT_JURNODES_URL"], os.environ["AKTEDIREKT_JURNODES_BENUTZER"],
                  os.environ["AKTEDIREKT_JURNODES_SCHLUESSEL"]),
-        Partnerliste.laden(os.environ.get("AKTEDIREKT_PARTNER")), Stufen.laden(), datetime.now().date())
+        Partnerliste.laden(os.environ.get("AKTEDIREKT_PARTNER")), Stufen.laden(), zeit.jetzt().date())
     # Nur Zahlen: Dieses Protokoll darf jeder lesen, der den Betrieb betreut.
     print(", ".join(f"{name}: {zahl}" for name, zahl in ergebnis.items()))

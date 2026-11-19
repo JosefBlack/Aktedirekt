@@ -32,7 +32,8 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (92 Prüfungen, ohne Netz):
+Vorhanden und geprüft (143 Prüfungen, ohne Netz; was eine Ablage braucht,
+läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
 |---|---|
@@ -43,6 +44,9 @@ Vorhanden und geprüft (92 Prüfungen, ohne Netz):
 | `aktedirekt/aufnahme.py` | welche Angaben es gibt und wann sie gelten |
 | `aktedirekt/dateien.py` | welche Dateien angenommen werden (JPG, PNG, HEIC, PDF bis 15 MB) |
 | `aktedirekt/speicher.py` | Ablage für Entwicklung und Vorführung (SQLite, Ordner) |
+| `aktedirekt/speicher_aws.py` | Ablage in AWS (DynamoDB, S3) mit denselben Aufrufen |
+| `aktedirekt/lambda_handler.py` | Einstieg für AWS Lambda: Anwendung und zeitgesteuerter Abgleich |
+| `infra/` | Vorlage für das AWS-Konto der Kanzlei und Anleitung ([infra/README.md](infra/README.md)) |
 | `aktedirekt/texte/` | Vollmacht, Datenschutz, Einwilligung – **Entwürfe, von der Kanzlei zu ersetzen** |
 | `aktedirekt/domain.py` | Fall, Partner, Einwilligung |
 | `aktedirekt/sicht.py` | die Sicht eines Partners auf einen Fall |
@@ -50,15 +54,13 @@ Vorhanden und geprüft (92 Prüfungen, ohne Netz):
 | `aktedirekt/jurnodes.py` | Lead anlegen und lesen, Aktenstatus, Akteneigenschaft |
 | `aktedirekt/abgleich.py` | Abgleich mit jur|nodes: Leads nachholen, Sachstand lesen (`python -m aktedirekt.abgleich`) |
 
-**Nur mit Testdaten benutzen.** Vor echten Mandaten fehlen: Betrieb in AWS mit
-verschlüsselter Ablage, Anmeldung mit Einmalcode für Mandanten (bisher merkt
-sich nur das Gerät den Zugang), zweiter Faktor und eigene Anmeldungen je
-Mitarbeiter für Partner, Begrenzung der Aufrufe, Prüfung der Dateien auf
-Schadsoftware, Übergabe von Angaben und Dateien an jur|nodes (bisher nur
-Kurzrubrum und Vermittler), Benachrichtigung des Mandanten, zeitgesteuerter
-Abgleich, fehlende Unterlagen aus jur|nodes. Der jur|nodes-Client ist nach der Beschreibung des Herstellers
-(Fassung 1.0.2) gebaut und **gegen den Server der Kanzlei noch nicht
-gelaufen**.
+**Nur mit Testdaten benutzen.** Die Vorlage für AWS ist geprüft, aber dort
+noch nicht gelaufen; was vor echten Mandaten fehlt, steht in
+[infra/README.md](infra/README.md). Außerdem offen: Übergabe von Angaben und
+Dateien an jur|nodes (bisher nur Kurzrubrum und Vermittler), Benachrichtigung
+des Mandanten, fehlende Unterlagen aus jur|nodes. Der jur|nodes-Client ist nach
+der Beschreibung des Herstellers (Fassung 1.0.2) gebaut und **gegen den Server
+der Kanzlei noch nicht gelaufen**.
 
 ## Ausprobieren
 

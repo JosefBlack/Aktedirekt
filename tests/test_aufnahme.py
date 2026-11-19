@@ -12,6 +12,7 @@ from aktedirekt.jurnodes import JurNodes
 from aktedirekt.partner import PartnerKonto, Partnerliste
 from aktedirekt.speicher import Speicher
 from aktedirekt.web import app_bauen
+from tests.conftest import hochladen
 
 HEUTE = date(2026, 11, 19)
 JETZT = datetime(2026, 11, 19, 10, 0)
@@ -93,18 +94,18 @@ def test_dateiart_nach_inhalt():
 # ---- Ablauf über die Schnittstelle --------------------------------------
 
 @pytest.fixture
-def umgebung(tmp_path):
+def umgebung(ablage):
     leads = []
 
     def jurnodes_antwort(anfrage: httpx.Request) -> httpx.Response:
         leads.append(json.loads(anfrage.content))
         return httpx.Response(200, json={"identifier": "L-1", "status": "created"})
 
-    speicher = Speicher(tmp_path)
+    speicher = ablage.speicher
     jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim",
                         transport=httpx.MockTransport(jurnodes_antwort))
     app = app_bauen(speicher, partner=PARTNER, jurnodes=jurnodes, jetzt=lambda: JETZT)
-    return TestClient(app), speicher, leads, tmp_path
+    return TestClient(app), speicher, leads, ablage
 
 
 def beginnen(client, einladung=""):
@@ -125,18 +126,20 @@ def test_ohne_zugang_keine_auskunft(umgebung):
 
 
 def test_zugang_steht_nicht_im_klartext_in_der_datenbank(umgebung):
-    client, _, _, ordner = umgebung
+    client, _, _, ablage = umgebung
     _, zugang = beginnen(client)
-    assert zugang.encode() not in (ordner / "aktedirekt.sqlite3").read_bytes()
+    assert not ablage.enthaelt(zugang)
 
 
 def test_ganzer_ablauf_mit_werkstatt(umgebung):
-    client, speicher, leads, ordner = umgebung
+    client, speicher, leads, ablage = umgebung
     kopf, zugang = beginnen(client, "test-werkstatt")
     assert client.get("/api/aufnahme", headers=kopf).json()["partner"] == "Autohaus Beispiel"
     ausfuellen(client, kopf)
-    antwort = client.post("/api/aufnahme/dateien?name=schaden.jpg", content=b"\xff\xd8\xff\xe0" + b"x" * 50, headers=kopf)
-    assert antwort.status_code == 200
+    foto = b"\xff\xd8\xff\xe0" + b"x" * 50
+    antwort = hochladen(client, kopf, ablage, "schaden.jpg", foto)
+    assert antwort.status_code == 200 and antwort.json()["name"] == "schaden.jpg"
+    assert speicher.datei_inhalt(speicher.laden(zugang).kennung, antwort.json()["kennung"]) == foto
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={
         "vollmacht": True, "datenschutz": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT})
     assert antwort.status_code == 200 and antwort.json()["abgeschlossen"] is True
@@ -149,12 +152,13 @@ def test_ganzer_ablauf_mit_werkstatt(umgebung):
     nachweis = speicher.nachweis(aufnahme.kennung)
     assert nachweis["zeitpunkt"] == JETZT.isoformat() and len(nachweis["vollmacht_sha256"]) == 64
     assert nachweis["einwilligung_partner_sha256"]
-    assert (ordner / "dateien" / f"{aufnahme.kennung}-unterschrift.png").read_bytes() == PNG
+    assert speicher.unterschrift(aufnahme.kennung) == PNG
 
     # Danach ist nichts mehr zu ändern, aber nachzureichen.
     assert client.put("/api/aufnahme/schritt/unfall", json=ANGABEN["unfall"], headers=kopf).status_code == 409
     assert client.post("/api/aufnahme/abschluss", headers=kopf, json={}).status_code == 409
-    assert client.post("/api/aufnahme/dateien?name=g.pdf", content=b"%PDF-1.7 x", headers=kopf).status_code == 200
+    assert hochladen(client, kopf, ablage, "g.pdf", b"%PDF-1.7 x").status_code == 200
+    assert sorted(d["name"] for d in client.get("/api/aufnahme", headers=kopf).json()["dateien"]) == ["g.pdf", "schaden.jpg"]
 
 
 def test_ohne_partner_gibt_es_keine_einwilligung(umgebung):
@@ -187,35 +191,55 @@ def test_fehlerhafter_schritt_wird_nicht_gespeichert(umgebung):
 
 
 def test_fremde_datei_laesst_sich_nicht_entfernen(umgebung):
-    client = umgebung[0]
+    client, ablage = umgebung[0], umgebung[3]
     kopf_a, _ = beginnen(client)
     kopf_b, _ = beginnen(client)
-    datei = client.post("/api/aufnahme/dateien?name=a.jpg", content=b"\xff\xd8\xff\xe0x", headers=kopf_a).json()
+    datei = hochladen(client, kopf_a, ablage, "a.jpg", b"\xff\xd8\xff\xe0x").json()
     assert client.delete(f"/api/aufnahme/dateien/{datei['kennung']}", headers=kopf_b).status_code == 404
     assert client.get("/api/aufnahme", headers=kopf_b).json()["dateien"] == []
     assert client.delete(f"/api/aufnahme/dateien/{datei['kennung']}", headers=kopf_a).status_code == 204
 
 
 def test_programm_als_foto_wird_abgewiesen(umgebung):
-    client = umgebung[0]
+    client, ablage = umgebung[0], umgebung[3]
     kopf, _ = beginnen(client)
-    assert client.post("/api/aufnahme/dateien?name=foto.jpg", content=b"MZ\x90\x00prog", headers=kopf).status_code == 415
+    assert hochladen(client, kopf, ablage, "foto.jpg", b"MZ\x90\x00prog").status_code == 415
+    # Verworfen heißt weg: Ein zweiter Versuch findet nichts mehr vor.
+    assert client.get("/api/aufnahme", headers=kopf).json()["dateien"] == []
 
 
 def test_dateiname_kann_keinen_pfad_bilden(umgebung):
-    client, _, _, ordner = umgebung
+    client, ablage = umgebung[0], umgebung[3]
     kopf, _ = beginnen(client)
-    antwort = client.post("/api/aufnahme/dateien", params={"name": "../../etc/passwd"},
-                          content=b"\xff\xd8\xff\xe0x", headers=kopf).json()
-    assert "/" not in antwort["name"]
-    assert sorted(p.name for p in (ordner / "dateien").iterdir()) == [f"{antwort['kennung']}.jpg"]
+    antwort = hochladen(client, kopf, ablage, "../../etc/passwd", b"\xff\xd8\xff\xe0x").json()
+    assert antwort["name"] == "....etcpasswd"
 
 
-def test_zu_grosse_datei(umgebung, monkeypatch):
-    client = umgebung[0]
+def test_zu_grosse_datei_wird_schon_bei_der_ankuendigung_abgewiesen(umgebung, monkeypatch):
+    client, ablage = umgebung[0], umgebung[3]
     monkeypatch.setattr("aktedirekt.dateien.MAX_BYTES", 100)
     kopf, _ = beginnen(client)
-    assert client.post("/api/aufnahme/dateien?name=a.jpg", content=b"\xff\xd8\xff" + b"x" * 200, headers=kopf).status_code == 413
+    assert hochladen(client, kopf, ablage, "a.jpg", b"\xff\xd8\xff" + b"x" * 200).status_code == 413
+    for unsinn in (0, -5, "viel", True, None):
+        assert client.post("/api/aufnahme/dateien", headers=kopf,
+                           json={"name": "a.jpg", "groesse": unsinn}).status_code == 400
+
+
+def test_fremde_datei_laesst_sich_nicht_uebernehmen(umgebung):
+    client, ablage = umgebung[0], umgebung[3]
+    kopf_a, _ = beginnen(client)
+    kopf_b, _ = beginnen(client)
+    ziel = client.post("/api/aufnahme/dateien", headers=kopf_a, json={"name": "a.jpg", "groesse": 5}).json()
+    ablage.abliefern(client, kopf_a, ziel["adresse"], b"\xff\xd8\xff\xe0x")
+    assert client.post(f"/api/aufnahme/dateien/{ziel['kennung']}/fertig", headers=kopf_b).status_code == 404
+    assert client.post(f"/api/aufnahme/dateien/{ziel['kennung']}/fertig", headers=kopf_a).status_code == 200
+
+
+def test_angekuendigt_aber_nicht_abgeliefert(umgebung):
+    client = umgebung[0]
+    kopf, _ = beginnen(client)
+    ziel = client.post("/api/aufnahme/dateien", headers=kopf, json={"name": "a.jpg", "groesse": 5}).json()
+    assert client.post(f"/api/aufnahme/dateien/{ziel['kennung']}/fertig", headers=kopf).status_code == 404
 
 
 def test_jurnodes_ausfall_verliert_die_aufnahme_nicht(tmp_path):
@@ -237,6 +261,10 @@ def test_seite_und_kopfzeilen(umgebung):
     client = umgebung[0]
     antwort = client.get("/")
     assert antwort.status_code == 200 and "Unfall melden" in antwort.text
-    assert "default-src 'self'" in antwort.headers["content-security-policy"]
+    richtlinie = antwort.headers["content-security-policy"]
+    assert "default-src 'self'" in richtlinie
+    # Nur in AWS darf der Browser noch mit einer zweiten Stelle sprechen: dem Dateispeicher der Kanzlei.
+    erlaubt = "connect-src 'self' https://aktedirekt-test-dateien.s3.eu-central-1.amazonaws.com;"
+    assert (erlaubt in richtlinie) == (umgebung[3].art == "aws") and ("connect-src 'self';" in richtlinie) == (umgebung[3].art == "sqlite")
     assert antwort.headers["cache-control"] == "no-store"
     assert client.get("/app.js").status_code == 200

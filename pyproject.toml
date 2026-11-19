@@ -17,7 +17,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+aws = [
+  # ASGI-Adapter für AWS Lambda hinter API Gateway; boto3 für DynamoDB, S3
+  # und den Secrets Manager.
+  "mangum>=0.17,<1",
+  "boto3>=1.35,<2",
+  "tzdata",
+]
+dev = [
+  "pytest>=8",
+  # Stellt AWS für die Prüfungen nach; es geht dabei nichts ins Netz.
+  "moto[dynamodb,s3,secretsmanager]>=5,<6",
+  "cfn-lint>=1",
+]
 
 [tool.setuptools.packages.find]
 include = ["aktedirekt*"]

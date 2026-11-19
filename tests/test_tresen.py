@@ -56,9 +56,9 @@ def test_fehlerhafte_angaben_legen_nichts_an(umgebung):
 
 
 def test_code_steht_nicht_im_klartext_in_der_datenbank(umgebung):
-    client, _, _, ordner = umgebung
+    client, _, _, ablage = umgebung
     daten = anlegen(client, anmelden(client))
-    assert code_aus(daten["link"]).encode() not in (ordner / "aktedirekt.sqlite3").read_bytes()
+    assert not ablage.enthaelt(code_aus(daten["link"]))
 
 
 def test_kunde_uebernimmt_mit_vorbelegten_angaben(umgebung):

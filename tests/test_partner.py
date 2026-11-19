@@ -36,11 +36,10 @@ class Uhr:
 
 
 @pytest.fixture
-def umgebung(tmp_path):
+def umgebung(ablage):
     uhr = Uhr()
-    speicher = Speicher(tmp_path)
-    client = TestClient(app_bauen(speicher, partner=partnerliste(), jetzt=uhr))
-    return client, speicher, uhr, tmp_path
+    client = TestClient(app_bauen(ablage.speicher, partner=partnerliste(), jetzt=uhr))
+    return client, ablage.speicher, uhr, ablage
 
 
 def aufnehmen(client, einladung, einwilligung=True, nachname="Muster"):
@@ -104,10 +103,22 @@ def test_sperre_nach_fehlversuchen_und_ihr_ende():
     assert liste.anmelden("werkstatt-a", KENNWORT_A, zeit + timedelta(minutes=16)) is not None
 
 
+def test_sperre_steht_in_der_ablage_und_gilt_fuer_jede_ausgabe_der_anwendung(umgebung):
+    client, speicher, uhr, _ = umgebung
+    for _ in range(5):
+        assert client.post("/api/partner/anmeldung", json={"kennung": "werkstatt-a", "kennwort": "x"}).status_code == 401
+    # Eine zweite Ausgabe der Anwendung mit eigener Partnerliste, wie in AWS üblich:
+    zweite = TestClient(app_bauen(speicher, partner=partnerliste(), jetzt=uhr))
+    assert zweite.post("/api/partner/anmeldung", json={"kennung": "werkstatt-a", "kennwort": KENNWORT_A}).status_code == 401
+    uhr.zeit += timedelta(minutes=16)
+    assert zweite.post("/api/partner/anmeldung", json={"kennung": "werkstatt-a", "kennwort": KENNWORT_A}).status_code == 200
+    assert speicher.fehlversuche("werkstatt-a") == (0, None)
+
+
 def test_sitzung_laeuft_ab_und_abmelden_beendet_sie(umgebung):
-    client, _, uhr, ordner = umgebung
+    client, _, uhr, ablage = umgebung
     kopf = anmelden(client)
-    assert kopf["Authorization"][7:].encode() not in (ordner / "aktedirekt.sqlite3").read_bytes()
+    assert not ablage.enthaelt(kopf["Authorization"][7:])
     assert client.get("/api/partner/faelle", headers=kopf).status_code == 200
     uhr.zeit += SITZUNG_DAUER + timedelta(seconds=1)
     assert client.get("/api/partner/faelle", headers=kopf).status_code == 401

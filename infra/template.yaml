@@ -1,0 +1,374 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Aktedirekt – Schadenaufnahme und Sachstandsauskunft für Verkehrsunfallmandate.
+  Eine Funktion hinter API Gateway, DynamoDB für Aufnahmen, S3 für Fotos und
+  Unterlagen, Geheimnisse für jur|nodes und die Partnerliste, ein eigener
+  KMS-Schlüssel, Kostenalarme. Region: eu-central-1. Eigener Stack neben
+  jusperfect; die beiden teilen nichts außer dem Konto.
+
+Parameters:
+  Stufe:
+    Type: String
+    Default: probe
+    AllowedPattern: "[a-z][a-z0-9-]{1,15}"
+    Description: Name dieser Ausgabe (probe, pilot, betrieb). Teil aller Namen.
+  AlarmEmail:
+    Type: String
+    Description: Wohin Kosten- und Fehleralarme gehen.
+  BudgetUsd:
+    Type: Number
+    Default: 30
+    Description: Monatsbudget in US-Dollar; gewarnt wird bei 50, 80 und 100 Prozent.
+  BasisUrl:
+    Type: String
+    Default: ""
+    Description: >
+      Die Adresse, unter der das Portal erreichbar ist (https://…, ohne
+      Schrägstrich am Ende). Beim ersten Deploy leer lassen, danach die Ausgabe
+      PortalUrl eintragen und erneut deployen – sie steht im QR-Code vom Tresen
+      und begrenzt, von welcher Seite aus Dateien abgeliefert werden dürfen.
+  AbgleichMinuten:
+    Type: Number
+    Default: 15
+    MinValue: 5
+    Description: Abstand, in dem der Sachstand aus jur|nodes geholt wird.
+
+Conditions:
+  MitBasisUrl: !Not [!Equals [!Ref BasisUrl, ""]]
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [arm64]
+    MemorySize: 1024
+    CodeUri: ../
+    Environment:
+      Variables:
+        AKTEDIREKT_SPEICHER: aws
+        AKTEDIREKT_TABELLE: !Ref Tabelle
+        AKTEDIREKT_BUCKET: !Ref DateiBucket
+        AKTEDIREKT_PARTNER_GEHEIMNIS: !Ref PartnerGeheimnis
+        AKTEDIREKT_JURNODES_GEHEIMNIS: !Ref JurNodesGeheimnis
+        AKTEDIREKT_BASIS_URL: !Ref BasisUrl
+
+Resources:
+  # ── Schlüssel und Geheimnisse ────────────────────────────────────────────
+  Schluessel:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub "Aktedirekt ${Stufe} – Aufnahmen, Dateien, Geheimnisse, Protokolle"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Kontoverwaltung
+            Effect: Allow
+            Principal: { AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root" }
+            Action: "kms:*"
+            Resource: "*"
+          - Sid: DiensteImKonto
+            Effect: Allow
+            Principal: { Service: [logs.amazonaws.com, s3.amazonaws.com, dynamodb.amazonaws.com] }
+            Action: ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey*", "kms:DescribeKey"]
+            Resource: "*"
+            Condition:
+              StringEquals: { "aws:SourceAccount": !Ref AWS::AccountId }
+          # Damit ein Alarm das verschlüsselte Alarmthema überhaupt erreicht.
+          - Sid: Alarme
+            Effect: Allow
+            Principal: { Service: cloudwatch.amazonaws.com }
+            Action: ["kms:Decrypt", "kms:GenerateDataKey*"]
+            Resource: "*"
+
+  SchluesselAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/aktedirekt-${Stufe}"
+      TargetKeyId: !Ref Schluessel
+
+  JurNodesGeheimnis:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "aktedirekt/${Stufe}/jurnodes"
+      Description: Zugang des Schnittstellenbenutzers zu jur|nodes. Werte nach dem Deploy setzen; solange sie leer sind, wird nichts an jur|nodes gemeldet.
+      KmsKeyId: !Ref Schluessel
+      SecretString: '{"url": "", "benutzer": "", "schluessel": ""}'
+
+  PartnerGeheimnis:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "aktedirekt/${Stufe}/partner"
+      Description: Liste der Werkstätten und Sachverständigen mit Einladungscode und scrypt-Wert des Kennworts. Aufbau wie testdaten/partner.json.
+      KmsKeyId: !Ref Schluessel
+      SecretString: "[]"
+
+  # ── Aufnahmen ────────────────────────────────────────────────────────────
+  Tabelle:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "aktedirekt-${Stufe}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: pk, AttributeType: S }
+        - { AttributeName: sk, AttributeType: S }
+        - { AttributeName: partner_liste, AttributeType: S }
+        - { AttributeName: angelegt_am, AttributeType: S }
+      KeySchema:
+        - { AttributeName: pk, KeyType: HASH }
+        - { AttributeName: sk, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: partner
+          KeySchema:
+            - { AttributeName: partner_liste, KeyType: HASH }
+            - { AttributeName: angelegt_am, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+      TimeToLiveSpecification: { AttributeName: ablauf, Enabled: true }
+      SSESpecification: { SSEEnabled: true, SSEType: KMS, KMSMasterKeyId: !Ref Schluessel }
+      # Hier liegen die Aufnahmen selbst, nicht nur Zwischenstände: Ein
+      # versehentliches Löschen muss sich zurückholen lassen.
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
+      DeletionProtectionEnabled: true
+
+  # ── Fotos und Unterlagen ─────────────────────────────────────────────────
+  DateiBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "aktedirekt-${Stufe}-dateien-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: aws:kms, KMSMasterKeyID: !Ref Schluessel }
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          # Was angekündigt und abgeliefert, aber nie übernommen wurde.
+          - Id: EingangLeeren
+            Status: Enabled
+            Prefix: eingang/
+            ExpirationInDays: 1
+            AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 }
+      CorsConfiguration:
+        CorsRules:
+          # Der Browser liefert Fotos unmittelbar hier ab (unterschriebene
+          # Adresse, zehn Minuten gültig). Ohne BasisUrl ist die Herkunft noch
+          # offen; die Unterschrift bleibt die eigentliche Schranke.
+          - AllowedMethods: [PUT]
+            AllowedOrigins: [!If [MitBasisUrl, !Ref BasisUrl, "*"]]
+            AllowedHeaders: ["content-type"]
+            MaxAge: 600
+
+  DateiBucketRichtlinie:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DateiBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: NurVerschluesselteVerbindung
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource: [!GetAtt DateiBucket.Arn, !Sub "${DateiBucket.Arn}/*"]
+            Condition:
+              Bool: { "aws:SecureTransport": "false" }
+
+  # ── API und Funktionen ───────────────────────────────────────────────────
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      # Ohne Stufenname in der Adresse: Die Seite ruft /api/… und /partner auf.
+      StageName: $default
+      DefaultRouteSettings:
+        # Schranke gegen Kosten und Überlast, nicht gegen einzelne Absender.
+        ThrottlingBurstLimit: 40
+        ThrottlingRateLimit: 20
+      AccessLogSettings:
+        DestinationArn: !GetAtt ApiProtokoll.Arn
+        # Kein Anfragetext, keine Kopfzeilen, keine Absenderadresse – nur Weg, Status, Dauer.
+        Format: '{"zeit":"$context.requestTime","weg":"$context.routeKey","status":"$context.status","dauer":"$context.responseLatency","id":"$context.requestId"}'
+
+  ApiProtokoll:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aktedirekt/${Stufe}/api"
+      RetentionInDays: 30
+      KmsKeyId: !GetAtt Schluessel.Arn
+
+  FunktionProtokoll:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/aktedirekt-${Stufe}"
+      RetentionInDays: 30
+      KmsKeyId: !GetAtt Schluessel.Arn
+
+  AbgleichProtokoll:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/aktedirekt-${Stufe}-abgleich"
+      RetentionInDays: 30
+      KmsKeyId: !GetAtt Schluessel.Arn
+
+  Funktion:
+    Type: AWS::Serverless::Function
+    DependsOn: FunktionProtokoll
+    Properties:
+      FunctionName: !Sub "aktedirekt-${Stufe}"
+      Handler: aktedirekt.lambda_handler.handler
+      Timeout: 29
+      ReservedConcurrentExecutions: 10
+      Events:
+        Alles:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api }
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Sid: Aufnahmen
+              Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:Query]
+              Resource: [!GetAtt Tabelle.Arn, !Sub "${Tabelle.Arn}/index/partner"]
+            - Sid: Dateien
+              Effect: Allow
+              Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+              Resource: !Sub "${DateiBucket.Arn}/*"
+            # Ohne dieses Recht meldet S3 eine fehlende Datei als "verboten"
+            # statt als "nicht vorhanden", und die Anwendung könnte beides
+            # nicht unterscheiden.
+            - Sid: DateienAuffinden
+              Effect: Allow
+              Action: s3:ListBucket
+              Resource: !GetAtt DateiBucket.Arn
+            - Sid: Geheimnisse
+              Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: [!Ref JurNodesGeheimnis, !Ref PartnerGeheimnis]
+            - Sid: Schluessel
+              Effect: Allow
+              Action: [kms:Encrypt, kms:Decrypt, kms:GenerateDataKey]
+              Resource: !GetAtt Schluessel.Arn
+            - Sid: NurEuRegionen
+              Effect: Deny
+              Action: ["s3:*", "dynamodb:*", "secretsmanager:*"]
+              Resource: "*"
+              Condition:
+                StringNotLike: { "aws:RequestedRegion": "eu-*" }
+
+  AbgleichFunktion:
+    Type: AWS::Serverless::Function
+    DependsOn: AbgleichProtokoll
+    Properties:
+      FunctionName: !Sub "aktedirekt-${Stufe}-abgleich"
+      Handler: aktedirekt.lambda_handler.abgleich
+      Timeout: 300
+      ReservedConcurrentExecutions: 1
+      Events:
+        Takt:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: !Sub "rate(${AbgleichMinuten} minutes)"
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Sid: Aufnahmen
+              Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem, dynamodb:Scan]
+              Resource: !GetAtt Tabelle.Arn
+            - Sid: Geheimnisse
+              Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: [!Ref JurNodesGeheimnis, !Ref PartnerGeheimnis]
+            - Sid: Schluessel
+              Effect: Allow
+              Action: [kms:Decrypt, kms:GenerateDataKey]
+              Resource: !GetAtt Schluessel.Arn
+
+  # ── Alarme ───────────────────────────────────────────────────────────────
+  Alarmthema:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "aktedirekt-${Stufe}-alarme"
+      # Der eigene Schlüssel, nicht der von AWS verwaltete: An ein Thema mit
+      # jenem kann CloudWatch nichts zustellen.
+      KmsMasterKeyId: !Ref Schluessel
+
+  AlarmAbonnement:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref Alarmthema
+      Protocol: email
+      Endpoint: !Ref AlarmEmail
+
+  Budget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "aktedirekt-${Stufe}"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref BudgetUsd, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 50, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlarmEmail }]
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlarmEmail }]
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlarmEmail }]
+
+  FehlerAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "aktedirekt-${Stufe}-fehler"
+      AlarmDescription: Mehr als fünf Fehler der Aktedirekt-Funktion in fünf Minuten.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref Funktion }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref Alarmthema]
+
+  AbgleichAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "aktedirekt-${Stufe}-abgleich"
+      AlarmDescription: Der Abgleich mit jur|nodes ist dreimal hintereinander gescheitert.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref AbgleichFunktion }]
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 3
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref Alarmthema]
+
+Outputs:
+  PortalUrl:
+    Description: Adresse des Portals. Als Parameter BasisUrl eintragen und erneut deployen.
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com"
+  FalllisteUrl:
+    Description: Anmeldung für Werkstätten und Sachverständige.
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/partner"
+  Tabelle:
+    Value: !Ref Tabelle
+  DateiBucket:
+    Value: !Ref DateiBucket
+  JurNodesGeheimnis:
+    Value: !Ref JurNodesGeheimnis
+  PartnerGeheimnis:
+    Value: !Ref PartnerGeheimnis

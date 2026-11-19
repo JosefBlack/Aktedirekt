@@ -161,6 +161,23 @@ function dateien_zeigen() {
   }
 }
 
+// Drei Schritte: ankündigen, abliefern, prüfen lassen. In AWS geht das Foto
+// dabei unmittelbar in den Dateispeicher der Kanzlei und nicht durch die Anwendung.
+async function eine_hochladen(datei) {
+  if (datei.size > 15 * 1024 * 1024) { const f = new Error("zu groß"); f.status = 413; throw f; }
+  const ziel = await aufruf("POST", "/api/aufnahme/dateien", { name: datei.name, groesse: datei.size });
+  const hier = ziel.adresse.startsWith("/");
+  let antwort;
+  try {
+    antwort = await fetch(ziel.adresse, { method: "PUT", body: datei,
+      headers: hier ? { Authorization: "Bearer " + zugang } : {} });
+  } catch (e) {
+    throw new Error("Keine Verbindung. Bitte noch einmal versuchen.");
+  }
+  if (!antwort.ok) throw new Error("Das Hochladen hat nicht geklappt. Bitte noch einmal versuchen.");
+  return aufruf("POST", "/api/aufnahme/dateien/" + ziel.kennung + "/fertig");
+}
+
 async function hochladen(auswahl, stand) {
   const dateien = Array.from(auswahl.files);
   auswahl.value = "";
@@ -171,7 +188,7 @@ async function hochladen(auswahl, stand) {
     stand.hidden = false;
     stand.textContent = `Lade ${nr} von ${dateien.length} hoch …`;
     try {
-      const neu = await aufruf("POST", "/api/aufnahme/dateien?name=" + encodeURIComponent(datei.name), datei, true);
+      const neu = await eine_hochladen(datei);
       zustand.dateien.push(neu);
       dateien_zeigen();
     } catch (fehler) {

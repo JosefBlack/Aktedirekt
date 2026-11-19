@@ -43,6 +43,17 @@ CREATE TABLE IF NOT EXISTS datei (
   groesse INTEGER NOT NULL,
   hochgeladen_am TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS upload (
+  kennung TEXT PRIMARY KEY,
+  aufnahme TEXT NOT NULL REFERENCES aufnahme(kennung),
+  name TEXT NOT NULL,
+  groesse INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fehlversuch (
+  kennung TEXT PRIMARY KEY,
+  anzahl INTEGER NOT NULL,
+  gesperrt_bis TEXT
+);
 CREATE TABLE IF NOT EXISTS sitzung (
   sha256 TEXT PRIMARY KEY,
   partner TEXT NOT NULL,
@@ -270,16 +281,69 @@ class Speicher:
                                 (kennung,)).fetchall()
         return [Datei(z["kennung"], z["name"], z["art"], z["groesse"]) for z in zeilen]
 
-    def datei_hinzufuegen(self, kennung: str, name: str, art: str, inhalt: bytes,
-                          jetzt: datetime) -> Datei:
-        datei = Datei(secrets.token_hex(12), name, art, len(inhalt))
+    # Hochladen geht in drei Schritten, damit ein Foto in AWS nicht durch die
+    # Anwendung muss, sondern unmittelbar in den Dateispeicher geht:
+    # vorbereiten -> Inhalt abliefern -> übernehmen (nach Prüfung) oder verwerfen.
+
+    def upload_vorbereiten(self, kennung: str, name: str, groesse: int, jetzt: datetime) -> tuple[str, str]:
+        """Gibt (Kennung der Datei, Adresse zum Abliefern) zurück.
+
+        Die Adresse ist hier leer: Abgeliefert wird bei der Anwendung selbst.
+        """
+        datei_kennung = secrets.token_hex(12)
+        with closing(self._db()) as db, db:
+            db.execute("INSERT INTO upload VALUES (?,?,?,?)", (datei_kennung, kennung, name, groesse))
+        return datei_kennung, ""
+
+    def _wartend(self, kennung: str, datei_kennung: str) -> sqlite3.Row | None:
+        with closing(self._db()) as db:
+            return db.execute("SELECT * FROM upload WHERE kennung = ? AND aufnahme = ?",
+                              (datei_kennung, kennung)).fetchone()
+
+    def upload_inhalt(self, kennung: str, datei_kennung: str, inhalt: bytes) -> bool:
+        if self._wartend(kennung, datei_kennung) is None:
+            return False
+        (self._ordner / "dateien" / f"{datei_kennung}.eingang").write_bytes(inhalt)
+        return True
+
+    def upload_anfang(self, kennung: str, datei_kennung: str) -> tuple[bytes, int] | None:
+        """Die ersten Bytes und die Größe des Abgelieferten - ``None``, wenn nichts da ist."""
+        pfad = self._ordner / "dateien" / f"{datei_kennung}.eingang"
+        if self._wartend(kennung, datei_kennung) is None or not pfad.is_file():
+            return None
+        with pfad.open("rb") as f:
+            return f.read(16), pfad.stat().st_size
+
+    def upload_uebernehmen(self, kennung: str, datei_kennung: str, art: str, jetzt: datetime) -> Datei:
+        z = self._wartend(kennung, datei_kennung)
+        assert z is not None
+        ordner = self._ordner / "dateien"
         # Der Name auf der Platte ist ein Zufallswert; der Name des Mandanten
         # steht nur in der Datenbank und kann deshalb keinen Pfad bilden.
-        (self._ordner / "dateien" / f"{datei.kennung}.{art}").write_bytes(inhalt)
+        (ordner / f"{datei_kennung}.eingang").replace(ordner / f"{datei_kennung}.{art}")
+        datei = Datei(datei_kennung, z["name"], art, (ordner / f"{datei_kennung}.{art}").stat().st_size)
         with closing(self._db()) as db, db:
+            db.execute("DELETE FROM upload WHERE kennung = ?", (datei_kennung,))
             db.execute("INSERT INTO datei VALUES (?,?,?,?,?,?)",
-                       (datei.kennung, kennung, name, art, datei.groesse, jetzt.isoformat()))
+                       (datei.kennung, kennung, datei.name, art, datei.groesse, jetzt.isoformat()))
         return datei
+
+    def upload_verwerfen(self, kennung: str, datei_kennung: str) -> None:
+        if self._wartend(kennung, datei_kennung) is None:
+            return
+        (self._ordner / "dateien" / f"{datei_kennung}.eingang").unlink(missing_ok=True)
+        with closing(self._db()) as db, db:
+            db.execute("DELETE FROM upload WHERE kennung = ?", (datei_kennung,))
+
+    def datei_inhalt(self, kennung: str, datei_kennung: str) -> bytes | None:
+        for d in self.dateien(kennung):
+            if d.kennung == datei_kennung:
+                return (self._ordner / "dateien" / f"{d.kennung}.{d.art}").read_bytes()
+        return None
+
+    def unterschrift(self, kennung: str) -> bytes | None:
+        pfad = self._ordner / "dateien" / f"{kennung}-unterschrift.png"
+        return pfad.read_bytes() if pfad.is_file() else None
 
     def datei_entfernen(self, kennung: str, datei_kennung: str) -> bool:
         with closing(self._db()) as db, db:
@@ -317,6 +381,23 @@ class Speicher:
     def sitzung_beenden(self, sitzung: str) -> None:
         with closing(self._db()) as db, db:
             db.execute("DELETE FROM sitzung WHERE sha256 = ?", (_pruefsumme(sitzung),))
+
+    # ---- Fehlversuche bei der Anmeldung --------------------------------
+
+    def fehlversuche(self, kennung: str) -> tuple[int, datetime | None]:
+        with closing(self._db()) as db:
+            z = db.execute("SELECT anzahl, gesperrt_bis FROM fehlversuch WHERE kennung = ?",
+                           (kennung,)).fetchone()
+        return (z["anzahl"], _zeit(z["gesperrt_bis"])) if z else (0, None)
+
+    def fehlversuche_setzen(self, kennung: str, anzahl: int, gesperrt_bis: datetime | None,
+                            jetzt: datetime) -> None:
+        with closing(self._db()) as db, db:
+            if anzahl <= 0:
+                db.execute("DELETE FROM fehlversuch WHERE kennung = ?", (kennung,))
+            else:
+                db.execute("INSERT OR REPLACE INTO fehlversuch VALUES (?,?,?)",
+                           (kennung, anzahl, gesperrt_bis.isoformat() if gesperrt_bis else None))
 
     # ---- Nachweis der Auskünfte -----------------------------------------
 

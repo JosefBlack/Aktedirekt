@@ -1,0 +1,7 @@
+# Was die Funktion in AWS braucht (sam build liest diese Datei).
+# boto3 bringt die Laufzeitumgebung von AWS selbst mit.
+fastapi>=0.115,<1
+httpx>=0.27,<1
+mangum>=0.17,<1
+segno>=1.6,<2
+tzdata

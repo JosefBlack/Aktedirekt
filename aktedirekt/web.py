@@ -29,7 +29,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from aktedirekt import dateien
+from aktedirekt import dateien, zeit
 from aktedirekt.abgleich import als_fall, lead_anlegen
 from aktedirekt.aufnahme import SCHRITTE, TRESEN, Aufnahme, felder_pruefen, schritt_pruefen
 from aktedirekt.jurnodes import JurNodes
@@ -47,8 +47,6 @@ SITZUNG_DAUER = timedelta(hours=8)
 UEBERGABE_DAUER = timedelta(hours=72)
 
 _KOPFZEILEN = {
-    "Content-Security-Policy": "default-src 'self'; img-src 'self' blob: data:; "
-                               "frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
@@ -60,17 +58,25 @@ def _text(name: str) -> str:
     return resources.files("aktedirekt").joinpath("texte", name).read_text("utf-8").strip()
 
 
-def app_bauen(speicher: Speicher, *, partner: Partnerliste | None = None,
+def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
               jurnodes: JurNodes | None = None, basis_url: str = "",
-              jetzt: Callable[[], datetime] = datetime.now) -> FastAPI:
+              jetzt: Callable[[], datetime] = zeit.jetzt) -> FastAPI:
     app = FastAPI(title="Aktedirekt", docs_url=None, redoc_url=None, openapi_url=None)
     stufen = Stufen.laden()
     partnerliste = partner or Partnerliste([])
     texte = {n: _text(f"{n}.txt") for n in ("vollmacht", "datenschutz", "einwilligung_partner")}
 
+    # Der Browser darf nur mit dieser Anwendung sprechen - und, in AWS, Dateien
+    # unmittelbar im Dateispeicher der Kanzlei abliefern.
+    abliefern = getattr(speicher, "ablieferadresse", "")
+    richtlinie = ("default-src 'self'; img-src 'self' blob: data:; connect-src 'self'"
+                  + (" " + abliefern if abliefern else "")
+                  + "; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+
     @app.middleware("http")
     async def kopfzeilen(request: Request, call_next):  # type: ignore[no-untyped-def]
         antwort = await call_next(request)
+        antwort.headers.setdefault("Content-Security-Policy", richtlinie)
         for name, wert in _KOPFZEILEN.items():
             antwort.headers.setdefault(name, wert)
         return antwort
@@ -155,17 +161,50 @@ def app_bauen(speicher: Speicher, *, partner: Partnerliste | None = None,
         return JSONResponse({"fehler": {}})
 
     @app.post("/api/aufnahme/dateien")
-    async def hochladen(request: Request, name: str = "") -> dict[str, str]:
+    async def hochladen(request: Request) -> dict[str, str]:
+        """Kündigt eine Datei an und sagt, wohin der Browser sie schickt."""
         aufnahme = aufnahme_von(request)
+        daten = await json_lesen(request)
+        name = daten.get("name", "") if isinstance(daten, dict) else ""
+        groesse = daten.get("groesse") if isinstance(daten, dict) else None
+        if not isinstance(name, str) or not isinstance(groesse, int) or isinstance(groesse, bool) or groesse < 1:
+            raise HTTPException(400, "Die Angaben konnten nicht gelesen werden.")
+        if groesse > dateien.MAX_BYTES:
+            raise HTTPException(413, "Das ist zu groß.")
         if len(speicher.dateien(aufnahme.kennung)) >= dateien.MAX_ANZAHL:
             raise HTTPException(409, f"Es sind höchstens {dateien.MAX_ANZAHL} Dateien möglich.")
+        anzeige = "".join(z for z in name if z.isprintable() and z not in "/\\")[:80] or "Datei"
+        kennung, adresse = speicher.upload_vorbereiten(aufnahme.kennung, anzeige, groesse, jetzt())
+        return {"kennung": kennung, "adresse": adresse or f"/api/aufnahme/dateien/{kennung}/inhalt"}
+
+    @app.put("/api/aufnahme/dateien/{datei}/inhalt")
+    async def abliefern_hier(datei: str, request: Request) -> Response:
+        """Nur außerhalb von AWS: Dort nimmt der Dateispeicher den Inhalt selbst an."""
+        aufnahme = aufnahme_von(request)
         inhalt = await koerper_lesen(request, dateien.MAX_BYTES)
-        art = dateien.art_erkennen(inhalt[:16])
-        if not art:
+        if not speicher.upload_inhalt(aufnahme.kennung, datei, inhalt):
+            raise HTTPException(404, "Diese Datei gibt es nicht.")
+        return Response(status_code=204)
+
+    @app.post("/api/aufnahme/dateien/{datei}/fertig")
+    async def uebernehmen_datei(datei: str, request: Request) -> dict[str, str]:
+        """Prüft das Abgelieferte und nimmt es zur Aufnahme - oder verwirft es."""
+        aufnahme = aufnahme_von(request)
+        anfang = speicher.upload_anfang(aufnahme.kennung, datei)
+        if anfang is None:
+            raise HTTPException(404, "Diese Datei gibt es nicht.")
+        art = dateien.art_erkennen(anfang[0])
+        zu_gross = anfang[1] > dateien.MAX_BYTES
+        zu_viele = len(speicher.dateien(aufnahme.kennung)) >= dateien.MAX_ANZAHL
+        if not art or zu_gross or zu_viele:
+            speicher.upload_verwerfen(aufnahme.kennung, datei)
+            if zu_gross:
+                raise HTTPException(413, "Das ist zu groß.")
+            if zu_viele:
+                raise HTTPException(409, f"Es sind höchstens {dateien.MAX_ANZAHL} Dateien möglich.")
             raise HTTPException(415, "Bitte ein Foto (JPG, PNG, HEIC) oder ein PDF hochladen.")
-        anzeige = "".join(z for z in name if z.isprintable() and z not in "/\\")[:80] or f"Datei.{art}"
-        datei = speicher.datei_hinzufuegen(aufnahme.kennung, anzeige, art, inhalt, jetzt())
-        return {"kennung": datei.kennung, "name": datei.name}
+        fertig = speicher.upload_uebernehmen(aufnahme.kennung, datei, art, jetzt())
+        return {"kennung": fertig.kennung, "name": fertig.name}
 
     @app.delete("/api/aufnahme/dateien/{datei}")
     async def entfernen(datei: str, request: Request) -> Response:
@@ -249,7 +288,7 @@ def app_bauen(speicher: Speicher, *, partner: Partnerliste | None = None,
         kennwort = daten.get("kennwort", "") if isinstance(daten, dict) else ""
         konto = None
         if isinstance(kennung, str) and isinstance(kennwort, str) and len(kennung) <= 80 and len(kennwort) <= 200:
-            konto = partnerliste.anmelden(kennung.strip(), kennwort, jetzt())
+            konto = partnerliste.anmelden(kennung.strip(), kennwort, jetzt(), speicher)
         if konto is None:
             # Eine Antwort für alles: falsche Kennung, falsches Kennwort, gesperrt.
             raise HTTPException(401, "Die Anmeldung hat nicht geklappt. Nach mehreren Fehlversuchen "
@@ -350,12 +389,38 @@ def app_bauen(speicher: Speicher, *, partner: Partnerliste | None = None,
     return app
 
 
+def _geheimnis(name: str, region: str) -> str:
+    import boto3
+    return boto3.client("secretsmanager", region_name=region).get_secret_value(SecretId=name)["SecretString"]
+
+
 def app_aus_umgebung() -> FastAPI:
+    """Baut die Anwendung aus den Einstellungen der Umgebung.
+
+    Mit ``AKTEDIREKT_SPEICHER=aws`` liegen die Daten in DynamoDB und S3, und
+    Partnerliste und jur|nodes-Zugang kommen aus dem Secrets Manager - nie aus
+    Umgebungsvariablen, die in der AWS-Konsole offen zu lesen wären.
+    """
+    umgebung = os.environ
+    basis_url = umgebung.get("AKTEDIREKT_BASIS_URL", "")
+    if umgebung.get("AKTEDIREKT_SPEICHER") == "aws":
+        from aktedirekt.speicher_aws import AwsSpeicher
+        region = umgebung.get("AWS_REGION", "eu-central-1")
+        speicher: Any = AwsSpeicher(umgebung["AKTEDIREKT_TABELLE"], umgebung["AKTEDIREKT_BUCKET"], region)
+        partner = Partnerliste.aus_text(_geheimnis(umgebung["AKTEDIREKT_PARTNER_GEHEIMNIS"], region))
+        jurnodes = jurnodes_aus_geheimnis(_geheimnis(umgebung["AKTEDIREKT_JURNODES_GEHEIMNIS"], region))
+        return app_bauen(speicher, partner=partner, jurnodes=jurnodes, basis_url=basis_url)
     jurnodes = None
-    if os.environ.get("AKTEDIREKT_JURNODES_URL"):
-        jurnodes = JurNodes(os.environ["AKTEDIREKT_JURNODES_URL"],
-                            os.environ["AKTEDIREKT_JURNODES_BENUTZER"],
-                            os.environ["AKTEDIREKT_JURNODES_SCHLUESSEL"])
-    return app_bauen(Speicher(os.environ.get("AKTEDIREKT_DATEN", ".aktedirekt-daten")),
-                     basis_url=os.environ.get("AKTEDIREKT_BASIS_URL", ""),
-                     partner=Partnerliste.laden(os.environ.get("AKTEDIREKT_PARTNER")), jurnodes=jurnodes)
+    if umgebung.get("AKTEDIREKT_JURNODES_URL"):
+        jurnodes = JurNodes(umgebung["AKTEDIREKT_JURNODES_URL"], umgebung["AKTEDIREKT_JURNODES_BENUTZER"],
+                            umgebung["AKTEDIREKT_JURNODES_SCHLUESSEL"])
+    return app_bauen(Speicher(umgebung.get("AKTEDIREKT_DATEN", ".aktedirekt-daten")), basis_url=basis_url,
+                     partner=Partnerliste.laden(umgebung.get("AKTEDIREKT_PARTNER")), jurnodes=jurnodes)
+
+
+def jurnodes_aus_geheimnis(text: str) -> JurNodes | None:
+    """Der Zugang zu jur|nodes aus dem Geheimnis - ``None``, solange er nicht eingetragen ist."""
+    daten = json.loads(text)
+    if not (daten.get("url") and daten.get("benutzer") and daten.get("schluessel")):
+        return None
+    return JurNodes(daten["url"], daten["benutzer"], daten["schluessel"])

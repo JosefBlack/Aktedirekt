@@ -20,6 +20,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Protocol
 
 FEHLVERSUCHE = 5
 SPERRE = timedelta(minutes=15)
@@ -52,21 +53,48 @@ def _kennwort_stimmt(kennwort: str, abgelegt: str) -> bool:
     return hmac.compare_digest(ist, soll)
 
 
+class Zaehler(Protocol):
+    """Wo die Fehlversuche stehen. In AWS in der Datenbank: Dort laufen mehrere
+    Ausgaben der Anwendung nebeneinander, und jede muss dieselbe Sperre sehen."""
+
+    def fehlversuche(self, kennung: str) -> tuple[int, datetime | None]: ...
+
+    def fehlversuche_setzen(self, kennung: str, anzahl: int, gesperrt_bis: datetime | None,
+                            jetzt: datetime) -> None: ...
+
+
+class _ImSpeicher:
+    def __init__(self) -> None:
+        self._stand: dict[str, tuple[int, datetime | None]] = {}
+
+    def fehlversuche(self, kennung: str) -> tuple[int, datetime | None]:
+        return self._stand.get(kennung, (0, None))
+
+    def fehlversuche_setzen(self, kennung: str, anzahl: int, gesperrt_bis: datetime | None,
+                            jetzt: datetime) -> None:
+        if anzahl <= 0:
+            self._stand.pop(kennung, None)
+        elif len(self._stand) < 10000 or kennung in self._stand:
+            self._stand[kennung] = (anzahl, gesperrt_bis)
+
+
 class Partnerliste:
     def __init__(self, konten: list[PartnerKonto]) -> None:
         self._nach_kennung = {k.kennung: k for k in konten}
         self._nach_einladung = {k.einladung: k for k in konten if k.einladung}
         if len(self._nach_kennung) != len(konten):
             raise ValueError("Eine Partnerkennung kommt doppelt vor.")
-        self._fehlversuche: dict[str, tuple[int, datetime | None]] = {}
+        self._zaehler: Zaehler = _ImSpeicher()
+
+    @classmethod
+    def aus_text(cls, text: str) -> "Partnerliste":
+        eintraege = json.loads(text)
+        return cls([PartnerKonto(e["kennung"], e["art"], e["name"], e.get("einladung", ""),
+                                 e.get("kennwort_scrypt", "")) for e in eintraege])
 
     @classmethod
     def laden(cls, pfad: Path | str | None) -> "Partnerliste":
-        if not pfad:
-            return cls([])
-        eintraege = json.loads(Path(pfad).read_text("utf-8"))
-        return cls([PartnerKonto(e["kennung"], e["art"], e["name"], e.get("einladung", ""),
-                                 e.get("kennwort_scrypt", "")) for e in eintraege])
+        return cls.aus_text(Path(pfad).read_text("utf-8")) if pfad else cls([])
 
     def konto(self, kennung: str) -> PartnerKonto | None:
         return self._nach_kennung.get(kennung)
@@ -74,29 +102,33 @@ class Partnerliste:
     def zu_einladung(self, einladung: str) -> PartnerKonto | None:
         return self._nach_einladung.get(einladung)
 
-    def anmelden(self, kennung: str, kennwort: str, jetzt: datetime) -> PartnerKonto | None:
+    def anmelden(self, kennung: str, kennwort: str, jetzt: datetime,
+                 zaehler: Zaehler | None = None) -> PartnerKonto | None:
         """Das Konto bei richtigem Kennwort, sonst ``None`` - ohne zu sagen, woran es lag.
 
         Nach fünf Fehlversuchen ist die Kennung eine Viertelstunde gesperrt,
         auch für das richtige Kennwort. Gezählt wird je Kennung, damit ein
         Fremder nicht von vielen Absendern aus raten kann.
         """
-        anzahl, gesperrt_bis = self._fehlversuche.get(kennung, (0, None))
-        gesperrt = gesperrt_bis is not None and jetzt < gesperrt_bis
-        if gesperrt_bis is not None and not gesperrt:
-            anzahl, gesperrt_bis = 0, None
+        zaehler = zaehler or self._zaehler
         konto = self._nach_kennung.get(kennung)
         # Auch für eine unbekannte Kennung wird gerechnet: Die Antwortzeit
         # verrät sonst, welche Kennungen es gibt.
         stimmt = _kennwort_stimmt(kennwort, konto.kennwort_scrypt if konto else "")
-        if gesperrt:
+        if konto is None:
+            # Für Kennungen, die es nicht gibt, wird nichts gezählt: Sonst
+            # könnte ein Fremder die Datenbank mit erfundenen Kennungen füllen.
             return None
-        if konto is not None and konto.kennwort_scrypt and stimmt:
-            self._fehlversuche.pop(kennung, None)
+        anzahl, gesperrt_bis = zaehler.fehlversuche(kennung)
+        if gesperrt_bis is not None:
+            if jetzt < gesperrt_bis:
+                return None
+            anzahl = 0
+        if konto.kennwort_scrypt and stimmt:
+            zaehler.fehlversuche_setzen(kennung, 0, None, jetzt)
             return konto
         anzahl += 1
-        if len(self._fehlversuche) < 10000 or kennung in self._fehlversuche:
-            self._fehlversuche[kennung] = (anzahl, jetzt + SPERRE if anzahl >= FEHLVERSUCHE else None)
+        zaehler.fehlversuche_setzen(kennung, anzahl, jetzt + SPERRE if anzahl >= FEHLVERSUCHE else None, jetzt)
         return None
 
 
