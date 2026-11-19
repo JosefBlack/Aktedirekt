@@ -54,8 +54,8 @@ läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 | `aktedirekt/jurnodes.py` | Lead anlegen und lesen, Aktenstatus, Akteneigenschaft |
 | `aktedirekt/abgleich.py` | Abgleich mit jur|nodes: Leads nachholen, Sachstand lesen (`python -m aktedirekt.abgleich`) |
 
-**Nur mit Testdaten benutzen.** Die Vorlage für AWS ist geprüft, aber dort
-noch nicht gelaufen; was vor echten Mandaten fehlt, steht in
+**Nur mit Testdaten benutzen.** Aktedirekt läuft seit dem 19.11.2026 als Stufe
+`probe` im AWS-Konto der Kanzlei; was vor echten Mandaten fehlt, steht in
 [infra/README.md](infra/README.md). Außerdem offen: Übergabe von Angaben und
 Dateien an jur|nodes (bisher nur Kurzrubrum und Vermittler), Benachrichtigung
 des Mandanten, fehlende Unterlagen aus jur|nodes. Der jur|nodes-Client ist nach

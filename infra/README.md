@@ -3,10 +3,12 @@
 Ein eigener Stack im AWS-Konto der Kanzlei, neben jusperfect. Die beiden teilen
 nichts außer dem Konto: eigener Schlüssel, eigene Tabelle, eigener Dateispeicher.
 
-> **Stand 19.11.2026: Diese Vorlage ist geprüft (`cfn-lint`), aber noch nie
-> in AWS gelaufen.** Die Anwendung ist gegen ein nachgestelltes AWS geprüft.
-> Rechnen Sie beim ersten Mal mit Nacharbeit – und benutzen Sie bis zur
-> Freigabe nur erfundene Fälle.
+> **Stand 19.11.2026: Im Konto der Kanzlei als Stufe `probe` eingerichtet**,
+> über den kurzen Weg unten, im ersten Anlauf. Von außen geprüft: Seiten,
+> Aufnahme anlegen, Foto unmittelbar in den Dateispeicher abliefern und
+> übernehmen, Abweisung bei falscher Größe, fremder Herkunft und falschem
+> Inhalt. Auf einem echten Handy und mit jur|nodes noch nicht geprüft.
+> Bis zur Freigabe nur erfundene Fälle.
 
 ## Was entsteht
 
