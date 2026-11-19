@@ -158,12 +158,7 @@
 <form data-seite="abschluss" novalidate hidden>
   <h1>Auftrag und Unterschrift</h1>
   <p class="fehler" data-fehler="_"></p>
-  <div class="text" id="text-vollmacht"></div>
-  <label class="haken"><input type="checkbox" name="vollmacht"><span>Ich erteile den Auftrag und die Vollmacht.</span></label>
-  <p class="fehler" data-fehler="vollmacht"></p>
-  <div class="text" id="text-datenschutz"></div>
-  <label class="haken"><input type="checkbox" name="datenschutz"><span>Zur Kenntnis genommen.</span></label>
-  <p class="fehler" data-fehler="datenschutz"></p>
+  <div id="erklaerungen"></div>
   <div id="block-partner" hidden>
     <div class="text" id="text-partner"></div>
     <label class="haken"><input type="checkbox" name="einwilligung_partner"><span>Einverstanden <span class="frei">freiwillig</span></span></label>
@@ -182,6 +177,11 @@
   <div id="auskunft" class="auskunft" hidden>
     <p id="auskunft-text" class="klein"></p>
     <button type="button" class="neben" id="widerrufen">Einverständnis widerrufen</button>
+  </div>
+  <div id="unterlagen" hidden>
+    <h2>Ihre Unterlagen</h2>
+    <p class="klein">Zum Speichern oder Ausdrucken – so, wie Sie sie bestätigt haben.</p>
+    <ul id="unterlagenliste" class="abschnitte"></ul>
   </div>
   <div id="ergaenzen" hidden>
     <h2>Angaben vervollständigen</h2>

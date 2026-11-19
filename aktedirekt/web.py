@@ -30,7 +30,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from aktedirekt import dateien, totp, zeit
+from aktedirekt import akte_pdf, dateien, erklaerungen, totp, zeit
 from aktedirekt.abgleich import ENTWURF_FRIST, alte_entwuerfe, als_fall, entwuerfe_loeschen, lead_anlegen
 from aktedirekt.aufnahme import (ERG, FALLARTEN, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
                                  kurzrubrum)
@@ -81,8 +81,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     app = FastAPI(title="Aktedirekt", docs_url=None, redoc_url=None, openapi_url=None)
     stufen = Stufen.laden()
     partnerliste = partner or Partnerliste([])
-    texte = {n: _text(f"{n}.txt") for n in ("vollmacht", "vollmacht_kuendigung", "datenschutz",
-                                             "einwilligung_partner")}
+    texte = {"einwilligung_partner": _text("einwilligung_partner.txt")}
     wortlaut = json.loads(_text("hinweise.json"))
     anruf = f": {telefon}" if telefon else ""
 
@@ -174,9 +173,10 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "partner": name,
             "einwilligung_partner": aufnahme.einwilligung_partner
                                     and aufnahme.einwilligung_widerrufen_am is None,
+            # Was vor der Unterschrift zu erklären ist - Vollmacht, Widerrufsrecht, Datenverarbeitung.
+            "erklaerungen": [{"name": e.name, "titel": e.titel, "text": e.text, "haken": e.haken, "pflicht": e.pflicht}
+                             for e in erklaerungen.liste(art.name)],
             "texte": {
-                "vollmacht": texte["vollmacht_kuendigung" if art.name == "kuendigung" else "vollmacht"],
-                "datenschutz": texte["datenschutz"],
                 "einwilligung_partner": texte["einwilligung_partner"].replace("{partner}", name) if name else "",
             },
         }
@@ -209,6 +209,17 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         if aufnahme is None:
             raise HTTPException(410, "Dieser Code gilt nicht mehr. Bitte lassen Sie sich einen neuen zeigen.")
         return JSONResponse({"zugang": zugang, **zustand(aufnahme)})
+
+    @app.get("/api/aufnahme/unterlagen/{name}")
+    async def unterlage(name: str, request: Request) -> Response:
+        """Vollmacht, Widerrufsbelehrung und Hinweise zur Datenverarbeitung als PDF zum Mitnehmen."""
+        aufnahme = aufnahme_von(request)
+        e = next((e for e in erklaerungen.liste(aufnahme.art) if e.name == name and e.text), None)
+        if e is None:
+            raise HTTPException(404, "Diese Unterlage gibt es nicht.")
+        pdf = akte_pdf.erzeugen(e.titel, [], [{"titel": "", "zeilen": [["", e.text]]}], None)
+        return Response(pdf, media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
 
     @app.get("/api/aufnahme")
     async def lesen(request: Request) -> dict[str, Any]:
@@ -328,10 +339,12 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         fehlend = aufnahme.fehlende_schritte()
         if fehlend:
             fehler["_"] = "Es fehlen noch Angaben."
-        if daten.get("vollmacht") is not True:
-            fehler["vollmacht"] = "Ohne Vollmacht kann die Kanzlei nicht tätig werden."
-        if daten.get("datenschutz") is not True:
-            fehler["datenschutz"] = "Bitte bestätigen."
+        abzugeben = erklaerungen.liste(aufnahme.art)
+        abgegeben = {e.name: daten.get(e.name) is True for e in abzugeben}
+        for e in abzugeben:
+            if e.pflicht and not abgegeben[e.name]:
+                fehler[e.name] = ("Ohne Vollmacht kann die Kanzlei nicht tätig werden." if e.name == "vollmacht"
+                                  else "Bitte bestätigen.")
         unterschrift = b""
         roh = daten.get("unterschrift", "")
         vorsatz = "data:image/png;base64,"
@@ -353,8 +366,9 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         nachweis = {
             "zeitpunkt": zeitpunkt.isoformat(),
             "geraet": request.headers.get("user-agent", "")[:300],
-            "vollmacht_sha256": hashlib.sha256(texte["vollmacht"].encode()).hexdigest(),
-            "datenschutz_sha256": hashlib.sha256(texte["datenschutz"].encode()).hexdigest(),
+            # Je Erklärung: abgegeben oder nicht, und die Prüfsumme ihres Wortlauts.
+            "erklaerungen": abgegeben,
+            **{f"{e.name}_sha256": e.pruefsumme for e in abzugeben},
             "einwilligung_partner_sha256":
                 hashlib.sha256(zustand(aufnahme)["texte"]["einwilligung_partner"].encode()).hexdigest()
                 if einwilligung else "",
@@ -632,7 +646,8 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         aufnahme = eingang_von(fall, request)
         unterschrift = speicher.unterschrift(aufnahme.kennung)
         nachweis = speicher.nachweis(aufnahme.kennung)
-        return {**kopfdaten(aufnahme), "teile": aufnahme.fuer_die_akte(),
+        return {**kopfdaten(aufnahme),
+                "teile": aufnahme.fuer_die_akte() + [erklaerungen.fuer_die_akte(aufnahme.art, nachweis)],
                 "dateien": [{"kennung": d.kennung, "name": d.name, "groesse": d.groesse, "von": einreicher(d.von)}
                             for d in speicher.dateien(aufnahme.kennung)],
                 "unterschrift": ("data:image/png;base64," + base64.b64encode(unterschrift).decode())

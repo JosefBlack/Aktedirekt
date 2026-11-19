@@ -112,7 +112,7 @@ def test_zuruecknehmen_nur_am_tag_des_hochladens_gleich_wie_der_fall_steht(umgeb
     for schritt, daten in ANGABEN.items():
         client.put(f"/api/aufnahme/schritt/{schritt}", json=daten, headers=mandant)
     client.post("/api/aufnahme/abschluss", headers=mandant, json={
-        "vollmacht": True, "datenschutz": True, "einwilligung_partner": False, "unterschrift": UNTERSCHRIFT})
+        "vollmacht": True, "datenschutz": True, "widerruf": True, "einwilligung_partner": False, "unterschrift": UNTERSCHRIFT})
     assert faelle(client, kopf)[0]["unterlagen"][0]["entfernbar"] is True
 
     uhr.zeit += ENTFERNEN_FRIST + timedelta(minutes=1)

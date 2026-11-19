@@ -96,7 +96,7 @@ def test_fall_ueber_die_werkstatt_verschwindet_auch_aus_ihrer_liste(umgebung):
         client.put(f"/api/aufnahme/schritt/{schritt}", json=angaben, headers=kopf)
     from tests.test_aufnahme import UNTERSCHRIFT
     client.post("/api/aufnahme/abschluss", headers=kopf, json={
-        "vollmacht": True, "datenschutz": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT})
+        "vollmacht": True, "datenschutz": True, "widerruf": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT})
     werkstatt = kanzlei(client, "werkstatt-a", WERKSTATT)
     assert len(client.get("/api/partner/faelle", headers=werkstatt).json()["faelle"]) == 1
     fall = speicher.laden(daten["zugang"]).kennung

@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta
 
 from typing import Any
 
-from aktedirekt import akte_pdf
+from aktedirekt import akte_pdf, erklaerungen
 from aktedirekt.aufnahme import Aufnahme, kurzrubrum
 from aktedirekt.domain import Einwilligung, Fall, Herkunft, Sachstand
 from aktedirekt.jurnodes import JurNodes, JurNodesFehler
@@ -157,7 +157,8 @@ def blatt_fuer_die_akte(aufnahme: Aufnahme, speicher: Any, partner: Partnerliste
     for d in speicher.dateien(aufnahme.kennung):
         einreicher = partner.konto(d.von)
         anlagen.append(_dateiname(d.name, d.art) + (f" (eingereicht von {einreicher.name if einreicher else 'Partner'})" if d.von else ""))
-    return akte_pdf.erzeugen(kurzrubrum(aufnahme), kopf, aufnahme.fuer_die_akte(), anlagen)
+    teile = aufnahme.fuer_die_akte() + [erklaerungen.fuer_die_akte(aufnahme.art, nachweis)]
+    return akte_pdf.erzeugen(kurzrubrum(aufnahme), kopf, teile, anlagen)
 
 
 def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: Partnerliste,

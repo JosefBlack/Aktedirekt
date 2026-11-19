@@ -51,7 +51,7 @@ def abschicken(client, kopf, angaben=K_ANGABEN):
         antwort = client.put(f"/api/aufnahme/schritt/{schritt}", json=daten, headers=kopf)
         assert antwort.status_code == 200, antwort.text
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={
-        "vollmacht": True, "datenschutz": True, "unterschrift": UNTERSCHRIFT})
+        "vollmacht": True, "datenschutz": True, "widerruf": True, "unterschrift": UNTERSCHRIFT})
     assert antwort.status_code == 200, antwort.text
     return antwort.json()
 
@@ -75,9 +75,9 @@ def test_aufnahme_kennt_ihre_fallart(umgebung):
     _, daten = beginnen(client)
     assert daten["art"] == "kuendigung" and daten["ablauf"] == list(K_SCHRITTE)
     assert [a["abschnitt"] for a in daten["schritt_felder"]] == list(K_SCHRITTE)
-    assert "Kündigung" in daten["texte"]["vollmacht"] and daten["hinweise"] == []
+    assert "Kündigung" in daten["erklaerungen"][0]["text"] and daten["hinweise"] == []
     _, unfall = beginnen(client, "unfall")
-    assert unfall["art"] == "unfall" and unfall["schritt_felder"] == [] and "Verkehrsunfall" in unfall["texte"]["vollmacht"]
+    assert unfall["art"] == "unfall" and unfall["schritt_felder"] == [] and "Verkehrsunfall" in unfall["erklaerungen"][0]["text"]
     assert beginnen(client, "erfunden")[1]["art"] == "unfall"
 
 
@@ -146,7 +146,7 @@ def test_ganzer_ablauf_mit_ergaenzung_und_meldung(umgebung):
     client, speicher, _, ablage, meldungen = umgebung
     kopf, daten = beginnen(client)
     assert client.post("/api/aufnahme/abschluss", headers=kopf, json={
-        "vollmacht": True, "datenschutz": True, "unterschrift": UNTERSCHRIFT}).json()["fehlend"] == list(K_SCHRITTE)
+        "vollmacht": True, "datenschutz": True, "widerruf": True, "unterschrift": UNTERSCHRIFT}).json()["fehlend"] == list(K_SCHRITTE)
     assert hochladen(client, kopf, ablage, "kuendigung.pdf", b"%PDF-1.7 Kuendigung").status_code == 200
     fertig = abschicken(client, kopf)
     assert fertig["abgeschlossen"] and [a["abschnitt"] for a in fertig["ergaenzung_felder"]] == ["familie", "verguetung", "unterlagen"]
@@ -213,7 +213,7 @@ def test_eingang_im_einzelnen_mit_anlage_und_unterschrift(umgebung):
     e = client.get(f"/api/kanzlei/eingaenge/{fall}", headers=k).json()
     titel = [t["titel"] for t in e["teile"]]
     assert titel == ["Ihre Kündigung", "Ihre Daten", "Ihr Arbeitgeber", "Die Kündigung", "Besondere Umstände",
-                     "Unterlagen und Kosten (ergänzt)"]
+                     "Unterlagen und Kosten (ergänzt)", "Erklärungen des Mandanten"]
     assert ["Name des Arbeitgebers", "Beispiel Logistik GmbH"] in e["teile"][2]["zeilen"]
     assert e["teile"][0]["zeilen"][0] == ["Wann haben Sie die Kündigung erhalten?", "10.11.2026"]
     assert ["Besteht eine Schwangerschaft?", "nicht relevant"] in e["teile"][4]["zeilen"]
@@ -241,7 +241,7 @@ def test_unfall_in_der_ansicht_der_kanzlei(umgebung):
     fall = client.get("/api/kanzlei/eingaenge", headers=k).json()["eingaenge"][0]["fall"]
     e = client.get(f"/api/kanzlei/eingaenge/{fall}", headers=k).json()
     assert [t["titel"] for t in e["teile"]] == ["Der Unfall", "Fahrzeug des Mandanten", "Gegenseite", "Mandant",
-                                                "Bankverbindung (ergänzt)"]
+                                                "Bankverbindung (ergänzt)", "Erklärungen des Mandanten"]
     assert ["Unfallort", "Hauptstr. 1, Berlin"] in e["teile"][0]["zeilen"]
     assert e["teile"][4]["zeilen"] == [["IBAN", "DE89370400440532013000"]]
     assert e["klagefrist"] == "" and e["vermittler"] == "Autohaus Beispiel"

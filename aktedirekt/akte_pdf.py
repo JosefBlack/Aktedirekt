@@ -43,20 +43,23 @@ def _kodiert(text: str) -> bytes:
     return roh.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)")
 
 
-def erzeugen(titel: str, kopfzeilen: list[str], teile: list[dict], anlagen: list[str]) -> bytes:
+def erzeugen(titel: str, kopfzeilen: list[str], teile: list[dict], anlagen: list[str] | None) -> bytes:
     """``teile`` wie ``Aufnahme.fuer_die_akte()``: Überschrift und Zeilen aus Bezeichnung und Angabe."""
     zeilen: list[tuple[str, str]] = [("titel", z) for z in _umbrechen(titel, 16)]
     zeilen += [("kopf", z) for k in kopfzeilen for z in _umbrechen(k, 9)]
     for teil in teile:
-        zeilen.append(("abschnitt", teil["titel"]))
+        if teil["titel"]:
+            zeilen.append(("abschnitt", teil["titel"]))
         if not teil["zeilen"]:
             zeilen.append(("wert", "keine Angaben"))
         for bezeichnung, wert in teil["zeilen"]:
-            zeilen += [("bezeichnung", z) for z in _umbrechen(bezeichnung, 8)]
+            if bezeichnung:
+                zeilen += [("bezeichnung", z) for z in _umbrechen(bezeichnung, 8)]
             zeilen += [("wert", z) for z in _umbrechen(wert, 10)]
             zeilen.append(("leer", ""))
-    zeilen.append(("abschnitt", "Anlagen"))
-    zeilen += [("wert", z) for a in (anlagen or ["keine"]) for z in _umbrechen(a, 10)]
+    if anlagen is not None:                        # ``None``: ein Blatt ohne Anlagenverzeichnis
+        zeilen.append(("abschnitt", "Anlagen"))
+        zeilen += [("wert", z) for a in (anlagen or ["keine"]) for z in _umbrechen(a, 10)]
 
     seiten: list[bytes] = []
     inhalt: list[bytes] = []

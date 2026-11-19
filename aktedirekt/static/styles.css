@@ -95,3 +95,7 @@ input[inputmode] { font-variant-numeric: tabular-nums; }
 #hinweise .hinweis { margin: 0 0 12px; font-size: 15px; }
 #hinweise .frist { border-left-color: var(--akzent); }
 #hinweise .warnung { border-left-color: var(--fehler); font-weight: 600; }
+.text.lang { max-height: 220px; overflow-y: auto; margin-top: 8px; }
+.verweis { display: inline-block; margin-top: 6px; padding: 8px 0; min-height: 44px; border: 0; background: none;
+  font: inherit; font-size: 15px; color: var(--marke); text-decoration: underline; cursor: pointer; }
+form[data-seite="abschluss"] h2 { margin-top: 30px; }

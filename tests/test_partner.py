@@ -50,7 +50,7 @@ def aufnehmen(client, einladung, einwilligung=True, nachname="Muster"):
             daten = {**daten, "nachname": nachname}
         assert client.put(f"/api/aufnahme/schritt/{schritt}", json=daten, headers=kopf).status_code == 200
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={
-        "vollmacht": True, "datenschutz": True, "einwilligung_partner": einwilligung,
+        "vollmacht": True, "datenschutz": True, "widerruf": True, "einwilligung_partner": einwilligung,
         "unterschrift": UNTERSCHRIFT})
     assert antwort.status_code == 200
     return kopf, zugang

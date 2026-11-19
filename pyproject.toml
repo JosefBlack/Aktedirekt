@@ -37,7 +37,7 @@ dev = [
 include = ["aktedirekt*"]
 
 [tool.setuptools.package-data]
-aktedirekt = ["sachstaende.json", "static/*", "texte/*.txt"]
+aktedirekt = ["sachstaende.json", "static/*", "texte/*.txt", "texte/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

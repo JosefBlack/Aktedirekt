@@ -1,0 +1,20 @@
+{
+  "_hinweis": [
+    "Was der Mandant vor der Unterschrift erklärt - in dieser Reihenfolge.",
+    "ENTWURF: Überschriften und Sätze neben den Kästchen bitte durch die Kanzlei prüfen.",
+    "'text' nennt die Datei mit dem Wortlaut (leer: kein eigener Text, nur das Kästchen).",
+    "'vollmacht' gibt es je Fallart: vollmacht.txt und vollmacht_kuendigung.txt.",
+    "'pflicht': Ohne dieses Kästchen lässt sich nicht abschicken."
+  ],
+  "erklaerungen": [
+    {"name": "vollmacht", "titel": "Auftrag und Vollmacht", "text": "vollmacht",
+     "haken": "Ich erteile den Auftrag und die Vollmacht.", "pflicht": true},
+    {"name": "widerruf", "titel": "Widerrufsrecht", "text": "widerruf",
+     "haken": "Ich habe die Widerrufsbelehrung erhalten.", "pflicht": true},
+    {"name": "widerruf_sofort", "titel": "", "text": "",
+     "haken": "Ich verlange ausdrücklich, dass die Kanzlei schon vor Ablauf der Widerrufsfrist tätig wird.",
+     "pflicht": false},
+    {"name": "datenschutz", "titel": "Datenverarbeitung", "text": "datenschutz",
+     "haken": "Ich habe die Hinweise zur Datenverarbeitung zur Kenntnis genommen.", "pflicht": true}
+  ]
+}

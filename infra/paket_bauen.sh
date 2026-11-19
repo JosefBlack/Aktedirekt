@@ -9,6 +9,13 @@ mkdir -p "$BAU/funktion" "$BAU/paket" ausgabe
 python3 -m pip install --quiet --requirement requirements.txt --target "$BAU/funktion" \
   --platform manylinux2014_aarch64 --implementation cp --python-version 3.12 --only-binary=:all:
 cp -r aktedirekt "$BAU/funktion/"
+# Der Wortlaut der Kanzlei (Vollmacht, Widerrufsbelehrung, Datenverarbeitung,
+# Hinweise) liegt nicht im Repository. Was im Ordner kanzlei-texte/ steht,
+# ersetzt beim Bau die gleichnamigen Entwürfe.
+if [ -d kanzlei-texte ]; then
+  cp kanzlei-texte/* "$BAU/funktion/aktedirekt/texte/"
+  echo "Wortlaut der Kanzlei eingesetzt: $(ls kanzlei-texte | tr '\n' ' ')"
+fi
 find "$BAU/funktion" -name __pycache__ -type d -prune -exec rm -r {} +
 (cd "$BAU/funktion" && zip -qr "$BAU/paket/funktion.zip" .)
 sed 's#CodeUri: \.\./#CodeUri: funktion.zip#' infra/template.yaml > "$BAU/paket/template.yaml"

@@ -8,3 +8,4 @@ __pycache__/
 infra/samconfig.toml
 .aws-sam/
 ausgabe/
+kanzlei-texte/

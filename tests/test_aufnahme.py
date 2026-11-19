@@ -141,7 +141,7 @@ def test_ganzer_ablauf_mit_werkstatt(umgebung):
     assert antwort.status_code == 200 and antwort.json()["name"] == "schaden.jpg"
     assert speicher.datei_inhalt(speicher.laden(zugang).kennung, antwort.json()["kennung"]) == foto
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={
-        "vollmacht": True, "datenschutz": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT})
+        "vollmacht": True, "datenschutz": True, "widerruf": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT})
     assert antwort.status_code == 200 and antwort.json()["abgeschlossen"] is True
     assert antwort.json()["sachstand"] == "Aufgenommen"
 
@@ -166,7 +166,7 @@ def test_ohne_partner_gibt_es_keine_einwilligung(umgebung):
     kopf, zugang = beginnen(client, "gibt-es-nicht")
     ausfuellen(client, kopf)
     client.post("/api/aufnahme/abschluss", headers=kopf, json={
-        "vollmacht": True, "datenschutz": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT})
+        "vollmacht": True, "datenschutz": True, "widerruf": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT})
     assert speicher.laden(zugang).einwilligung_partner is False
     assert "broker" not in leads[0]["model"]
 
@@ -176,7 +176,7 @@ def test_abschluss_verlangt_alles(umgebung):
     kopf, zugang = beginnen(client)
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={"unterschrift": "data:image/png;base64,AAAA"})
     assert antwort.status_code == 422
-    assert set(antwort.json()["fehler"]) == {"_", "vollmacht", "datenschutz", "unterschrift"}
+    assert set(antwort.json()["fehler"]) == {"_", "vollmacht", "widerruf", "datenschutz", "unterschrift"}
     assert antwort.json()["fehlend"] == ["unfall", "fahrzeug", "gegner", "person"]
     assert speicher.laden(zugang).abgeschlossen_am is None and leads == []
 
@@ -250,7 +250,7 @@ def test_jurnodes_ausfall_verliert_die_aufnahme_nicht(tmp_path):
     kopf, zugang = beginnen(client)
     ausfuellen(client, kopf)
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={
-        "vollmacht": True, "datenschutz": True, "unterschrift": UNTERSCHRIFT})
+        "vollmacht": True, "datenschutz": True, "widerruf": True, "unterschrift": UNTERSCHRIFT})
     assert antwort.status_code == 200
     aufnahme = speicher.laden(zugang)
     assert aufnahme.abgeschlossen_am == JETZT and aufnahme.lead_kennung == ""

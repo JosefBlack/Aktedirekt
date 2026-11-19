@@ -94,7 +94,7 @@ def aufnehmen(client, ablage, einladung="ein-a"):
         client.put(f"/api/aufnahme/schritt/{schritt}", json=daten, headers=kopf)
     assert hochladen(client, kopf, ablage, "Schaden <vorne>.jpg", b"\xff\xd8\xff\xe0 Schadenfoto").status_code == 200
     assert client.post("/api/aufnahme/abschluss", headers=kopf, json={
-        "vollmacht": True, "datenschutz": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT}).status_code == 200
+        "vollmacht": True, "datenschutz": True, "widerruf": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT}).status_code == 200
     return kopf, zugang
 
 

@@ -29,7 +29,7 @@ def abschicken(client, zugang, einwilligung, nachname="Muster"):
             daten = {**daten, "nachname": nachname}
         assert client.put(f"/api/aufnahme/schritt/{schritt}", json=daten, headers=kopf).status_code == 200
     assert client.post("/api/aufnahme/abschluss", headers=kopf, json={
-        "vollmacht": True, "datenschutz": True, "einwilligung_partner": einwilligung,
+        "vollmacht": True, "datenschutz": True, "widerruf": True, "einwilligung_partner": einwilligung,
         "unterschrift": UNTERSCHRIFT}).status_code == 200
     return kopf
 

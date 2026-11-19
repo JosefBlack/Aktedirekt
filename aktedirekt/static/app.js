@@ -350,8 +350,7 @@ abschluss.addEventListener("submit", async (e) => {
   sperren(abschluss, true);
   try {
     const antwort = await aufruf("POST", "/api/aufnahme/abschluss", {
-      vollmacht: $('[name="vollmacht"]', abschluss).checked,
-      datenschutz: $('[name="datenschutz"]', abschluss).checked,
+      ...Object.fromEntries((zustand.erklaerungen || []).map((e) => [e.name, $('[name="' + e.name + '"]', abschluss).checked])),
       einwilligung_partner: $('[name="einwilligung_partner"]', abschluss).checked,
       // Ein paar Punkte sind keine Unterschrift.
       unterschrift: flaeche.striche >= 12 ? flaeche.leinwand.toDataURL("image/png") : "",
@@ -371,6 +370,53 @@ $("#widerrufen").addEventListener("click", async () => {
   } catch (fehler) { melden(fehler.message); }
 });
 
+// ---- Erklärungen und Unterlagen ----------------------------------------
+
+// Vollmacht, Widerrufsrecht, Datenverarbeitung: Text, Kästchen und der Text als PDF.
+function erklaerungen_bauen() {
+  const ziel = $("#erklaerungen");
+  ziel.textContent = "";
+  for (const e of zustand.erklaerungen || []) {
+    if (e.titel) ziel.append(knoten("h2", {}, e.titel));
+    if (e.text) {
+      ziel.append(knoten("div", { class: "text lang", tabindex: "0" }, e.text));
+      const pdf = knoten("button", { type: "button", class: "verweis" }, e.titel + " als PDF speichern");
+      pdf.addEventListener("click", () => unterlage_speichern(e).catch((fehler) => melden(fehler.message)));
+      ziel.append(pdf);
+    }
+    const marke = knoten("label", { class: "haken" });
+    marke.append(knoten("input", { type: "checkbox", name: e.name }), knoten("span", {}, e.haken + (e.pflicht ? "" : " ")));
+    if (!e.pflicht) marke.lastChild.append(knoten("span", { class: "frei" }, "freiwillig"));
+    ziel.append(marke, knoten("p", { class: "fehler", "data-fehler": e.name }));
+  }
+}
+
+async function unterlage_speichern(e) {
+  let antwort;
+  try {
+    antwort = await fetch("/api/aufnahme/unterlagen/" + e.name, { headers: { Authorization: "Bearer " + zugang } });
+  } catch (f) { throw new Error("Keine Verbindung. Bitte noch einmal versuchen."); }
+  if (!antwort.ok) throw new Error("Das hat nicht geklappt. Bitte noch einmal versuchen.");
+  const verweis = knoten("a", { href: URL.createObjectURL(await antwort.blob()), download: e.titel + ".pdf" });
+  verweis.click();
+  setTimeout(() => URL.revokeObjectURL(verweis.href), 60000);
+}
+
+function unterlagen_zeigen() {
+  const mit_text = (zustand.erklaerungen || []).filter((e) => e.text);
+  $("#unterlagen").hidden = !zustand.abgeschlossen || !mit_text.length;
+  const liste = $("#unterlagenliste");
+  liste.textContent = "";
+  for (const e of mit_text) {
+    const knopf = knoten("button", { type: "button" });
+    knopf.append(knoten("span", {}, e.titel), knoten("span", { class: "zustand" }, "PDF ›"));
+    knopf.addEventListener("click", () => unterlage_speichern(e).catch((fehler) => melden(fehler.message)));
+    const li = knoten("li");
+    li.append(knopf);
+    liste.append(li);
+  }
+}
+
 // ---- Ablauf -------------------------------------------------------------
 
 function fertig() {
@@ -378,6 +424,7 @@ function fertig() {
   $("#auskunft").hidden = !zustand.einwilligung_partner;
   $("#auskunft-text").textContent = zustand.partner + " darf diesen Stand sehen.";
   dateien_zeigen();
+  unterlagen_zeigen();
   if (window.ergaenzungen_zeigen) window.ergaenzungen_zeigen();
   zeigen("fertig");
 }
@@ -404,8 +451,7 @@ function uebernehmen() {
     // Was die Werkstatt eingetragen hat, steht schon da - der Mandant kann es ändern.
     fuellen(form, zustand.angaben[schritt] || vorbelegt[schritt] || {});
   }
-  $("#text-vollmacht").textContent = zustand.texte.vollmacht;
-  $("#text-datenschutz").textContent = zustand.texte.datenschutz;
+  erklaerungen_bauen();
   $("#text-partner").textContent = zustand.texte.einwilligung_partner;
   $("#block-partner").hidden = !zustand.partner;
   $("#partnerhinweis").hidden = !zustand.partner;

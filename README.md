@@ -33,7 +33,7 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (256 Prüfungen, ohne Netz; was eine Ablage braucht,
+Vorhanden und geprüft (273 Prüfungen, ohne Netz; was eine Ablage braucht,
 läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
@@ -113,6 +113,32 @@ Kennwort gehört deshalb vor die erste Anmeldung.
 
 In AWS meldet außerdem eine E-Mail jeden Eingang: ohne Namen und ohne Inhalt,
 bei einer Kündigung mit der Klagefrist im Betreff.
+
+## Erklärungen vor der Unterschrift
+
+Vor der Unterschrift erklärt der Mandant, in dieser Reihenfolge:
+
+| Erklärung | Pflicht |
+|---|---|
+| Auftrag und Vollmacht (je Fallart ein eigener Text) | ja |
+| Widerrufsbelehrung erhalten | ja |
+| Verlangen, dass die Kanzlei vor Ablauf der Widerrufsfrist tätig wird | nein |
+| Hinweise zur Datenverarbeitung zur Kenntnis genommen | ja |
+
+Jeden Text kann der Mandant als PDF speichern, vor der Unterschrift und danach
+auf seiner Statusseite. Festgehalten wird je Erklärung, ob sie abgegeben wurde,
+und die Prüfsumme ihres Wortlauts. Kanzlei-Ansicht und das PDF für die Akte
+zeigen jede Erklärung mit ja oder nein.
+
+Reihenfolge, Überschriften und die Sätze neben den Kästchen stehen in
+`aktedirekt/texte/erklaerungen.json`. **Alle Texte im Repository sind
+Platzhalter.** Der Wortlaut der Kanzlei gehört nicht hierher: Er liegt beim Bau
+des Pakets im Ordner `kanzlei-texte/` (nicht eingecheckt) und ersetzt dort die
+gleichnamigen Dateien.
+
+Offen: Die Widerrufsbelehrung muss dem Mandanten dauerhaft zur Verfügung
+stehen. Bisher kann er sie nur selbst als PDF speichern; ein Versand per E-Mail
+fehlt noch.
 
 ## Übergabe an jur|nodes
 
