@@ -175,6 +175,11 @@
     <p id="auskunft-text" class="klein"></p>
     <button type="button" class="neben" id="widerrufen">Einverständnis widerrufen</button>
   </div>
+  <div id="ergaenzen" hidden>
+    <h2>Angaben vervollständigen</h2>
+    <p class="klein">Das hilft uns, Ihren Schaden schneller geltend zu machen. Nichts davon ist Pflicht – tragen Sie ein, was Sie wissen, wann es Ihnen passt.</p>
+    <ul id="ergaenzungsliste" class="abschnitte"></ul>
+  </div>
   <p>Sie können weitere Fotos und Unterlagen nachreichen:</p>
   <div class="hochladen">
     <label class="knopf">Foto aufnehmen<input type="file" id="kamera2" accept="image/*" capture="environment" hidden></label>
@@ -183,7 +188,14 @@
   <p id="ladestand2" class="klein" hidden></p>
   <ul id="dateiliste2" class="dateien"></ul>
 </section>
+<form data-seite="ergaenzung" id="ergaenzung" novalidate hidden>
+  <h1 id="ergaenzung-titel"></h1>
+  <p id="ergaenzung-hinweis" class="klein"></p>
+  <div id="ergaenzung-felder"></div>
+  <button type="submit" class="haupt">Speichern</button>
+</form>
 </main>
 <script src="app.js"></script>
+<script src="ergaenzung.js"></script>
 </body>
 </html>

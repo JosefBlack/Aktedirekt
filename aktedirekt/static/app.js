@@ -51,10 +51,12 @@ function zeigen(name) {
   seite = name;
   melden("");
   for (const s of $$("[data-seite]")) s.hidden = s.dataset.seite !== name;
-  const nr = SEITEN.indexOf(name);
+  // Die Ergänzungen der zweiten Stufe hängen an der Statusseite, nicht am Ablauf.
+  const nebenan = name === "ergaenzung";
+  const nr = nebenan ? SEITEN.length - 1 : SEITEN.indexOf(name);
   const mitten = nr > 0 && nr < SEITEN.length - 1;
-  $("#titel").textContent = TITEL[name];
-  $("#zurueck").hidden = !mitten;
+  $("#titel").textContent = nebenan ? "Ergänzen" : TITEL[name];
+  $("#zurueck").hidden = !(mitten || nebenan);
   $("#zaehler").textContent = mitten ? `${nr} von ${SEITEN.length - 2}` : "";
   $("#fortschritt").style.width = (100 * nr / (SEITEN.length - 1)) + "%";
   if (name === "abschluss") flaeche.einrichten();
@@ -279,6 +281,7 @@ function fertig() {
   $("#auskunft").hidden = !zustand.einwilligung_partner;
   $("#auskunft-text").textContent = zustand.partner + " darf diesen Stand sehen.";
   dateien_zeigen();
+  if (window.ergaenzungen_zeigen) window.ergaenzungen_zeigen();
   zeigen("fertig");
 }
 
@@ -314,7 +317,10 @@ $("#los").addEventListener("click", async () => {
   $("#los").disabled = false;
 });
 
-$("#zurueck").addEventListener("click", () => zeigen(SEITEN[Math.max(0, SEITEN.indexOf(seite) - 1)]));
+$("#zurueck").addEventListener("click", () => {
+  if (seite === "ergaenzung") return fertig();
+  zeigen(SEITEN[Math.max(0, SEITEN.indexOf(seite) - 1)]);
+});
 
 (async function beginnen() {
   try { zugang = localStorage.getItem(MERKER) || ""; } catch (e) { zugang = ""; }

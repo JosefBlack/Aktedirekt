@@ -78,3 +78,11 @@ button.neben { min-height: 44px; font-weight: 400; }
 [hidden] { display: none !important; }
 .auskunft { margin: -4px 0 20px; }
 .auskunft p { margin: 0; }
+h2 { font-size: 20px; margin: 28px 0 6px; }
+.abschnitte { list-style: none; padding: 0; margin: 12px 0 24px; }
+.abschnitte button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+  min-height: 54px; margin-top: 8px; padding: 0 14px; font: inherit; text-align: left; color: var(--schrift);
+  background: var(--flaeche); border: 1.5px solid var(--rand); border-radius: 12px; cursor: pointer; }
+.abschnitte .zustand { font-size: 14px; color: var(--leise); white-space: nowrap; }
+.abschnitte .erledigt .zustand { color: var(--gut); font-weight: 600; }
+input[inputmode] { font-variant-numeric: tabular-nums; }

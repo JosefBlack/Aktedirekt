@@ -31,7 +31,8 @@ from fastapi.staticfiles import StaticFiles
 
 from aktedirekt import dateien, zeit
 from aktedirekt.abgleich import als_fall, lead_anlegen
-from aktedirekt.aufnahme import SCHRITTE, TRESEN, Aufnahme, felder_pruefen, schritt_pruefen
+from aktedirekt.aufnahme import (ERG, ERGAENZUNGEN, SCHRITTE, TRESEN, Aufnahme, felder_pruefen,
+                                 schritt_pruefen)
 from aktedirekt.jurnodes import JurNodes
 from aktedirekt.partner import Partnerliste
 from aktedirekt.sachstand import Stufen
@@ -105,11 +106,21 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             teile.append(stueck)
         return b"".join(teile)
 
+    # Woraus die Oberfläche die Formulare der zweiten Stufe baut.
+    ergaenzung_felder = [
+        {"abschnitt": name, "titel": a.titel, "hinweis": a.hinweis, "felder": [
+            {"name": f.name, "art": f.art, "bezeichnung": f.bezeichnung, "hinweis": f.hinweis,
+             "laenge": f.laenge, "zeige_wenn": list(f.zeige_wenn) if f.zeige_wenn else None}
+            for f in a.felder]}
+        for name, a in ERGAENZUNGEN.items()]
+
     def zustand(aufnahme: Aufnahme) -> dict[str, Any]:
         konto = partnerliste.konto(aufnahme.partner)
         name = konto.name if konto else ""
         return {
-            "angaben": aufnahme.angaben,
+            "angaben": {s: a for s, a in aufnahme.angaben.items() if not s.startswith(ERG)},
+            "ergaenzungen": aufnahme.ergaenzungen(),
+            "ergaenzung_felder": ergaenzung_felder,
             "vorbelegt": aufnahme.vorbelegt(),
             "dateien": [{"kennung": d.kennung, "name": d.name} for d in speicher.dateien(aufnahme.kennung)],
             "abgeschlossen": aufnahme.abgeschlossen_am is not None,
@@ -159,6 +170,20 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             return JSONResponse({"fehler": fehler}, status_code=422)
         speicher.schritt_speichern(aufnahme.kennung, schritt, sauber)
         return JSONResponse({"fehler": {}})
+
+    @app.put("/api/aufnahme/ergaenzung/{abschnitt}")
+    async def ergaenzen(abschnitt: str, request: Request) -> JSONResponse:
+        """Zweite Stufe: weitere Angaben nach dem Abschicken, abschnittsweise und freiwillig."""
+        aufnahme = aufnahme_von(request)
+        if abschnitt not in ERGAENZUNGEN:
+            raise HTTPException(404, "Diesen Abschnitt gibt es nicht.")
+        if aufnahme.abgeschlossen_am is None:
+            raise HTTPException(409, "Bitte schicken Sie zuerst die Unfallmeldung ab.")
+        sauber, fehler = felder_pruefen(ERGAENZUNGEN[abschnitt].felder, await json_lesen(request), jetzt().date())
+        if fehler:
+            return JSONResponse({"fehler": fehler}, status_code=422)
+        speicher.schritt_speichern(aufnahme.kennung, ERG + abschnitt, sauber)
+        return JSONResponse({"fehler": {}, "ergaenzungen": {**aufnahme.ergaenzungen(), abschnitt: sauber}})
 
     @app.post("/api/aufnahme/dateien")
     async def hochladen(request: Request) -> dict[str, str]:

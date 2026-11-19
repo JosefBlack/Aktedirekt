@@ -19,12 +19,19 @@ from typing import Any
 @dataclass(frozen=True)
 class Feld:
     name: str
-    art: str  # text | lang | datum | zeit | ja_nein | auswahl | email | telefon | plz | kennzeichen
+    # text | lang | datum | datum_frei | zeit | ja_nein | auswahl | email | telefon | plz |
+    # kennzeichen | iban | zahl | betrag | jahr
+    art: str
     pflicht: bool = False
     laenge: int = 120
     auswahl: tuple[str, ...] = ()
     # Pflicht nur, wenn ein anderes Feld desselben Schritts diesen Wert hat.
     pflicht_wenn: tuple[str, str] | None = None
+    # Für die Ergänzungen: Die Oberfläche baut ihre Formulare aus diesen Angaben.
+    bezeichnung: str = ""
+    hinweis: str = ""
+    # Nur zeigen, wenn ein anderes Feld desselben Abschnitts diesen Wert hat.
+    zeige_wenn: tuple[str, str] | None = None
 
 
 SCHRITTE: dict[str, tuple[Feld, ...]] = {
@@ -76,10 +83,91 @@ TRESEN: tuple[Feld, ...] = (
     Feld("unfalldatum", "datum", pflicht=True),
 )
 
+@dataclass(frozen=True)
+class Abschnitt:
+    titel: str
+    hinweis: str
+    felder: tuple[Feld, ...]
+
+
+# Die zweite Stufe: Was der Fragebogen der Kanzlei darüber hinaus wissen will.
+# Nichts davon ist Pflicht, und nichts davon hält die Unterschrift auf - der
+# Mandant ergänzt es nach dem Abschicken auf seiner Statusseite, in beliebiger
+# Reihenfolge und auch in mehreren Anläufen.
+ERGAENZUNGEN: dict[str, Abschnitt] = {
+    "bank": Abschnitt("Bankverbindung", "Dorthin überweisen wir Zahlungen der Versicherung.", (
+        Feld("iban", "iban", laenge=42, bezeichnung="IBAN"),
+        Feld("kontoinhaber", "text", bezeichnung="Kontoinhaber", hinweis="falls nicht Sie selbst"),
+        Feld("bic", "text", laenge=11, bezeichnung="BIC", hinweis="nur bei ausländischem Konto"),
+    )),
+    "person": Abschnitt("Zu Ihrer Person", "", (
+        Feld("geburtsdatum", "datum_frei", bezeichnung="Geburtsdatum"),
+        Feld("beruf", "text", bezeichnung="Berufliche Tätigkeit"),
+    )),
+    "fahrer": Abschnitt("Wer ist gefahren?", "", (
+        Feld("fahrer_selbst", "ja_nein", bezeichnung="Sind Sie selbst gefahren?"),
+        Feld("fahrer_name", "text", pflicht_wenn=("fahrer_selbst", "nein"), zeige_wenn=("fahrer_selbst", "nein"),
+             bezeichnung="Name des Fahrers"),
+        Feld("fahrer_geburtsdatum", "datum_frei", zeige_wenn=("fahrer_selbst", "nein"),
+             bezeichnung="Geburtsdatum des Fahrers"),
+        Feld("fahrer_email", "email", zeige_wenn=("fahrer_selbst", "nein"), bezeichnung="E-Mail des Fahrers"),
+    )),
+    "fahrzeug": Abschnitt("Ihr Fahrzeug im Einzelnen",
+                          "Das meiste steht im Fahrzeugschein. Haben Sie ihn fotografiert, genügt, was Sie auswendig wissen.", (
+        Feld("fahrzeugart", "text", laenge=60, bezeichnung="Fahrzeugart", hinweis="Pkw, Motorrad, Transporter …"),
+        Feld("baujahr", "jahr", bezeichnung="Baujahr"),
+        Feld("erstzulassung", "datum_frei", bezeichnung="Erstzulassung"),
+        Feld("kilometerstand", "zahl", bezeichnung="Kilometerstand"),
+        Feld("scheckheft", "ja_nein", bezeichnung="Scheckheft gepflegt?"),
+        Feld("eigentuemer", "text", bezeichnung="Eigentümer oder Leasinggeber", hinweis="falls nicht Sie selbst"),
+    )),
+    "schaden": Abschnitt("Der Schaden", "", (
+        Feld("beschaedigt", "lang", laenge=1000, bezeichnung="Was wurde beschädigt?",
+             hinweis="auch Gegenstände im Fahrzeug, Kleidung, Helm"),
+        Feld("reparaturkosten", "betrag", bezeichnung="Voraussichtliche Reparaturkosten in Euro", hinweis="falls bekannt"),
+        Feld("besichtigungsort", "text", laenge=200, bezeichnung="Wo kann das Fahrzeug besichtigt werden?"),
+        Feld("besichtigungstelefon", "telefon", bezeichnung="Telefon für die Besichtigung"),
+    )),
+    "versicherungen": Abschnitt("Ihre Versicherungen", "Soweit vorhanden. Die Nummern stehen auf dem Versicherungsschein.", (
+        Feld("haftpflicht", "text", bezeichnung="Kfz-Haftpflicht bei"),
+        Feld("haftpflicht_nr", "text", laenge=60, bezeichnung="Versicherungsnummer Haftpflicht"),
+        Feld("vollkasko", "text", bezeichnung="Vollkasko bei"),
+        Feld("vollkasko_sb", "betrag", bezeichnung="Selbstbeteiligung Vollkasko in Euro"),
+        Feld("vollkasko_nr", "text", laenge=60, bezeichnung="Versicherungsnummer Vollkasko"),
+        Feld("teilkasko", "text", bezeichnung="Teilkasko bei"),
+        Feld("teilkasko_sb", "betrag", bezeichnung="Selbstbeteiligung Teilkasko in Euro"),
+        Feld("teilkasko_nr", "text", laenge=60, bezeichnung="Versicherungsnummer Teilkasko"),
+        Feld("rechtsschutz_nr", "text", laenge=60, bezeichnung="Versicherungsnummer Rechtsschutz"),
+    )),
+    "gegner": Abschnitt("Die Gegenseite im Einzelnen", "Was Sie wissen. Lücken sind kein Problem.", (
+        Feld("gegner_anschrift", "text", laenge=200, bezeichnung="Anschrift des Halters"),
+        Feld("gegner_telefon", "telefon", bezeichnung="Telefon des Halters"),
+        Feld("gegner_policen_nr", "text", laenge=60, bezeichnung="Versicherungsnummer der Gegenseite"),
+        Feld("gegner_fahrer", "text", bezeichnung="Name des Fahrers", hinweis="falls nicht der Halter"),
+        Feld("gegner_fahrer_anschrift", "text", laenge=200, bezeichnung="Anschrift des Fahrers"),
+        Feld("gegner_fahrer_telefon", "telefon", bezeichnung="Telefon des Fahrers"),
+        Feld("weitere_beteiligte", "lang", laenge=1000, bezeichnung="Weitere beteiligte Verkehrsteilnehmer"),
+        Feld("polizeidienststelle", "text", bezeichnung="Polizeidienststelle", hinweis="falls die Polizei da war"),
+    )),
+}
+
+# Unter diesem Vorsatz stehen die Ergänzungen bei den Angaben der Aufnahme.
+ERG = "erg_"
+
 _STEUERZEICHEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _KENNZEICHEN = re.compile(r"^[A-ZÄÖÜ]{1,3}[- ]?[A-Z]{0,2} ?[0-9]{1,4} ?[EH]?$")
 _EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
 _TELEFON = re.compile(r"^\+?[0-9][0-9 /()\-]{5,24}$")
+_IBAN = re.compile(r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$")
+_BETRAG = re.compile(r"^[0-9]{1,7}([.,][0-9]{1,2})?$")
+
+
+def iban_gueltig(iban: str) -> bool:
+    """Form und Prüfziffer (Rest 1 bei Teilung durch 97). Ob es das Konto gibt, sagt das nicht."""
+    if not _IBAN.match(iban):
+        return False
+    umgestellt = iban[4:] + iban[:4]
+    return int("".join(str(int(z, 36)) for z in umgestellt)) % 97 == 1
 
 
 def _pruefe(feld: Feld, wert: str, heute: date) -> str:
@@ -95,6 +183,25 @@ def _pruefe(feld: Feld, wert: str, heute: date) -> str:
             return "Das Datum liegt in der Zukunft."
         if tag.year < heute.year - 10:
             return "Bitte das Datum prüfen."
+    elif feld.art == "datum_frei":
+        try:
+            tag = date.fromisoformat(wert)
+        except ValueError:
+            return "Bitte ein Datum angeben."
+        if tag > heute or tag.year < 1900:
+            return "Bitte das Datum prüfen."
+    elif feld.art == "iban":
+        if not iban_gueltig(wert):
+            return "Bitte die IBAN prüfen – da ist vermutlich ein Tippfehler."
+    elif feld.art == "zahl":
+        if not re.fullmatch(r"[0-9]{1,7}", wert):
+            return "Bitte nur Ziffern."
+    elif feld.art == "betrag":
+        if not _BETRAG.match(wert):
+            return "Bitte einen Betrag angeben, zum Beispiel 1250 oder 1250,50."
+    elif feld.art == "jahr":
+        if not (re.fullmatch(r"[0-9]{4}", wert) and 1900 <= int(wert) <= heute.year):
+            return "Bitte das Jahr prüfen."
     elif feld.art == "zeit":
         try:
             time.fromisoformat(wert)
@@ -144,6 +251,13 @@ def felder_pruefen(felder: tuple[Feld, ...], eingabe: Any,
         wert = _STEUERZEICHEN.sub("", roh).strip()
         if feld.art == "kennzeichen":
             wert = " ".join(wert.upper().split())
+        elif feld.art == "iban":
+            wert = "".join(wert.upper().split())
+        elif feld.art in ("zahl", "betrag"):
+            # Tausenderpunkte und ein Euro-Zeichen schreibt mancher mit.
+            wert = wert.replace(" ", "").replace("€", "")
+            if re.fullmatch(r"[0-9]{1,3}(\.[0-9]{3})+(,[0-9]{1,2})?", wert):
+                wert = wert.replace(".", "")
         elif feld.art != "lang":
             wert = " ".join(wert.split())
         sauber[feld.name] = wert
@@ -190,6 +304,9 @@ class Aufnahme:
 
     def fehlende_schritte(self) -> list[str]:
         return [s for s in SCHRITTE if s not in self.angaben]
+
+    def ergaenzungen(self) -> dict[str, dict[str, str]]:
+        return {name: self.angaben.get(ERG + name, {}) for name in ERGAENZUNGEN}
 
 
 # jur|nodes nimmt nur einen begrenzten Zeichenvorrat an (so die Beschreibung

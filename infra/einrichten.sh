@@ -55,11 +55,20 @@ gescheitert() {
   exit 1
 }
 
-echo "== Erster Durchgang (dauert einige Minuten)"
-anlegen "" || gescheitert
-URL=$(ausgabe PortalUrl)
-echo "== Zweiter Durchgang: Adresse $URL eintragen"
-anlegen "$URL" || gescheitert
+# Besteht der Stack schon, ist die Adresse bekannt und ein Durchgang genügt.
+# So bleibt sie auch während der Aktualisierung eingetragen.
+URL=""
+if [ "$STATUS" != "KEINER" ] && [ "$STATUS" != "ROLLBACK_COMPLETE" ]; then URL=$(ausgabe PortalUrl); fi
+if [ -n "$URL" ] && [ "$URL" != "None" ]; then
+  echo "== Aktualisierung (dauert wenige Minuten)"
+  anlegen "$URL" || gescheitert
+else
+  echo "== Erster Durchgang (dauert einige Minuten)"
+  anlegen "" || gescheitert
+  URL=$(ausgabe PortalUrl)
+  echo "== Zweiter Durchgang: Adresse $URL eintragen"
+  anlegen "$URL" || gescheitert
+fi
 
 # Probepartner nur, wenn noch keine Liste eingetragen ist.
 GEHEIMNIS=$(ausgabe PartnerGeheimnis)

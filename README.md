@@ -32,7 +32,7 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (143 Prüfungen, ohne Netz; was eine Ablage braucht,
+Vorhanden und geprüft (158 Prüfungen, ohne Netz; was eine Ablage braucht,
 läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
@@ -41,7 +41,8 @@ läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 | `aktedirekt/web.py` | Schnittstelle dazu; legt nach dem Abschicken den Lead in jur|nodes an |
 | `aktedirekt/static/partner.html` | Fallliste für Werkstatt und Sachverständigen, mit Anmeldung, Suche und Aufnahme am Tresen |
 | `aktedirekt/partner.py` | Partnerkonten, Kennwortprüfung, Sperre nach Fehlversuchen |
-| `aktedirekt/aufnahme.py` | welche Angaben es gibt und wann sie gelten |
+| `aktedirekt/aufnahme.py` | welche Angaben es gibt und wann sie gelten – erste Stufe (vor der Unterschrift) und zweite Stufe (Ergänzungen danach) |
+| `aktedirekt/static/ergaenzung.js` | die zweite Stufe auf dem Handy; die Formulare entstehen aus den Angaben des Servers |
 | `aktedirekt/dateien.py` | welche Dateien angenommen werden (JPG, PNG, HEIC, PDF bis 15 MB) |
 | `aktedirekt/speicher.py` | Ablage für Entwicklung und Vorführung (SQLite, Ordner) |
 | `aktedirekt/speicher_aws.py` | Ablage in AWS (DynamoDB, S3) mit denselben Aufrufen |
@@ -75,6 +76,18 @@ Beispielwerkstatt aus `testdaten/partner.json`.
 Die Fallliste liegt unter `http://127.0.0.1:8000/partner`. Kennung und
 Kennwort der beiden Beispielpartner stehen in `testdaten/partner.json`. Ein
 Kennwort für einen echten Partner erzeugt `python -m aktedirekt.partner`.
+
+## Zwei Stufen
+
+Der Fragebogen der Kanzlei zum Verkehrsunfall hat rund 55 Felder. Vor der
+Unterschrift stehen davon nur die, ohne die es nicht geht (erste Stufe, etwa
+fünf Minuten). Den Rest – Bankverbindung, Fahrer, Fahrzeugdaten, Schaden,
+eigene Versicherungen, Einzelheiten zur Gegenseite – ergänzt der Mandant nach
+dem Abschicken auf seiner Statusseite: abschnittsweise, freiwillig, in
+beliebiger Reihenfolge. Was dort steht, sieht kein Partner.
+
+Vorlage war das Repository `kanzlei-frageboegen`. Der Fragebogen zum
+Kündigungsschutz daraus ist noch nicht übernommen.
 
 ## Aufnahme am Tresen
 
