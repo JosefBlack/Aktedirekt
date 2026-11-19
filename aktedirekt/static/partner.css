@@ -40,3 +40,6 @@ button.haupt.oben { margin: 0 0 16px; }
 .faelle .nochmal { grid-column: 1 / -1; justify-self: start; margin-top: 6px; }
 #faktor h2 { font-size: 20px; margin: 24px 0 6px; }
 #faktor-geheimnis { font-family: ui-monospace, monospace; overflow-wrap: anywhere; color: var(--schrift); }
+.kennwortfeld { position: relative; }
+.kennwortfeld input { padding-right: 110px; }
+.kennwortfeld button { position: absolute; right: 4px; top: 9px; min-height: 44px; color: var(--marke); text-decoration: underline; }

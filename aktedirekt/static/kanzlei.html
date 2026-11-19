@@ -25,7 +25,11 @@
 <form id="anmeldung" novalidate hidden>
   <h1>Kanzlei</h1>
   <label>Kennung<input type="text" name="kennung" maxlength="80" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
-  <label>Kennwort<input type="password" name="kennwort" maxlength="200" autocomplete="current-password"></label>
+  <label for="kennwort">Kennwort</label>
+  <div class="kennwortfeld">
+    <input type="password" id="kennwort" name="kennwort" maxlength="200" autocomplete="current-password">
+    <button type="button" id="kennwort-zeigen" class="schlicht" aria-pressed="false" aria-controls="kennwort">Anzeigen</button>
+  </div>
   <div id="faktor" hidden>
     <div id="faktor-einrichten" hidden>
       <h2>Zweiten Faktor einrichten</h2>

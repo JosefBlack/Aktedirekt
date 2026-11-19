@@ -7,6 +7,8 @@ async function anmeldung_schritt(form, aufruf) {
   const daten = await aufruf("POST", "/api/partner/anmeldung",
     { kennung: form.kennung.value, kennwort: form.kennwort.value, code: form.code.value });
   if (daten.sitzung) return daten;
+  // Während der Code abgefragt wird, soll das Kennwort nicht lesbar danebenstehen.
+  kennwort_sichtbar(false);
   const faktor = form.querySelector("#faktor");
   const einrichten = form.querySelector("#faktor-einrichten");
   faktor.hidden = false;
@@ -20,7 +22,22 @@ async function anmeldung_schritt(form, aufruf) {
   return null;
 }
 
+// Das Kennwort auf Wunsch lesbar machen - wer allein vor dem Bildschirm sitzt,
+// vertippt sich so seltener.
+function kennwort_sichtbar(an) {
+  const feld = document.querySelector("#kennwort"), knopf = document.querySelector("#kennwort-zeigen");
+  feld.type = an ? "text" : "password";
+  knopf.textContent = an ? "Verbergen" : "Anzeigen";
+  knopf.setAttribute("aria-pressed", an ? "true" : "false");
+}
+document.querySelector("#kennwort-zeigen").addEventListener("click", () => {
+  kennwort_sichtbar(document.querySelector("#kennwort").type === "password");
+  document.querySelector("#kennwort").focus();
+});
+
 function anmeldung_zuruecksetzen(form) {
+  // Nach der Anmeldung steht nichts Lesbares mehr im Feld.
+  kennwort_sichtbar(false);
   form.kennwort.value = "";
   form.code.value = "";
   form.querySelector("#faktor").hidden = true;
