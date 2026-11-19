@@ -32,3 +32,9 @@ input[type=password], input[type=search] {
   .faelle li { grid-template-columns: 1fr; }
   .faelle .stand { grid-column: 1; grid-row: auto; align-items: flex-start; text-align: left; margin-top: 8px; }
 }
+button.haupt.oben { margin: 0 0 16px; }
+.qr { background: #fff; border: 1px solid var(--rand); border-radius: 12px; padding: 12px;
+  display: flex; justify-content: center; margin: 16px 0; }
+.qr img { width: min(100%, 300px); height: auto; image-rendering: pixelated; }
+.faelle .marke.offen { color: var(--leise); border-style: dashed; }
+.faelle .nochmal { grid-column: 1 / -1; justify-self: start; margin-top: 6px; }

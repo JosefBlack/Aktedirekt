@@ -24,13 +24,14 @@ from datetime import datetime, timedelta
 from importlib import resources
 from typing import Any, Callable
 
+import segno
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from aktedirekt import dateien
 from aktedirekt.abgleich import als_fall, lead_anlegen
-from aktedirekt.aufnahme import SCHRITTE, Aufnahme, schritt_pruefen
+from aktedirekt.aufnahme import SCHRITTE, TRESEN, Aufnahme, felder_pruefen, schritt_pruefen
 from aktedirekt.jurnodes import JurNodes
 from aktedirekt.partner import Partnerliste
 from aktedirekt.sachstand import Stufen
@@ -42,6 +43,8 @@ MAX_UNTERSCHRIFT = 400 * 1024
 MIN_UNTERSCHRIFT = 800
 _PNG = b"\x89PNG\r\n\x1a\n"
 SITZUNG_DAUER = timedelta(hours=8)
+# So lange kann der Kunde den Code vom Tresen auf seinem Gerät einlösen.
+UEBERGABE_DAUER = timedelta(hours=72)
 
 _KOPFZEILEN = {
     "Content-Security-Policy": "default-src 'self'; img-src 'self' blob: data:; "
@@ -58,7 +61,7 @@ def _text(name: str) -> str:
 
 
 def app_bauen(speicher: Speicher, *, partner: Partnerliste | None = None,
-              jurnodes: JurNodes | None = None,
+              jurnodes: JurNodes | None = None, basis_url: str = "",
               jetzt: Callable[[], datetime] = datetime.now) -> FastAPI:
     app = FastAPI(title="Aktedirekt", docs_url=None, redoc_url=None, openapi_url=None)
     stufen = Stufen.laden()
@@ -101,6 +104,7 @@ def app_bauen(speicher: Speicher, *, partner: Partnerliste | None = None,
         name = konto.name if konto else ""
         return {
             "angaben": aufnahme.angaben,
+            "vorbelegt": aufnahme.vorbelegt(),
             "dateien": [{"kennung": d.kennung, "name": d.name} for d in speicher.dateien(aufnahme.kennung)],
             "abgeschlossen": aufnahme.abgeschlossen_am is not None,
             "sachstand": stufen.bezeichnung(aufnahme.sachstand),
@@ -120,6 +124,17 @@ def app_bauen(speicher: Speicher, *, partner: Partnerliste | None = None,
         einladung = daten.get("einladung", "") if isinstance(daten, dict) else ""
         konto = partnerliste.zu_einladung(einladung) if isinstance(einladung, str) and einladung else None
         aufnahme, zugang = speicher.anlegen(jetzt(), partner=konto.kennung if konto else "")
+        return JSONResponse({"zugang": zugang, **zustand(aufnahme)})
+
+    @app.post("/api/aufnahme/uebernahme")
+    async def uebernehmen(request: Request) -> JSONResponse:
+        """Der Kunde löst den Code vom Tresen ein und bekommt seinen eigenen Zugang."""
+        daten = await json_lesen(request)
+        code = daten.get("code", "") if isinstance(daten, dict) else ""
+        zugang = speicher.uebergabe_einloesen(code, jetzt()) if isinstance(code, str) else ""
+        aufnahme = speicher.laden(zugang)
+        if aufnahme is None:
+            raise HTTPException(410, "Dieser Code gilt nicht mehr. Bitte lassen Sie sich einen neuen zeigen.")
         return JSONResponse({"zugang": zugang, **zustand(aufnahme)})
 
     @app.get("/api/aufnahme")
@@ -246,16 +261,68 @@ def app_bauen(speicher: Speicher, *, partner: Partnerliste | None = None,
         speicher.sitzung_beenden(sitzung_von(request))
         return Response(status_code=204)
 
+    def konto_von(request: Request):  # type: ignore[no-untyped-def]
+        konto = partnerliste.konto(speicher.sitzung_partner(sitzung_von(request), jetzt()))
+        if konto is None:
+            raise HTTPException(401, "Bitte anmelden.")
+        return konto
+
+    def uebergabe(aufnahme: Aufnahme, request: Request) -> dict[str, str] | None:
+        """Link und QR-Code für den Kunden - ``None``, wenn er schon übernommen hat."""
+        code = speicher.uebergabe_anlegen(aufnahme.kennung, jetzt() + UEBERGABE_DAUER)
+        if code is None:
+            return None
+        # Der Code steht hinter dem #: Dieser Teil der Adresse wird nicht an den
+        # Server geschickt und steht deshalb in keinem Zugriffsprotokoll.
+        link = (basis_url or str(request.base_url)).rstrip("/") + "/#u=" + code
+        return {"link": link, "qr": segno.make(link, error="m").svg_data_uri(scale=6, border=2)}
+
+    @app.post("/api/partner/faelle")
+    async def am_tresen(request: Request) -> JSONResponse:
+        konto = konto_von(request)
+        sauber, fehler = felder_pruefen(TRESEN, await json_lesen(request), jetzt().date())
+        if fehler:
+            return JSONResponse({"fehler": fehler}, status_code=422)
+        aufnahme = speicher.am_tresen_anlegen(jetzt(), konto.kennung, sauber)
+        return JSONResponse({"fehler": {}, "fall": aufnahme.kennung, **(uebergabe(aufnahme, request) or {})})
+
+    @app.post("/api/partner/faelle/{fall}/uebergabe")
+    async def neuer_code(fall: str, request: Request) -> dict[str, str]:
+        konto = konto_von(request)
+        aufnahme = speicher.nach_kennung(fall)
+        # Nur für selbst am Tresen Angelegtes - und für Fremdes dieselbe Antwort
+        # wie für Unbekanntes.
+        if aufnahme is None or aufnahme.partner != konto.kennung or not aufnahme.vom_partner:
+            raise HTTPException(404, "Diesen Fall gibt es nicht.")
+        neu = uebergabe(aufnahme, request)
+        if neu is None:
+            raise HTTPException(409, "Ihr Kunde hat die Aufnahme bereits auf seinem Gerät geöffnet.")
+        return neu
+
     @app.get("/api/partner/faelle")
     async def faelle(request: Request) -> dict[str, Any]:
         zeitpunkt = jetzt()
-        konto = partnerliste.konto(speicher.sitzung_partner(sitzung_von(request), zeitpunkt))
-        if konto is None:
-            raise HTTPException(401, "Bitte anmelden.")
+        konto = konto_von(request)
         liste = []
         for aufnahme in speicher.des_partners(konto.kennung):
-            sicht = partner_sicht(als_fall(aufnahme, konto.art), konto.kennung, zeitpunkt, stufen)
-            if sicht is None:
+            sicht = None
+            if aufnahme.abgeschlossen_am is not None:
+                sicht = partner_sicht(als_fall(aufnahme, konto.art), konto.kennung, zeitpunkt, stufen)
+            if sicht is None or not sicht.sachstand:
+                # Ohne Auskunft sieht der Partner höchstens, was er selbst am
+                # Tresen eingetragen hat - im Wortlaut von damals und ohne
+                # Hinweis darauf, ob der Kunde inzwischen abgeschickt hat.
+                eigen = aufnahme.vom_partner
+                if eigen:
+                    liste.append({
+                        "fall": aufnahme.kennung,
+                        "mandant": (eigen.get("vorname", "") + " " + eigen.get("nachname", "")).strip(),
+                        "kennzeichen": eigen.get("kennzeichen", ""),
+                        "unfalldatum": eigen.get("unfalldatum", ""),
+                        "uebergeben_am": aufnahme.angelegt_am.date().isoformat(),
+                        "sachstand": "", "sachstand_seit": "", "fehlende_unterlagen": [],
+                        "am_tresen": True,
+                    })
                 continue
             speicher.auskunft_vermerken(konto.kennung, aufnahme.kennung, sicht.sachstand, zeitpunkt)
             liste.append({
@@ -265,6 +332,7 @@ def app_bauen(speicher: Speicher, *, partner: Partnerliste | None = None,
                 "sachstand": sicht.sachstand,
                 "sachstand_seit": sicht.sachstand_seit.isoformat() if sicht.sachstand_seit else "",
                 "fehlende_unterlagen": list(sicht.fehlende_unterlagen),
+                "am_tresen": bool(aufnahme.vom_partner),
             })
         return {"name": konto.name, "einladung": konto.einladung, "faelle": liste}
 
@@ -289,4 +357,5 @@ def app_aus_umgebung() -> FastAPI:
                             os.environ["AKTEDIREKT_JURNODES_BENUTZER"],
                             os.environ["AKTEDIREKT_JURNODES_SCHLUESSEL"])
     return app_bauen(Speicher(os.environ.get("AKTEDIREKT_DATEN", ".aktedirekt-daten")),
+                     basis_url=os.environ.get("AKTEDIREKT_BASIS_URL", ""),
                      partner=Partnerliste.laden(os.environ.get("AKTEDIREKT_PARTNER")), jurnodes=jurnodes)

@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS sitzung (
   partner TEXT NOT NULL,
   laeuft_ab TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS uebergabe (
+  sha256 TEXT PRIMARY KEY,
+  aufnahme TEXT NOT NULL REFERENCES aufnahme(kennung),
+  laeuft_ab TEXT NOT NULL,
+  eingeloest_am TEXT
+);
 CREATE TABLE IF NOT EXISTS auskunft (
   partner TEXT NOT NULL,
   aufnahme TEXT NOT NULL,
@@ -63,6 +69,7 @@ _NEUE_SPALTEN = {
     "einwilligung_widerrufen_am": "TEXT",
     "sachstand_seit": "TEXT",
     "akte_kennung": "TEXT NOT NULL DEFAULT ''",
+    "vom_partner": "TEXT NOT NULL DEFAULT '{}'",
 }
 
 
@@ -127,7 +134,8 @@ class Speicher:
             einwilligung_partner=bool(z["einwilligung_partner"]),
             einwilligung_widerrufen_am=_zeit(z["einwilligung_widerrufen_am"]),
             lead_kennung=z["lead_kennung"], akte_kennung=z["akte_kennung"], sachstand=z["sachstand"],
-            sachstand_seit=date.fromisoformat(z["sachstand_seit"]) if z["sachstand_seit"] else None)
+            sachstand_seit=date.fromisoformat(z["sachstand_seit"]) if z["sachstand_seit"] else None,
+            vom_partner=json.loads(z["vom_partner"]))
 
     def laden(self, zugang: str) -> Aufnahme | None:
         if not zugang:
@@ -149,8 +157,64 @@ class Speicher:
         return [self._aus_zeile(z) for z in zeilen]
 
     def des_partners(self, partner: str) -> list[Aufnahme]:
-        """Abgeschickte Aufnahmen, die über diesen Partner kamen."""
-        return self._liste("partner = ?", partner) if partner else []
+        """Was dieser Partner sehen könnte: abgeschickte Aufnahmen über seinen Link
+        und alles, was er selbst am Tresen angelegt hat - auch noch nicht Abgeschicktes."""
+        if not partner:
+            return []
+        with closing(self._db()) as db:
+            zeilen = db.execute(
+                "SELECT * FROM aufnahme WHERE partner = ? AND (abgeschlossen_am IS NOT NULL "
+                "OR vom_partner <> '{}') ORDER BY angelegt_am DESC", (partner,)).fetchall()
+        return [self._aus_zeile(z) for z in zeilen]
+
+    # ---- Aufnahme am Tresen ----------------------------------------------
+
+    def am_tresen_anlegen(self, jetzt: datetime, partner: str, angaben: dict[str, str]) -> Aufnahme:
+        """Legt eine Aufnahme an, zu der es noch keinen Zugang gibt.
+
+        Der Zugang entsteht erst, wenn der Kunde den Übergabecode auf seinem
+        Gerät einlöst. Bis dahin steht hier die Prüfsumme eines Zufallswerts,
+        den niemand kennt.
+        """
+        kennung = secrets.token_hex(8)
+        with closing(self._db()) as db, db:
+            db.execute("INSERT INTO aufnahme (kennung, zugang_sha256, partner, angelegt_am, vom_partner) "
+                       "VALUES (?,?,?,?,?)",
+                       (kennung, _pruefsumme(secrets.token_urlsafe(32)), partner, jetzt.isoformat(),
+                        json.dumps(angaben, ensure_ascii=False)))
+        return Aufnahme(kennung=kennung, angelegt_am=jetzt, partner=partner, vom_partner=angaben)
+
+    def uebergabe_anlegen(self, kennung: str, laeuft_ab: datetime) -> str | None:
+        """Ein neuer Übergabecode; frühere werden ungültig.
+
+        ``None``, wenn der Kunde die Aufnahme schon auf sein Gerät genommen hat:
+        Danach gibt es für den Partner keinen Weg mehr hinein.
+        """
+        code = secrets.token_urlsafe(24)
+        with closing(self._db()) as db, db:
+            if db.execute("SELECT 1 FROM uebergabe WHERE aufnahme = ? AND eingeloest_am IS NOT NULL",
+                          (kennung,)).fetchone():
+                return None
+            db.execute("DELETE FROM uebergabe WHERE aufnahme = ?", (kennung,))
+            db.execute("INSERT INTO uebergabe VALUES (?,?,?,NULL)",
+                       (_pruefsumme(code), kennung, laeuft_ab.isoformat()))
+        return code
+
+    def uebergabe_einloesen(self, code: str, jetzt: datetime) -> str:
+        """Tauscht den Code einmalig gegen den Zugang des Kunden - leer, wenn er nicht (mehr) gilt."""
+        if not code:
+            return ""
+        zugang = secrets.token_urlsafe(32)
+        with closing(self._db()) as db, db:
+            geaendert = db.execute(
+                "UPDATE uebergabe SET eingeloest_am = ? WHERE sha256 = ? AND eingeloest_am IS NULL "
+                "AND laeuft_ab > ?", (jetzt.isoformat(), _pruefsumme(code), jetzt.isoformat())).rowcount
+            if geaendert != 1:
+                return ""
+            z = db.execute("SELECT aufnahme FROM uebergabe WHERE sha256 = ?", (_pruefsumme(code),)).fetchone()
+            db.execute("UPDATE aufnahme SET zugang_sha256 = ? WHERE kennung = ?",
+                       (_pruefsumme(zugang), z["aufnahme"]))
+        return zugang
 
     def ohne_lead(self) -> list[Aufnahme]:
         """Abgeschickte Aufnahmen, die jur|nodes noch nicht kennt."""

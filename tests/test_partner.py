@@ -136,7 +136,8 @@ def test_partner_sieht_seinen_fall_mit_sachstand(umgebung):
     assert liste == [{
         "fall": speicher.laden(zugang).kennung, "mandant": "Erika Muster", "kennzeichen": "B-XY 123",
         "unfalldatum": "2026-11-17", "uebergeben_am": "2026-11-19",
-        "sachstand": "Mahnstufe 2", "sachstand_seit": "2026-11-18", "fehlende_unterlagen": []}]
+        "sachstand": "Mahnstufe 2", "sachstand_seit": "2026-11-18", "fehlende_unterlagen": [],
+        "am_tresen": False}]
 
 
 def test_antwort_enthaelt_nichts_ausser_der_sicht(umgebung):

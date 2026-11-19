@@ -266,7 +266,12 @@ function fertig() {
 }
 
 function uebernehmen() {
-  for (const form of $$("form[data-schritt]")) fuellen(form, zustand.angaben[form.dataset.schritt] || {});
+  const vorbelegt = zustand.vorbelegt || {};
+  for (const form of $$("form[data-schritt]")) {
+    const schritt = form.dataset.schritt;
+    // Was die Werkstatt eingetragen hat, steht schon da - der Mandant kann es ändern.
+    fuellen(form, zustand.angaben[schritt] || vorbelegt[schritt] || {});
+  }
   $("#text-vollmacht").textContent = zustand.texte.vollmacht;
   $("#text-datenschutz").textContent = zustand.texte.datenschutz;
   $("#text-partner").textContent = zustand.texte.einwilligung_partner;
@@ -296,6 +301,23 @@ $("#zurueck").addEventListener("click", () => zeigen(SEITEN[Math.max(0, SEITEN.i
 
 (async function beginnen() {
   try { zugang = localStorage.getItem(MERKER) || ""; } catch (e) { zugang = ""; }
+  // Code vom Tresen: hinter dem # der Adresse, damit er nicht zum Server reist.
+  const code = new URLSearchParams(location.hash.slice(1)).get("u");
+  if (code) {
+    history.replaceState(null, "", location.pathname);
+    try {
+      zugang = "";
+      zustand = await aufruf("POST", "/api/aufnahme/uebernahme", { code });
+      zugang = zustand.zugang;
+      try { localStorage.setItem(MERKER, zugang); } catch (e) { /* privates Fenster */ }
+      uebernehmen();
+      return zeigen("start");
+    } catch (fehler) {
+      zustand = null;
+      try { zugang = localStorage.getItem(MERKER) || ""; } catch (e) { zugang = ""; }
+      if (!zugang) { zeigen("start"); return melden(fehler.message); }
+    }
+  }
   if (zugang) {
     try {
       zustand = await aufruf("GET", "/api/aufnahme");

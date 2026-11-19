@@ -32,13 +32,13 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (79 Prüfungen, ohne Netz):
+Vorhanden und geprüft (92 Prüfungen, ohne Netz):
 
 | Datei | Inhalt |
 |---|---|
 | `aktedirekt/static/` | Schadenaufnahme für das Handy: sechs Schritte, Fotos, Unterschrift |
 | `aktedirekt/web.py` | Schnittstelle dazu; legt nach dem Abschicken den Lead in jur|nodes an |
-| `aktedirekt/static/partner.html` | Fallliste für Werkstatt und Sachverständigen, mit Anmeldung und Suche |
+| `aktedirekt/static/partner.html` | Fallliste für Werkstatt und Sachverständigen, mit Anmeldung, Suche und Aufnahme am Tresen |
 | `aktedirekt/partner.py` | Partnerkonten, Kennwortprüfung, Sperre nach Fehlversuchen |
 | `aktedirekt/aufnahme.py` | welche Angaben es gibt und wann sie gelten |
 | `aktedirekt/dateien.py` | welche Dateien angenommen werden (JPG, PNG, HEIC, PDF bis 15 MB) |
@@ -74,12 +74,26 @@ Die Fallliste liegt unter `http://127.0.0.1:8000/partner`. Kennung und
 Kennwort der beiden Beispielpartner stehen in `testdaten/partner.json`. Ein
 Kennwort für einen echten Partner erzeugt `python -m aktedirekt.partner`.
 
+## Aufnahme am Tresen
+
+Die Werkstatt oder das Sachverständigenbüro trägt Vorname, Nachname,
+Kennzeichen und Unfalldatum ein und bekommt einen QR-Code. Der Kunde scannt
+ihn, findet diese Angaben vorbelegt, ergänzt den Rest auf seinem eigenen Handy
+und unterschreibt dort.
+
+Der Code gilt drei Tage und genau einmal. Mit dem Einlösen entsteht der Zugang
+des Kunden; der Partner hat danach keinen Weg mehr zu dessen Angaben und kann
+auch keinen neuen Code erzeugen. Ohne Einwilligung des Kunden sieht der Partner
+dauerhaft nur, was er selbst eingetragen hat, mit dem Vermerk „Noch keine
+Auskunft" - gleich, ob der Kunde noch nicht begonnen, abgeschickt oder die
+Auskunft abgelehnt hat.
+
 ## Was ein Partner sieht
 
-Nur Fälle, die über seinen Link kamen, abgeschickt sind und bei denen der
-Mandant der Auskunft zugestimmt hat: Name, Kennzeichen, Unfalldatum, Sachstand
-mit Datum. Ohne Zustimmung oder nach Widerruf erscheint der Fall nicht - auch
-nicht als „übergeben", denn schon dass jemand die Kanzlei beauftragt hat,
+Den Sachstand nur bei Fällen, die über ihn kamen, abgeschickt sind und bei
+denen der Mandant der Auskunft zugestimmt hat: Name, Kennzeichen, Unfalldatum, Sachstand
+mit Datum. Ohne Zustimmung oder nach Widerruf erscheint ein Fall über den Link
+gar nicht - auch nicht als „übergeben", denn schon dass jemand die Kanzlei beauftragt hat,
 unterliegt der Verschwiegenheit. Welchen Stand ein Partner wann erstmals und
 zuletzt gesehen hat, wird festgehalten.
 
@@ -91,16 +105,22 @@ Finger). Der Mandant öffnet einen Link oder QR-Code und muss nichts
 installieren. Eine App in den Stores von Apple und Google kann später
 dieselbe Oberfläche einhüllen.
 
+## Entschieden
+
+- Aktedirekt läuft im selben AWS-Konto wie jusperfect (19.11.2026).
+- Der jur|nodes-Server der Kanzlei ist aus dem Internet erreichbar; der
+  Abgleich kann also aus AWS heraus laufen (19.11.2026).
+
 ## Offen
 
-1. Ist der jur|nodes-Server der Kanzlei von AWS aus erreichbar?
-2. Ein eigener Schnittstellenbenutzer für Aktedirekt mit den Rechten
+1. Ein eigener Schnittstellenbenutzer für Aktedirekt mit den Rechten
    `write:leads`, `read:leads`, `read:records`, `search:records_subject`
    (später Kontakte und Dateien).
-3. Die Akteneigenschaft „Sachstand" in jur|nodes als Auswahlfeld mit den
+2. Die Akteneigenschaft „Sachstand" in jur|nodes als Auswahlfeld mit den
    Bezeichnungen aus `sachstaende.json`.
-4. Deckt web|nodes, der Mandantenkanal von jur|nodes, einen Teil der
+3. Deckt web|nodes, der Mandantenkanal von jur|nodes, einen Teil der
    Mandantenseite schon ab?
+4. Der Wortlaut von Vollmacht, Datenschutzhinweisen und Einwilligung.
 
 ## Prüfen
 

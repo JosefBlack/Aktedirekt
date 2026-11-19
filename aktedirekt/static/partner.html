@@ -30,6 +30,7 @@
 
 <section id="liste" hidden>
   <h1 id="name"></h1>
+  <button type="button" class="haupt oben" id="neu">Neuen Fall aufnehmen</button>
   <details class="link">
     <summary>Link für Ihre Kunden</summary>
     <p class="klein">Über diesen Link meldet Ihr Kunde seinen Unfall. Er entscheidet dabei selbst, ob Sie den Stand sehen dürfen.</p>
@@ -38,8 +39,35 @@
   <label class="suche">Suchen<input type="search" id="suche" placeholder="Name oder Kennzeichen" autocomplete="off"></label>
   <p id="anzahl" class="klein"></p>
   <ul id="faelle" class="faelle"></ul>
-  <p id="leer" class="klein" hidden>Noch keine Fälle. Hier erscheint ein Fall, sobald Ihr Kunde seinen Unfall abgeschickt und der Auskunft an Sie zugestimmt hat.</p>
+  <p id="leer" class="klein" hidden>Noch keine Fälle. Hier erscheint, was Sie selbst aufnehmen, und jeder Fall über Ihren Link, sobald Ihr Kunde der Auskunft an Sie zugestimmt hat.</p>
   <p class="klein fuss">Sie sehen den Stand in Stichworten. Zu Beträgen und Einzelheiten gibt die Kanzlei Ihrem Kunden selbst Auskunft.</p>
+</section>
+<form id="tresen" novalidate hidden>
+  <h1>Neuen Fall aufnehmen</h1>
+  <p class="klein">Sie tragen nur ein, was Sie von Ihrem Kunden ohnehin wissen. Alles Weitere gibt er selbst auf seinem Handy an und unterschreibt dort.</p>
+  <label>Vorname<input type="text" name="vorname" maxlength="60" autocomplete="off"></label>
+  <p class="fehler" data-fehler="vorname"></p>
+  <label>Nachname<input type="text" name="nachname" maxlength="60" autocomplete="off"></label>
+  <p class="fehler" data-fehler="nachname"></p>
+  <label>Kennzeichen<input type="text" name="kennzeichen" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="B-XY 123"></label>
+  <p class="fehler" data-fehler="kennzeichen"></p>
+  <label>Wann war der Unfall?<input type="date" name="unfalldatum"></label>
+  <p class="fehler" data-fehler="unfalldatum"></p>
+  <button type="submit" class="haupt">Code für den Kunden erzeugen</button>
+  <button type="button" class="neben" data-zur-liste>Abbrechen</button>
+</form>
+
+<section id="uebergabe" hidden>
+  <h1>Bitte scannen</h1>
+  <p>Ihr Kunde scannt diesen Code mit der Kamera seines Handys und macht dort weiter.</p>
+  <div class="qr"><img id="qr" alt="QR-Code für den Kunden"></div>
+  <p class="klein">Der Code gilt drei Tage und nur einmal. Sobald Ihr Kunde ihn geöffnet hat, führt er niemanden sonst mehr zu seinen Angaben.</p>
+  <details class="link">
+    <summary>Kein Scannen möglich?</summary>
+    <p class="klein">Diesen Link können Sie Ihrem Kunden schicken.</p>
+    <div class="zeile"><input type="text" id="uebergabelink" readonly aria-label="Link für den Kunden"><button type="button" id="link-kopieren" class="schlicht rand">Kopieren</button></div>
+  </details>
+  <button type="button" class="haupt" data-zur-liste>Fertig</button>
 </section>
 </main>
 <script src="partner.js"></script>

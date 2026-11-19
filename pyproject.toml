@@ -12,6 +12,8 @@ dependencies = [
   "httpx>=0.27,<1",
   "fastapi>=0.115,<1",
   "uvicorn>=0.30,<1",
+  # QR-Code für die Übergabe am Tresen. Reines Python, keine Abhängigkeiten.
+  "segno>=1.6,<2",
 ]
 
 [project.optional-dependencies]

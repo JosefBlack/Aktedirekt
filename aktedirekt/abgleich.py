@@ -25,10 +25,10 @@ from aktedirekt.speicher import Speicher
 def als_fall(aufnahme: Aufnahme, partner_art: str = "") -> Fall:
     """Eine abgeschickte Aufnahme als Fall, wie ihn ``aktedirekt.sicht`` beurteilt.
 
-    ``aufgenommen_von`` bleibt leer: Bei diesem Weg hat der Mandant seine
-    Angaben selbst gemacht, der Partner hat nur den Link weitergegeben. Er
-    weiß deshalb von sich aus nicht einmal, ob der Mandant abgeschickt hat -
-    und erfährt es ohne Einwilligung auch nicht.
+    ``aufgenommen_von`` nennt den Partner nur, wenn er die Aufnahme selbst am
+    Tresen angelegt hat. Beim Weg über den Link hat der Mandant alles selbst
+    eingetragen; der Partner weiß dann von sich aus nicht einmal, ob der
+    Mandant abgeschickt hat - und erfährt es ohne Einwilligung auch nicht.
     """
     if aufnahme.abgeschlossen_am is None:
         raise ValueError("Die Aufnahme ist noch nicht abgeschickt.")
@@ -44,6 +44,7 @@ def als_fall(aufnahme: Aufnahme, partner_art: str = "") -> Fall:
         mandant_name=f"{person.get('vorname', '')} {person.get('nachname', '')}".strip(),
         kennzeichen=aufnahme.angaben.get("fahrzeug", {}).get("kennzeichen", ""),
         unfalldatum=date.fromisoformat(aufnahme.angaben["unfall"]["unfalldatum"]),
+        aufgenommen_von=aufnahme.partner if aufnahme.vom_partner else "",
         partner={aufnahme.partner} if aufnahme.partner else set(),
         einwilligungen=einwilligungen,
         sachstand=Sachstand(aufnahme.sachstand, aufnahme.sachstand_seit),

@@ -66,6 +66,16 @@ SCHRITTE: dict[str, tuple[Feld, ...]] = {
     ),
 }
 
+# Was die Werkstatt oder der Sachverständige am Tresen einträgt. Mehr nicht:
+# Alles Übrige - Hergang, Anschrift, Vollmacht - gibt der Kunde selbst auf
+# seinem eigenen Gerät an.
+TRESEN: tuple[Feld, ...] = (
+    Feld("vorname", "text", pflicht=True, laenge=60),
+    Feld("nachname", "text", pflicht=True, laenge=60),
+    Feld("kennzeichen", "kennzeichen", pflicht=True),
+    Feld("unfalldatum", "datum", pflicht=True),
+)
+
 _STEUERZEICHEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _KENNZEICHEN = re.compile(r"^[A-ZÄÖÜ]{1,3}[- ]?[A-Z]{0,2} ?[0-9]{1,4} ?[EH]?$")
 _EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
@@ -112,12 +122,16 @@ def _pruefe(feld: Feld, wert: str, heute: date) -> str:
 
 
 def schritt_pruefen(schritt: str, eingabe: Any, heute: date) -> tuple[dict[str, str], dict[str, str]]:
+    return felder_pruefen(SCHRITTE[schritt], eingabe, heute)
+
+
+def felder_pruefen(felder: tuple[Feld, ...], eingabe: Any,
+                   heute: date) -> tuple[dict[str, str], dict[str, str]]:
     """Gibt (bereinigte Angaben, Fehler je Feld) zurück.
 
     Unbekannte Felder werden verworfen, nicht gespeichert: Was hier nicht
     aufgezählt ist, gelangt nicht in die Akte.
     """
-    felder = SCHRITTE[schritt]
     if not isinstance(eingabe, dict):
         return {}, {"_": "Die Angaben konnten nicht gelesen werden."}
     sauber: dict[str, str] = {}
@@ -162,6 +176,17 @@ class Aufnahme:
     akte_kennung: str = ""
     sachstand: str = "aufgenommen"
     sachstand_seit: date | None = None
+    # Was der Partner am Tresen eingetragen hat (leer beim Weg über den Link).
+    vom_partner: dict[str, str] = field(default_factory=dict)
+
+    def vorbelegt(self) -> dict[str, dict[str, str]]:
+        """Die Angaben des Partners, verteilt auf die Schritte des Mandanten."""
+        v = self.vom_partner
+        if not v:
+            return {}
+        return {"unfall": {"unfalldatum": v.get("unfalldatum", "")},
+                "fahrzeug": {"kennzeichen": v.get("kennzeichen", "")},
+                "person": {"vorname": v.get("vorname", ""), "nachname": v.get("nachname", "")}}
 
     def fehlende_schritte(self) -> list[str]:
         return [s for s in SCHRITTE if s not in self.angaben]

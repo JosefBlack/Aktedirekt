@@ -60,10 +60,25 @@ function zeigen() {
     const li = teil("li");
     li.append(teil("span", "wer", f.mandant));
     const stand = teil("div", "stand");
-    stand.append(teil("span", "marke " + farbe(f.sachstand), f.sachstand));
-    if (f.sachstand_seit) stand.append(teil("span", "seit", "seit " + datum(f.sachstand_seit)));
+    if (f.sachstand) {
+      stand.append(teil("span", "marke " + farbe(f.sachstand), f.sachstand));
+      if (f.sachstand_seit) stand.append(teil("span", "seit", "seit " + datum(f.sachstand_seit)));
+    } else {
+      stand.append(teil("span", "marke offen", "Noch keine Auskunft"));
+      stand.append(teil("span", "seit", "aufgenommen am " + datum(f.uebergeben_am)));
+    }
     li.append(stand);
     li.append(teil("span", "kfz", f.kennzeichen + " · Unfall am " + datum(f.unfalldatum)));
+    if (!f.sachstand) {
+      const nochmal = teil("button", "schlicht rand nochmal", "Code erneut zeigen");
+      nochmal.type = "button";
+      nochmal.addEventListener("click", async () => {
+        melden("");
+        try { uebergabe_zeigen(await aufruf("POST", "/api/partner/faelle/" + f.fall + "/uebergabe")); }
+        catch (fehler) { fehler.status === 401 ? abgemeldet("Bitte erneut anmelden.") : melden(fehler.message); }
+      });
+      li.append(nochmal);
+    }
     if (f.fehlende_unterlagen.length) li.append(teil("div", "fehlt", "Es fehlt noch: " + f.fehlende_unterlagen.join(", ")));
     liste.append(li);
   }
@@ -77,23 +92,81 @@ function zeigen() {
 async function laden() {
   const daten = await aufruf("GET", "/api/partner/faelle");
   // Ohne Sachstand gibt es nichts zu zeigen.
-  faelle = daten.faelle.filter((f) => f.sachstand);
+  faelle = daten.faelle;
   $("#name").textContent = daten.name;
   $("#kundenlink").value = location.origin + "/?p=" + encodeURIComponent(daten.einladung);
-  $("#anmeldung").hidden = true;
-  $("#liste").hidden = false;
   $("#abmelden").hidden = false;
+  ansicht("liste");
   zeigen();
 }
+
+function ansicht(name) {
+  for (const id of ["anmeldung", "liste", "tresen", "uebergabe"]) $("#" + id).hidden = id !== name;
+  window.scrollTo(0, 0);
+}
+
+function uebergabe_zeigen(daten) {
+  $("#qr").src = daten.qr;
+  $("#uebergabelink").value = daten.link;
+  $("#link-kopieren").textContent = "Kopieren";
+  ansicht("uebergabe");
+}
+
+function tresen_fehler(fehler) {
+  for (const p of document.querySelectorAll("#tresen [data-fehler]")) p.textContent = fehler[p.dataset.fehler] || "";
+}
+
+$("#neu").addEventListener("click", () => {
+  melden("");
+  $("#tresen").reset();
+  tresen_fehler({});
+  ansicht("tresen");
+});
+
+$("#tresen").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  melden("");
+  const form = e.currentTarget;
+  form.querySelector("button.haupt").disabled = true;
+  try {
+    const antwort = await fetch("/api/partner/faelle", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + sitzung, "Content-Type": "application/json" },
+      body: JSON.stringify({ vorname: form.vorname.value, nachname: form.nachname.value,
+        kennzeichen: form.kennzeichen.value, unfalldatum: form.unfalldatum.value }),
+    });
+    const daten = await antwort.json();
+    if (antwort.status === 401) abgemeldet("Bitte erneut anmelden.");
+    else if (antwort.status === 422) tresen_fehler(daten.fehler || {});
+    else if (!antwort.ok) melden("Das hat nicht geklappt. Bitte noch einmal versuchen.");
+    else uebergabe_zeigen(daten);
+  } catch (fehler) { melden("Keine Verbindung. Bitte später noch einmal versuchen."); }
+  form.querySelector("button.haupt").disabled = false;
+});
+
+for (const knopf of document.querySelectorAll("[data-zur-liste]")) {
+  knopf.addEventListener("click", async () => {
+    // Den Code nicht stehen lassen, wenn der Bildschirm zum nächsten Kunden zeigt.
+    $("#qr").removeAttribute("src");
+    $("#uebergabelink").value = "";
+    try { await laden(); } catch (fehler) { abgemeldet(fehler.status === 401 ? "Bitte erneut anmelden." : fehler.message); }
+  });
+}
+
+$("#link-kopieren").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#uebergabelink").value); $("#link-kopieren").textContent = "Kopiert"; }
+  catch (e) { $("#uebergabelink").select(); }
+});
 
 function abgemeldet(text) {
   sitzung = "";
   try { sessionStorage.removeItem(MERKER); } catch (e) { /* egal */ }
   faelle = [];
   $("#faelle").textContent = "";
-  $("#liste").hidden = true;
+  $("#qr").removeAttribute("src");
+  $("#uebergabelink").value = "";
   $("#abmelden").hidden = true;
-  $("#anmeldung").hidden = false;
+  ansicht("anmeldung");
   melden(text || "");
 }
 
