@@ -20,7 +20,7 @@ from typing import Any
 from aktedirekt import akte_pdf, erklaerungen
 from aktedirekt.aufnahme import Aufnahme, kurzrubrum
 from aktedirekt.domain import Einwilligung, Fall, Herkunft, Sachstand
-from aktedirekt.jurnodes import JurNodes, JurNodesFehler
+from aktedirekt.jurnodes import JurNodes, JurNodesFehler, OhneKennung
 from aktedirekt.partner import Partnerliste
 from aktedirekt.sachstand import Stufen, sachstand_ableiten
 from aktedirekt.speicher import Speicher
@@ -111,18 +111,46 @@ def fall_abgleichen(fall: Fall, jurnodes: JurNodes, stufen: Stufen, heute: date,
     return True
 
 
+# Steht als Kennung, wenn jur|nodes den Lead angenommen, aber seine Kennung nicht
+# genannt hat. Damit wird er nie ein zweites Mal angelegt.
+UNBEKANNT = "unbekannt"
+
+
 def lead_anlegen(aufnahme: Aufnahme, speicher: Speicher, jurnodes: JurNodes,
-                 partner: Partnerliste, heute: date) -> bool:
-    """Meldet eine abgeschickte Aufnahme an jur|nodes. Scheitert das, bleibt sie vorgemerkt."""
+                 partner: Partnerliste, heute: date, nachholen: bool = False) -> bool:
+    """Meldet eine abgeschickte Aufnahme an jur|nodes. Scheitert das, bleibt sie vorgemerkt.
+
+    Oberstes Gebot: kein Eingang doppelt. Beim Nachholen wird deshalb zuerst
+    gesucht, ob es den Lead schon gibt - und lässt sich das nicht klären, wird
+    nicht angelegt. Nimmt jur|nodes das Anlegen an, ohne die Kennung zu
+    nennen, gilt der Lead als angelegt.
+    """
     if aufnahme.lead_kennung:
         return True
     konto = partner.konto(aufnahme.partner)
+    rubrum = kurzrubrum(aufnahme)
     try:
-        lead = jurnodes.lead_anlegen(kurzrubrum(aufnahme), vermittler=konto.name if konto else "",
-                                     datum=heute)
+        if nachholen:
+            vorhanden = jurnodes.lead_suchen(rubrum)
+            if vorhanden is not None:
+                speicher.lead_setzen(aufnahme.kennung, vorhanden.kennung)
+                return True
+        lead = jurnodes.lead_anlegen(rubrum, vermittler=konto.name if konto else "", datum=heute)
+    except OhneKennung:
+        speicher.lead_setzen(aufnahme.kennung, UNBEKANNT)
+        return True
     except JurNodesFehler:
         return False
     speicher.lead_setzen(aufnahme.kennung, lead.kennung)
+    return True
+
+
+def kennung_nachtragen(aufnahme: Aufnahme, speicher: Speicher, jurnodes: JurNodes) -> bool:
+    """Sucht zu einem Lead ohne bekannte Kennung die Kennung über das Kurzrubrum."""
+    gefunden = jurnodes.lead_suchen(kurzrubrum(aufnahme))
+    if gefunden is None:
+        return False
+    speicher.lead_setzen(aufnahme.kennung, gefunden.kennung)
     return True
 
 
@@ -216,15 +244,25 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
 def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerliste,
                      stufen: Stufen, heute: date) -> dict[str, int]:
     """Ein Durchlauf. Ein Fehler bei einem Fall hält die übrigen nicht auf."""
-    zahlen = {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "abgelegt": 0, "fehler": 0}
+    zahlen = {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "fehler": 0}
     for aufnahme in speicher.ohne_lead():
-        if lead_anlegen(aufnahme, speicher, jurnodes, partner, heute):
+        if lead_anlegen(aufnahme, speicher, jurnodes, partner, heute, nachholen=True):
             zahlen["leads_nachgeholt"] += 1
         else:
             zahlen["leads_offen"] += 1
     for aufnahme in speicher.mit_lead():
         # Zwei Dinge je Fall, und das eine hält das andere nicht auf: erst der
         # Sachstand, dann die Dateien.
+        if aufnahme.lead_kennung == UNBEKANNT:
+            # Angelegt, aber ohne Kennung: erst die Kennung finden, sonst geht nichts weiter.
+            try:
+                if not kennung_nachtragen(aufnahme, speicher, jurnodes):
+                    zahlen["ohne_kennung"] += 1
+                    continue
+            except JurNodesFehler:
+                zahlen["ohne_kennung"] += 1
+                continue
+            aufnahme = speicher.nach_kennung(aufnahme.kennung) or aufnahme
         fall = als_fall(aufnahme)
         lead = None
         try:

@@ -33,7 +33,7 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (279 Prüfungen, ohne Netz; was eine Ablage braucht,
+Vorhanden und geprüft (291 Prüfungen, ohne Netz; was eine Ablage braucht,
 läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
@@ -156,7 +156,15 @@ abgelegt ist, wird je Aufnahme festgehalten; ein abgebrochener Lauf macht beim
 nächsten Mal weiter und legt nichts doppelt ab. Ein abgelehnter Lead bekommt
 nichts mehr.
 
-**Gegen den Server der Kanzlei ist das noch nicht gelaufen.** Es folgt der
+**Kein Eingang doppelt.** Beim ersten Versuch am Server der Kanzlei
+(19.11.2026) nahm jur|nodes das Anlegen an, nannte die Kennung des Leads aber
+nicht so, wie die Beschreibung es erwarten ließ; das Portal hielt den Lead für
+gescheitert und legte ihn bei jedem Lauf neu an. Seitdem gilt: Nimmt jur|nodes
+das Anlegen an, gilt der Lead als angelegt, auch ohne Kennung; die Kennung wird
+über das Kurzrubrum gesucht. Beim Nachholen wird zuerst gesucht, ob es den Lead
+schon gibt, und lässt sich das nicht klären, wird nicht angelegt.
+
+**Gegen den Server der Kanzlei ist die Übergabe der Dateien noch nicht gelaufen.** Es folgt der
 Beschreibung des Herstellers und dem, was jusperfect an diesem Server gelernt
 hat (Ordner und Umbenennen in Kopfzeilen, Datei als Formularteil).
 

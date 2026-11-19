@@ -114,7 +114,7 @@ def test_aufnahme_unterschrift_und_anlage_landen_im_ordner_des_leads(umgebung):
     aufnehmen(client, ablage)
     assert server.abgelegt == []                       # beim Abschicken nur der Lead - Dateien folgen im Lauf
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "abgelegt": 3, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "fehler": 0}
     namen = [a["name"] for a in server.abgelegt]
     assert namen[0].startswith("Aufnahme Aktedirekt ") and namen[0].endswith(".pdf")
     assert namen[1:] == ["Unterschrift Aktedirekt.png", "Schaden _vorne.jpg"]
@@ -216,7 +216,7 @@ def test_akte_wird_ueber_das_aktenzeichen_gefunden(mit_aktenzeichen):
     _, zugang = aufnehmen(client, ablage)
     server.status = "accepted"                         # die Kanzlei nimmt an, bevor der erste Lauf kommt
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 1, "abgelegt": 3, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 1, "abgelegt": 3, "fehler": 0}
     aufnahme = speicher.laden(zugang)
     assert aufnahme.sachstand == "angemeldet" and aufnahme.akte_kennung == "rec-uuid-1"
     assert {a["ordner"] for a in server.abgelegt} == {"99"}
@@ -254,3 +254,100 @@ def test_pannen_nennen_weg_und_status_aber_nichts_vom_inhalt(mit_aktenzeichen):
     assert jurnodes.pannen == ["POST /file-system/add-file: Status 500"]
     for geheim in ("Muster", "M-AB", "L-1", "Erika"):
         assert not any(geheim in p for p in jurnodes.pannen)
+
+
+# ---- Kein Eingang doppelt -------------------------------------------------
+
+class ServerOhneKennung(Server):
+    """Nimmt das Anlegen an, nennt aber die Kennung anders als erwartet - wie am 19.11.2026 erlebt."""
+    def __init__(self):
+        super().__init__()
+        self.suche, self.suchen_geht = [], True
+
+    def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        weg = anfrage.url.path
+        if anfrage.method == "POST" and weg == "/lead":
+            self.leads.append(json.loads(anfrage.content)["model"])
+            return httpx.Response(200, json={"success": True, "nummer": 4711})
+        if weg == "/lead/search":
+            self.suche.append(dict(anfrage.url.params))
+            if not self.suchen_geht:
+                return httpx.Response(401, json={})
+            elemente = [{"identifier": "L-alt", "shortRubrum": "Anderer ./. X"}]
+            elemente += [{"identifier": "L-7", "shortRubrum": l["shortRubrum"], "status": "created", "fileFolderId": 77}
+                         for l in self.leads[:1]]
+            return httpx.Response(200, json={"elements": elemente})
+        if weg == "/lead":
+            return httpx.Response(200, json={"identifier": "L-7", "status": "created", "fileFolderId": 77})
+        return super().__call__(anfrage)
+
+
+@pytest.fixture
+def ohne_kennung(ablage):
+    server = ServerOhneKennung()
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
+    client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jurnodes=jurnodes, jetzt=lambda: JETZT))
+    return client, ablage.speicher, server, ablage, jurnodes
+
+
+def test_antwort_ohne_kennung_fuehrt_nie_zu_einem_zweiten_lead(ohne_kennung):
+    client, speicher, server, ablage, jurnodes = ohne_kennung
+    _, zugang = aufnehmen(client, ablage)
+    assert len(server.leads) == 1 and speicher.laden(zugang).lead_kennung == "unbekannt"
+    # Im Protokoll stehen die Namen der Felder, die jur|nodes geschickt hat - nicht ihr Inhalt.
+    assert jurnodes.pannen == ["POST /lead: Antwort ohne Kennung (Felder nummer, success)"]
+    for _ in range(3):
+        lauf(speicher, jurnodes)
+    assert len(server.leads) == 1                      # drei Läufe, kein weiterer Lead
+
+
+def test_kennung_wird_ueber_das_kurzrubrum_nachgetragen_und_dann_geht_alles_weiter(ohne_kennung):
+    client, speicher, server, ablage, jurnodes = ohne_kennung
+    _, zugang = aufnehmen(client, ablage)
+    zahlen = lauf(speicher, jurnodes)
+    assert speicher.laden(zugang).lead_kennung == "L-7"
+    assert zahlen["ohne_kennung"] == 0 and zahlen["abgelegt"] == 3
+    assert server.suche[0] == {"shortRubrum": "Muster ./. M-AB 4567 (Unfall 17.11.26)", "page": "0"}
+
+
+def test_ohne_suchrecht_bleibt_der_lead_ohne_kennung_aber_einmalig(ohne_kennung):
+    client, speicher, server, ablage, jurnodes = ohne_kennung
+    server.suchen_geht = False
+    _, zugang = aufnehmen(client, ablage)
+    zahlen = lauf(speicher, jurnodes)
+    assert zahlen["ohne_kennung"] == 1 and zahlen["abgelegt"] == 0 and len(server.leads) == 1
+    assert speicher.laden(zugang).lead_kennung == "unbekannt"
+
+
+def test_nachholen_sucht_erst_und_uebernimmt_einen_vorhandenen_lead(ablage):
+    # Abgeschickt, als jur|nodes noch nicht angeschlossen war.
+    client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jetzt=lambda: JETZT))
+    _, zugang = aufnehmen(client, ablage)
+    server = ServerOhneKennung()
+    server.leads.append({"shortRubrum": "Muster ./. M-AB 4567 (Unfall 17.11.26)"})    # den Lead gibt es schon
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
+    zahlen = lauf(ablage.speicher, jurnodes)
+    assert zahlen["leads_nachgeholt"] == 1 and len(server.leads) == 1                 # übernommen, nicht neu angelegt
+    assert ablage.speicher.laden(zugang).lead_kennung == "L-7"
+
+
+def test_nachholen_legt_nichts_an_wenn_sich_nicht_klaeren_laesst_ob_es_den_lead_gibt(ablage):
+    client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jetzt=lambda: JETZT))
+    _, zugang = aufnehmen(client, ablage)
+    server = ServerOhneKennung()
+    server.suchen_geht = False
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
+    for _ in range(3):
+        zahlen = lauf(ablage.speicher, jurnodes)
+    assert zahlen["leads_offen"] == 1 and server.leads == []
+    assert ablage.speicher.laden(zugang).lead_kennung == ""
+    assert "GET /lead/search: Status 401" in jurnodes.pannen
+
+
+def test_kennung_auch_in_verpackter_antwort(ablage):
+    def antwort(anfrage: httpx.Request) -> httpx.Response:
+        if anfrage.method == "POST":
+            return httpx.Response(200, json={"model": {"leadIdentifier": "L-9", "status": "created"}})
+        return httpx.Response(200, json={"identifier": "L-9", "status": "created"})
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(antwort))
+    assert jurnodes.lead_anlegen("Muster ./. X").kennung == "L-9"

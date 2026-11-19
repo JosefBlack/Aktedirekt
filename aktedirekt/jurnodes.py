@@ -10,7 +10,7 @@ Repository jusperfect unter ``schnittstelle/``). Zwei Eigenheiten daraus:
 
 Gebraucht werden diese Rechte des Schnittstellenbenutzers:
 ``write:leads`` (anlegen), ``read:leads``, ``read:records``,
-``search:records_subject`` und, für die Übergabe von Aufnahme und Anlagen,
+``search:leads``, ``search:records_subject`` und, für die Übergabe von Aufnahme und Anlagen,
 ``write:file``; dazu ``search:records``, falls jur|nodes am angenommenen
 Lead das Aktenzeichen und nicht die Kennung der Akte nennt. jur|nodes meldet keine Änderungen von sich aus;
 der Sachstand wird deshalb in Abständen abgefragt.
@@ -29,6 +29,14 @@ import httpx
 
 class JurNodesFehler(RuntimeError):
     """Der Text ist für die Kanzlei bestimmt und enthält nichts vom Server."""
+
+
+class OhneKennung(JurNodesFehler):
+    """jur|nodes hat die Anfrage angenommen, nennt aber keine Kennung.
+
+    Beim Anlegen heißt das: Den Lead gibt es vermutlich. Noch einmal anlegen
+    darf man ihn dann nicht.
+    """
 
 
 @dataclass(frozen=True)
@@ -88,15 +96,29 @@ class JurNodes:
             raise JurNodesFehler("jur|nodes hat keine lesbare Antwort geliefert.") from fehler
 
     @staticmethod
-    def _lead(daten: Any) -> Lead:
-        if not isinstance(daten, dict) or not daten.get("identifier"):
-            raise JurNodesFehler("jur|nodes hat keinen Lead geliefert.")
+    def _lead_daten(daten: Any) -> dict[str, Any] | None:
+        """Der Teil der Antwort, der den Lead beschreibt - gleich, wie er verpackt ist."""
+        kandidaten = [daten]
+        if isinstance(daten, dict):
+            kandidaten += [daten.get(k) for k in ("model", "lead", "data", "result")]
+        for k in kandidaten:
+            if isinstance(k, dict) and (k.get("identifier") or k.get("leadIdentifier")):
+                return k
+        return None
+
+    def _lead(self, daten: Any, verfahren: str) -> Lead:
+        d = self._lead_daten(daten)
+        if d is None:
+            # Nur die Namen der Felder gehen ins Protokoll, nie ihr Inhalt.
+            gestalt = "Felder " + ", ".join(sorted(str(k) for k in daten)[:12]) if isinstance(daten, dict) else type(daten).__name__
+            self._panne(verfahren, "/lead", f"Antwort ohne Kennung ({gestalt})")
+            raise OhneKennung("jur|nodes hat geantwortet, aber keine Kennung des Leads genannt.")
         try:
-            ordner = int(daten.get("fileFolderId") or 0)
+            ordner = int(d.get("fileFolderId") or 0)
         except (TypeError, ValueError):
             ordner = 0
-        return Lead(kennung=str(daten["identifier"]), status=str(daten.get("status") or ""),
-                    akte_kennung=str(daten.get("acceptedRecord") or ""), ordner=ordner)
+        return Lead(kennung=str(d.get("identifier") or d.get("leadIdentifier")), status=str(d.get("status") or ""),
+                    akte_kennung=str(d.get("acceptedRecord") or ""), ordner=ordner)
 
     def lead_anlegen(self, kurzrubrum: str, vermittler: str = "",
                      datum: date | None = None) -> Lead:
@@ -106,10 +128,22 @@ class JurNodes:
                                   "leadDate": (datum or date.today()).isoformat()}
         if vermittler:
             modell["broker"] = vermittler[:50]
-        return self._lead(self._aufruf("POST", "/lead", json={"model": modell}))
+        return self._lead(self._aufruf("POST", "/lead", json={"model": modell}), "POST")
+
+    def lead_suchen(self, kurzrubrum: str) -> Lead | None:
+        """Der jüngste Lead mit genau diesem Kurzrubrum - ``None``, wenn es keinen gibt.
+
+        Damit wird vor dem Nachholen nachgesehen, ob es den Lead schon gibt:
+        Ein zweites Anlegen wäre ein doppelter Eingang in der Kanzlei.
+        """
+        daten = self._aufruf("GET", "/lead/search", params={"shortRubrum": kurzrubrum[:50], "page": 0})
+        elemente = daten.get("elements") if isinstance(daten, dict) else None
+        treffer = [e for e in elemente or [] if isinstance(e, dict) and e.get("shortRubrum") == kurzrubrum[:50]
+                   and self._lead_daten(e) is not None]
+        return self._lead(treffer[-1], "GET") if treffer else None
 
     def lead(self, kennung: str) -> Lead:
-        return self._lead(self._aufruf("GET", "/lead", params={"identifier": kennung}))
+        return self._lead(self._aufruf("GET", "/lead", params={"identifier": kennung}), "GET")
 
     def akte_finden(self, angabe: str) -> str:
         """Die Kennung der Akte zu dem, was jur|nodes am angenommenen Lead nennt.
