@@ -54,6 +54,12 @@ CREATE TABLE IF NOT EXISTS fehlversuch (
   anzahl INTEGER NOT NULL,
   gesperrt_bis TEXT
 );
+CREATE TABLE IF NOT EXISTS zweitfaktor (
+  kennung TEXT PRIMARY KEY,
+  geheimnis TEXT NOT NULL,
+  aktiv INTEGER NOT NULL,
+  letzter_schritt INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS sitzung (
   sha256 TEXT PRIMARY KEY,
   partner TEXT NOT NULL,
@@ -471,6 +477,23 @@ class Speicher:
             else:
                 db.execute("INSERT OR REPLACE INTO fehlversuch VALUES (?,?,?)",
                            (kennung, anzahl, gesperrt_bis.isoformat() if gesperrt_bis else None))
+
+    # ---- Zweiter Faktor --------------------------------------------------
+
+    def zweitfaktor(self, kennung: str) -> tuple[str, bool, int] | None:
+        """(Geheimnis, eingerichtet?, zuletzt benutzter Schritt) - oder ``None``."""
+        with closing(self._db()) as db:
+            z = db.execute("SELECT * FROM zweitfaktor WHERE kennung = ?", (kennung,)).fetchone()
+        return (z["geheimnis"], bool(z["aktiv"]), z["letzter_schritt"]) if z else None
+
+    def zweitfaktor_setzen(self, kennung: str, geheimnis: str, aktiv: bool, letzter_schritt: int) -> None:
+        with closing(self._db()) as db, db:
+            db.execute("INSERT OR REPLACE INTO zweitfaktor VALUES (?,?,?,?)",
+                       (kennung, geheimnis, int(aktiv), letzter_schritt))
+
+    def zweitfaktor_loeschen(self, kennung: str) -> None:
+        with closing(self._db()) as db, db:
+            db.execute("DELETE FROM zweitfaktor WHERE kennung = ?", (kennung,))
 
     # ---- Nachweis der Auskünfte -----------------------------------------
 

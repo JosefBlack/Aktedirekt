@@ -20,6 +20,7 @@ import base64
 import hashlib
 import json
 import os
+import time
 from datetime import datetime, timedelta
 from importlib import resources
 from typing import Any, Callable
@@ -29,12 +30,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from aktedirekt import dateien, zeit
+from aktedirekt import dateien, totp, zeit
 from aktedirekt.abgleich import ENTWURF_FRIST, alte_entwuerfe, als_fall, entwuerfe_loeschen, lead_anlegen
 from aktedirekt.aufnahme import (ERG, FALLARTEN, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
                                  kurzrubrum)
 from aktedirekt.jurnodes import JurNodes
-from aktedirekt.partner import Partnerliste
+from aktedirekt.partner import FEHLVERSUCHE, SPERRE, Partnerliste
 from aktedirekt.sachstand import Stufen
 from aktedirekt.sicht import partner_sicht
 from aktedirekt.speicher import Speicher
@@ -73,6 +74,7 @@ def _abschnitte(abschnitte: dict[str, Abschnitt]) -> list[dict[str, Any]]:
 def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
               jurnodes: JurNodes | None = None, basis_url: str = "", telefon: str = "",
               eingang_melden: Callable[[str, str], None] | None = None,
+              epoche: Callable[[], float] = time.time,
               jetzt: Callable[[], datetime] = zeit.jetzt) -> FastAPI:
     app = FastAPI(title="Aktedirekt", docs_url=None, redoc_url=None, openapi_url=None)
     stufen = Stufen.laden()
@@ -370,18 +372,63 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         kopf = request.headers.get("authorization", "")
         return kopf[7:] if kopf.lower().startswith("bearer ") else ""
 
+    abgewiesen = HTTPException(401, "Die Anmeldung hat nicht geklappt. Nach mehreren Fehlversuchen "
+                                    "ist die Kennung für eine Viertelstunde gesperrt.")
+
+    def code_pruefen(kennung: str, geheimnis: str, eingabe: str, letzter: int) -> int:
+        """Der Schritt des gültigen Codes - sonst eine Abweisung, nach fünf falschen eine Sperre.
+
+        Gezählt wird getrennt vom Kennwort: Wer das Kennwort kennt, soll die
+        sechs Ziffern nicht durchprobieren können.
+        """
+        zaehler = kennung + "#code"
+        anzahl, gesperrt_bis = speicher.fehlversuche(zaehler)
+        if gesperrt_bis is not None and jetzt() < gesperrt_bis:
+            raise abgewiesen
+        schritt = totp.pruefen(geheimnis, eingabe, epoche(), letzter)
+        if schritt is None:
+            anzahl = 1 if gesperrt_bis is not None else anzahl + 1
+            speicher.fehlversuche_setzen(zaehler, anzahl, jetzt() + SPERRE if anzahl >= FEHLVERSUCHE else None, jetzt())
+            raise abgewiesen
+        speicher.fehlversuche_setzen(zaehler, 0, None, jetzt())
+        return schritt
+
     @app.post("/api/partner/anmeldung")
-    async def anmelden(request: Request) -> dict[str, str]:
+    async def anmelden(request: Request) -> dict[str, Any]:
+        """Kennung und Kennwort - und, wo verlangt, der Code aus der Authenticator-App.
+
+        Ohne Code antwortet die Anmeldung mit dem, was fehlt: beim ersten Mal
+        mit dem QR-Code zum Einrichten, danach mit der Bitte um den Code.
+        Eine Sitzung gibt es erst, wenn alles stimmt.
+        """
         daten = await json_lesen(request)
         kennung = daten.get("kennung", "") if isinstance(daten, dict) else ""
         kennwort = daten.get("kennwort", "") if isinstance(daten, dict) else ""
+        eingabe = daten.get("code", "") if isinstance(daten, dict) else ""
         konto = None
         if isinstance(kennung, str) and isinstance(kennwort, str) and len(kennung) <= 80 and len(kennwort) <= 200:
             konto = partnerliste.anmelden(kennung.strip(), kennwort, jetzt(), speicher)
-        if konto is None:
+        if konto is None or not isinstance(eingabe, str) or len(eingabe) > 20:
             # Eine Antwort für alles: falsche Kennung, falsches Kennwort, gesperrt.
-            raise HTTPException(401, "Die Anmeldung hat nicht geklappt. Nach mehreren Fehlversuchen "
-                                     "ist die Kennung für eine Viertelstunde gesperrt.")
+            raise abgewiesen
+        if konto.zweiter_faktor:
+            stand = speicher.zweitfaktor(konto.kennung)
+            if stand is None or not stand[1]:
+                # Noch nicht eingerichtet: Das Geheimnis bleibt dasselbe, bis der erste Code stimmt.
+                geheimnis = stand[0] if stand else totp.neues_geheimnis()
+                if stand is None:
+                    speicher.zweitfaktor_setzen(konto.kennung, geheimnis, False, 0)
+                if not eingabe:
+                    verweis = totp.adresse(geheimnis, konto.kennung)
+                    return {"einrichten": {"geheimnis": geheimnis,
+                                           "qr": segno.make(verweis, error="m").svg_data_uri(scale=5, border=2)}}
+                schritt = code_pruefen(konto.kennung, geheimnis, eingabe, 0)
+                speicher.zweitfaktor_setzen(konto.kennung, geheimnis, True, schritt)
+            else:
+                if not eingabe:
+                    return {"code_noetig": True}
+                schritt = code_pruefen(konto.kennung, stand[0], eingabe, stand[2])
+                speicher.zweitfaktor_setzen(konto.kennung, stand[0], True, schritt)
         return {"sitzung": speicher.sitzung_anlegen(konto.kennung, jetzt(), jetzt() + SITZUNG_DAUER), "name": konto.name}
 
     @app.post("/api/partner/abmeldung")

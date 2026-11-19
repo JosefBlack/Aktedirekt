@@ -176,11 +176,11 @@ $("#anmeldung").addEventListener("submit", async (e) => {
   const form = e.currentTarget;
   form.querySelector("button").disabled = true;
   try {
-    const daten = await aufruf("POST", "/api/partner/anmeldung",
-      { kennung: form.kennung.value, kennwort: form.kennwort.value });
+    const daten = await anmeldung_schritt(form, aufruf);
+    if (!daten) { form.querySelector("button").disabled = false; return; }
     sitzung = daten.sitzung;
     try { sessionStorage.setItem(MERKER, sitzung); } catch (e2) { /* egal */ }
-    form.kennwort.value = "";
+    anmeldung_zuruecksetzen(form);
     await laden();
   } catch (fehler) { melden(fehler.message); }
   form.querySelector("button").disabled = false;

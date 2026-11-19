@@ -35,6 +35,8 @@ class PartnerKonto:
     name: str
     einladung: str
     kennwort_scrypt: str = ""
+    # Verlangt die Anmeldung zusätzlich einen Code aus einer Authenticator-App?
+    zweiter_faktor: bool = False
 
 
 def kennwort_verschluesseln(kennwort: str) -> str:
@@ -89,8 +91,11 @@ class Partnerliste:
     @classmethod
     def aus_text(cls, text: str) -> "Partnerliste":
         eintraege = json.loads(text)
+        # Die Kanzlei sieht alle Eingänge und braucht den zweiten Faktor immer;
+        # für eine Werkstatt lässt er sich in der Liste einschalten.
         return cls([PartnerKonto(e["kennung"], e["art"], e["name"], e.get("einladung", ""),
-                                 e.get("kennwort_scrypt", "")) for e in eintraege])
+                                 e.get("kennwort_scrypt", ""),
+                                 bool(e.get("zweiter_faktor", e["art"] == "kanzlei"))) for e in eintraege])
 
     @classmethod
     def laden(cls, pfad: Path | str | None) -> "Partnerliste":

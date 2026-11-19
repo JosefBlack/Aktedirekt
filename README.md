@@ -33,7 +33,7 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (203 Prüfungen, ohne Netz; was eine Ablage braucht,
+Vorhanden und geprüft (222 Prüfungen, ohne Netz; was eine Ablage braucht,
 läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
@@ -103,6 +103,14 @@ Kündigungen mit der nächsten Frist zuerst. Ein Eingang zeigt alle Angaben mit
 Gerät – und lässt sich für die Akte drucken oder als PDF speichern. Der Zugang
 ist ein Konto der Art `kanzlei` in der Partnerliste; Werkstätten und
 Sachverständige kommen dort nicht hinein.
+
+Die Anmeldung der Kanzlei verlangt neben dem Kennwort einen **zweiten Faktor**:
+einen sechsstelligen Code aus einer Authenticator-App. Bei der ersten Anmeldung
+zeigt die Seite dazu einmalig einen QR-Code. Ein Code gilt nur einmal; nach fünf
+falschen ist die Kennung eine Viertelstunde gesperrt. Für eine Werkstatt lässt
+sich dasselbe in der Partnerliste mit `"zweiter_faktor": true` einschalten.
+Wer zuerst mit dem Kennwort ankommt, richtet den Faktor ein – ein neues
+Kennwort gehört deshalb vor die erste Anmeldung.
 
 In AWS meldet außerdem eine E-Mail jeden Eingang: ohne Namen und ohne Inhalt,
 bei einer Kündigung mit der Klagefrist im Betreff.

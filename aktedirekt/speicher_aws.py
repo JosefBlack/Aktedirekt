@@ -15,6 +15,7 @@ Eine Tabelle, zwei Schlüsselfelder ``pk`` und ``sk``:
     S#<Prüfsumme der Sitzung> / S           Sitzung eines Partners
     F#<Partnerkennung> / F                  Fehlversuche bei der Anmeldung
     L / <Zeit>#<Aufnahme>                   Nachweis einer Löschung (ohne Inhalt)
+    T#<Partnerkennung> / T                  Geheimnis des zweiten Faktors
 
 Zugänge, Codes und Sitzungen stehen nur als Prüfsumme in der Tabelle. Was ein
 Verfallsdatum hat, trägt es im Feld ``ablauf`` und wird von DynamoDB entfernt;
@@ -455,6 +456,19 @@ class AwsSpeicher:
         if gesperrt_bis:
             eintrag["gesperrt_bis"] = gesperrt_bis.isoformat()
         self._tabelle.put_item(Item=eintrag)
+
+    # ---- Zweiter Faktor --------------------------------------------------
+
+    def zweitfaktor(self, kennung: str) -> tuple[str, bool, int] | None:
+        e = self._tabelle.get_item(Key={"pk": f"T#{kennung}", "sk": "T"}, ConsistentRead=True).get("Item")
+        return (e["geheimnis"], bool(e["aktiv"]), int(e["letzter_schritt"])) if e else None
+
+    def zweitfaktor_setzen(self, kennung: str, geheimnis: str, aktiv: bool, letzter_schritt: int) -> None:
+        self._tabelle.put_item(Item={"pk": f"T#{kennung}", "sk": "T", "geheimnis": geheimnis,
+                                     "aktiv": aktiv, "letzter_schritt": letzter_schritt})
+
+    def zweitfaktor_loeschen(self, kennung: str) -> None:
+        self._tabelle.delete_item(Key={"pk": f"T#{kennung}", "sk": "T"})
 
     # ---- Nachweis der Auskünfte -----------------------------------------
 

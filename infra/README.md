@@ -108,6 +108,26 @@ aws secretsmanager put-secret-value --secret-id aktedirekt/probe/partner --secre
 
 Die Änderung wirkt nach spätestens fünf Minuten, ohne neuen Deploy.
 
+## Zugänge verwalten
+
+In der CloudShell, nach dem Auspacken des Pakets:
+
+```bash
+bash aktedirekt/verwalten.sh liste
+```
+
+```bash
+bash aktedirekt/verwalten.sh kennwort kanzlei
+```
+
+```bash
+bash aktedirekt/verwalten.sh faktor kanzlei
+```
+
+`kennwort` setzt ein neues Kennwort und zeigt es einmalig an. `faktor` setzt
+den zweiten Faktor zurück, etwa bei verlorenem Handy; bei der nächsten
+Anmeldung erscheint wieder der QR-Code.
+
 ## jur|nodes anschließen
 
 Erst, wenn es in jur|nodes einen **eigenen Schnittstellenbenutzer** für
@@ -136,7 +156,7 @@ Aufnahmen bleiben vorgemerkt und werden beim ersten Abgleich nachgeholt.
 ## Was vor echten Mandaten noch fehlt
 
 - eigene Adresse der Kanzlei statt der AWS-Adresse
-- zweiter Faktor für die Ansicht der Kanzlei, die alle Eingänge zeigt; ein Nachweis, wer dort was geöffnet hat
+- ein Nachweis, wer in der Ansicht der Kanzlei was geöffnet hat
 - Freigabe des Wortlauts aller Hinweise, insbesondere zur Klagefrist
 - Anmeldung mit Einmalcode für Mandanten; zweiter Faktor und eigene
   Anmeldungen je Mitarbeiter für Partner

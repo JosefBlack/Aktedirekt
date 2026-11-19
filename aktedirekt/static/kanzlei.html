@@ -26,6 +26,15 @@
   <h1>Kanzlei</h1>
   <label>Kennung<input type="text" name="kennung" maxlength="80" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
   <label>Kennwort<input type="password" name="kennwort" maxlength="200" autocomplete="current-password"></label>
+  <div id="faktor" hidden>
+    <div id="faktor-einrichten" hidden>
+      <h2>Zweiten Faktor einrichten</h2>
+      <p>Dieser Zugang ist zusätzlich mit einem Code geschützt. Scannen Sie den QR-Code einmalig mit einer Authenticator-App (zum Beispiel Google Authenticator, Microsoft Authenticator oder die Passwörter-App des iPhones) und geben Sie den angezeigten Code ein.</p>
+      <div class="qr"><img id="faktor-qr" alt="QR-Code für die Authenticator-App"></div>
+      <p class="klein">Ohne Kamera: diesen Schlüssel in der App von Hand eintragen – <span id="faktor-geheimnis"></span></p>
+    </div>
+    <label>Code aus der App<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="6 Ziffern"></label>
+  </div>
   <button type="submit" class="haupt">Anmelden</button>
 </form>
 
@@ -65,6 +74,7 @@
   </div>
 </section>
 </main>
+<script src="anmeldung.js"></script>
 <script src="kanzlei.js"></script>
 </body>
 </html>
