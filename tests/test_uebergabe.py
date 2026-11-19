@@ -176,3 +176,81 @@ def test_abgelehnter_lead_bekommt_nichts_mehr(umgebung):
     aufnehmen(client, ablage)
     server.status = "rejected"
     assert lauf(speicher, jurnodes)["abgelegt"] == 0 and server.abgelegt == []
+
+
+# ---- jur|nodes nennt am Lead das Aktenzeichen, nicht die Kennung der Akte ----
+
+class ServerMitAktenzeichen(Server):
+    """Wie der Server der Kanzlei: /record kennt nur Kennungen, der Lead nennt das Aktenzeichen."""
+    def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        weg = anfrage.url.path
+        self.gefragt = getattr(self, "gefragt", [])
+        self.gefragt.append((anfrage.method, weg, dict(anfrage.url.params)))
+        if weg == "/lead" and anfrage.method == "GET" and self.status == "accepted":
+            return httpx.Response(200, json={"identifier": "L-1", "status": "accepted", "acceptedRecord": "40566/26",
+                                             "fileFolderId": 77})
+        if weg == "/record":
+            if anfrage.url.params.get("identifier") != "rec-uuid-1":
+                return httpx.Response(405, json={"error": "ungültig"})
+            return httpx.Response(200, json={"identifier": "rec-uuid-1", "recordStatus": "active", "fileFolderId": 99})
+        if weg == "/record/search":
+            return httpx.Response(200, json={"elements": [
+                {"identifier": "rec-uuid-0", "sign": "40566/25"}, {"identifier": "rec-uuid-1", "sign": "40566/26"}]})
+        if weg == "/record-subject/search":
+            if anfrage.url.params.get("recordIdentifier") != "rec-uuid-1":
+                return httpx.Response(405, json={})
+            return httpx.Response(200, json={"elements": [{"recordSubject": "Sachstand", "valueText": "Anspruch angemeldet"}]})
+        return super().__call__(anfrage)
+
+
+@pytest.fixture
+def mit_aktenzeichen(ablage):
+    server = ServerMitAktenzeichen()
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
+    client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jurnodes=jurnodes, jetzt=lambda: JETZT))
+    return client, ablage.speicher, server, ablage, jurnodes
+
+
+def test_akte_wird_ueber_das_aktenzeichen_gefunden(mit_aktenzeichen):
+    client, speicher, server, ablage, jurnodes = mit_aktenzeichen
+    _, zugang = aufnehmen(client, ablage)
+    server.status = "accepted"                         # die Kanzlei nimmt an, bevor der erste Lauf kommt
+    zahlen = lauf(speicher, jurnodes)
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 1, "abgelegt": 3, "fehler": 0}
+    aufnahme = speicher.laden(zugang)
+    assert aufnahme.sachstand == "angemeldet" and aufnahme.akte_kennung == "rec-uuid-1"
+    assert {a["ordner"] for a in server.abgelegt} == {"99"}
+    assert jurnodes.pannen == []                       # der Umweg über die Suche ist kein Fehler
+    # Beim nächsten Lauf ist die Kennung gemerkt: keine Suche mehr.
+    server.gefragt.clear()
+    lauf(speicher, jurnodes)
+    assert not any(weg == "/record/search" for _, weg, _ in server.gefragt)
+
+
+def test_unauffindbare_akte_haelt_die_dateien_nicht_auf(mit_aktenzeichen, monkeypatch):
+    client, speicher, server, ablage, jurnodes = mit_aktenzeichen
+    _, zugang = aufnehmen(client, ablage)
+    server.status = "accepted"
+    weiter = ServerMitAktenzeichen.__call__
+
+    def ohne_treffer(self, anfrage):
+        if anfrage.url.path == "/record/search":
+            return httpx.Response(200, json={"elements": []})
+        return weiter(self, anfrage)
+    monkeypatch.setattr(ServerMitAktenzeichen, "__call__", ohne_treffer)
+    zahlen = lauf(speicher, jurnodes)
+    # Der Sachstand scheitert und wird gezählt; die Dateien landen trotzdem - im Ordner des Leads.
+    assert zahlen["fehler"] == 1 and zahlen["abgelegt"] == 3
+    assert {a["ordner"] for a in server.abgelegt} == {"77"}
+    assert speicher.laden(zugang).sachstand == "aufgenommen"
+    assert "GET /record/search: kein Treffer zum Aktenzeichen" in jurnodes.pannen
+
+
+def test_pannen_nennen_weg_und_status_aber_nichts_vom_inhalt(mit_aktenzeichen):
+    client, speicher, server, ablage, jurnodes = mit_aktenzeichen
+    aufnehmen(client, ablage)
+    server.kaputt_ab = 0                               # jur|nodes nimmt keine Datei an
+    assert lauf(speicher, jurnodes)["fehler"] == 1
+    assert jurnodes.pannen == ["POST /file-system/add-file: Status 500"]
+    for geheim in ("Muster", "M-AB", "L-1", "Erika"):
+        assert not any(geheim in p for p in jurnodes.pannen)

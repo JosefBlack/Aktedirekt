@@ -11,7 +11,8 @@ Repository jusperfect unter ``schnittstelle/``). Zwei Eigenheiten daraus:
 Gebraucht werden diese Rechte des Schnittstellenbenutzers:
 ``write:leads`` (anlegen), ``read:leads``, ``read:records``,
 ``search:records_subject`` und, für die Übergabe von Aufnahme und Anlagen,
-``write:file``. jur|nodes meldet keine Änderungen von sich aus;
+``write:file``; dazu ``search:records``, falls jur|nodes am angenommenen
+Lead das Aktenzeichen und nicht die Kennung der Akte nennt. jur|nodes meldet keine Änderungen von sich aus;
 der Sachstand wird deshalb in Abständen abgefragt.
 
 Gegen den Server der Kanzlei ist dieser Client noch nicht gelaufen.
@@ -52,15 +53,28 @@ class JurNodes:
             timeout=timeout_sekunden,
             transport=transport,
         )
+        self.pannen: list[str] = []
 
     def close(self) -> None:
         self._client.close()
+
+    def _panne(self, verfahren: str, pfad: str, was: str) -> None:
+        """Hält fest, welcher Aufruf woran gescheitert ist - Weg und Status, nichts vom Inhalt.
+
+        Das ist die Auskunft für den Betrieb: Sie darf ins Protokoll, weil
+        weder die Anfrage (mit Aktenzeichen) noch die Antwort darin vorkommt.
+        """
+        if len(self.pannen) < 50:
+            self.pannen.append(f"{verfahren} {pfad}: {was}")
 
     def _aufruf(self, verfahren: str, pfad: str, **kw: Any) -> Any:
         try:
             antwort = self._client.request(verfahren, pfad, **kw)
         except httpx.HTTPError as fehler:
+            self._panne(verfahren, pfad, "nicht erreichbar")
             raise JurNodesFehler("jur|nodes ist nicht erreichbar.") from fehler
+        if antwort.status_code != 200:
+            self._panne(verfahren, pfad, f"Status {antwort.status_code}")
         if antwort.status_code == 401:
             raise JurNodesFehler("jur|nodes hat die Anmeldung abgewiesen.")
         if antwort.status_code in (400, 405):
@@ -70,6 +84,7 @@ class JurNodes:
         try:
             return antwort.json()
         except ValueError as fehler:
+            self._panne(verfahren, pfad, "Antwort nicht lesbar")
             raise JurNodesFehler("jur|nodes hat keine lesbare Antwort geliefert.") from fehler
 
     @staticmethod
@@ -96,6 +111,30 @@ class JurNodes:
     def lead(self, kennung: str) -> Lead:
         return self._lead(self._aufruf("GET", "/lead", params={"identifier": kennung}))
 
+    def akte_finden(self, angabe: str) -> str:
+        """Die Kennung der Akte zu dem, was jur|nodes am angenommenen Lead nennt.
+
+        Dort steht nach der Beschreibung des Herstellers das Aktenzeichen
+        ("40566/20"); gelesen wird eine Akte aber über ihre Kennung. Ist die
+        Angabe schon eine Kennung, bleibt sie; sonst wird nach dem
+        Aktenzeichen gesucht.
+        """
+        vorher = len(self.pannen)
+        try:
+            daten = self._aufruf("GET", "/record", params={"identifier": angabe})
+            if isinstance(daten, dict) and (daten.get("identifier") or daten.get("recordStatus")):
+                return str(daten.get("identifier") or angabe)
+        except JurNodesFehler:
+            pass
+        gefunden = self._aufruf("GET", "/record/search", params={"sign": angabe, "page": 1})
+        elemente = gefunden.get("elements") if isinstance(gefunden, dict) else None
+        for eintrag in elemente or []:
+            if isinstance(eintrag, dict) and eintrag.get("sign") == angabe and eintrag.get("identifier"):
+                del self.pannen[vorher:]           # der erste Versuch war kein Fehler, nur der falsche Weg
+                return str(eintrag["identifier"])
+        self._panne("GET", "/record/search", "kein Treffer zum Aktenzeichen")
+        raise JurNodesFehler("jur|nodes kennt die Akte zu diesem Lead nicht.")
+
     def akte_status(self, akte_kennung: str) -> str:
         daten = self._aufruf("GET", "/record", params={"identifier": akte_kennung})
         return str(daten.get("recordStatus") or "") if isinstance(daten, dict) else ""
@@ -119,7 +158,10 @@ class JurNodes:
                                         headers={"folderId": str(ordner), "autoRenameIfExist": "true"},
                                         timeout=120.0)
         except httpx.HTTPError as fehler:
+            self._panne("POST", "/file-system/add-file", "nicht erreichbar")
             raise JurNodesFehler("jur|nodes ist nicht erreichbar.") from fehler
+        if antwort.status_code != 200:
+            self._panne("POST", "/file-system/add-file", f"Status {antwort.status_code}")
         if antwort.status_code == 401:
             raise JurNodesFehler("jur|nodes hat die Anmeldung abgewiesen oder das Recht zum Ablegen fehlt.")
         if antwort.status_code != 200:

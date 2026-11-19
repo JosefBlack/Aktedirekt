@@ -146,6 +146,19 @@ Wieder herausnehmen: `bash aktedirekt/verwalten.sh jurnodes-aus`.
 Solange die Felder leer sind, meldet Aktedirekt nichts an jur|nodes; die
 Aufnahmen bleiben vorgemerkt und werden beim ersten Abgleich nachgeholt.
 
+## Wenn der Abgleich mit jur|nodes hakt
+
+Der zeitgesteuerte Lauf schreibt Zahlen ins Protokoll und, wenn etwas
+scheitert, welcher Aufruf mit welchem Status – ohne Mandanten und ohne
+Aktenzeichen. In der CloudShell:
+
+```bash
+aws logs tail /aws/lambda/aktedirekt-probe-abgleich --since 1h --region eu-central-1
+```
+
+Zeilen mit „Panne:" nennen den Aufruf, etwa `POST /file-system/add-file:
+Status 401` (dann fehlt dem Schnittstellenbenutzer das Recht `write:file`).
+
 ## Ausprobieren
 
 1. `PortalUrl` auf dem Handy öffnen und einen erfundenen Unfall melden, mit

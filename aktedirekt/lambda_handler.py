@@ -45,6 +45,9 @@ def abgleich(ereignis: Any, kontext: Any) -> dict[str, int]:
         AwsSpeicher(os.environ["AKTEDIREKT_TABELLE"], os.environ["AKTEDIREKT_BUCKET"], region), jurnodes,
         Partnerliste.aus_text(_geheimnis(os.environ["AKTEDIREKT_PARTNER_GEHEIMNIS"], region)),
         Stufen.laden(), zeit.jetzt().date())
-    # Nur Zahlen gehen ins Protokoll.
+    # Ins Protokoll gehen Zahlen - und, wenn etwas scheitert, welcher Aufruf
+    # mit welchem Status. Nichts davon nennt einen Mandanten oder eine Akte.
     print(", ".join(f"{name}: {zahl}" for name, zahl in ergebnis.items()))
+    for panne in sorted(set(jurnodes.pannen)):
+        print("Panne:", panne)
     return ergebnis

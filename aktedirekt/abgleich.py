@@ -97,11 +97,14 @@ def fall_abgleichen(fall: Fall, jurnodes: JurNodes, stufen: Stufen, heute: date,
     lead = lead or jurnodes.lead(fall.lead_kennung)
     akte_status = eigenschaft = ""
     if lead.status == "accepted" and lead.akte_kennung:
-        akte_status = jurnodes.akte_status(lead.akte_kennung)
-        eigenschaft = jurnodes.akteneigenschaft(lead.akte_kennung, stufen.akteneigenschaft)
+        # Am Lead steht das Aktenzeichen; gebraucht wird die Kennung der Akte.
+        # Einmal gefunden, bleibt sie gemerkt.
+        akte = fall.akte_kennung or jurnodes.akte_finden(lead.akte_kennung)
+        akte_status = jurnodes.akte_status(akte)
+        eigenschaft = jurnodes.akteneigenschaft(akte, stufen.akteneigenschaft)
+        fall.akte_kennung = akte
     neu = sachstand_ableiten(stufen, fall.sachstand.schluessel, lead.status,
                              akte_status, eigenschaft)
-    fall.akte_kennung = lead.akte_kennung or fall.akte_kennung
     if neu == fall.sachstand.schluessel:
         return False
     fall.sachstand = Sachstand(neu, heute)
@@ -180,8 +183,11 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
     if summe == stand["blatt"] and stand["unterschrift"] and not ausstehend:
         return 0                                   # nichts Neues - jur|nodes wird gar nicht erst gefragt
     # Wohin: in den Ordner der Akte, sobald es sie gibt, sonst in den des Leads.
-    ordner = jurnodes.akte_ordner(aufnahme.akte_kennung) if aufnahme.akte_kennung else jurnodes.lead(aufnahme.lead_kennung).ordner
+    ordner = jurnodes.akte_ordner(aufnahme.akte_kennung) if aufnahme.akte_kennung else 0
     if not ordner:
+        ordner = jurnodes.lead(aufnahme.lead_kennung).ordner
+    if not ordner:
+        jurnodes.pannen.append("Übergabe: jur|nodes nennt zu Lead und Akte keinen Dateiordner")
         return 0
     anzahl = 0
     if summe != stand["blatt"]:
@@ -217,24 +223,33 @@ def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerlis
         else:
             zahlen["leads_offen"] += 1
     for aufnahme in speicher.mit_lead():
+        # Zwei Dinge je Fall, und das eine hält das andere nicht auf: erst der
+        # Sachstand, dann die Dateien.
         fall = als_fall(aufnahme)
+        lead = None
         try:
             lead = jurnodes.lead(aufnahme.lead_kennung)
             geaendert = fall_abgleichen(fall, jurnodes, stufen, heute, lead)
+            if geaendert:
+                speicher.sachstand_setzen(aufnahme.kennung, fall.sachstand.schluessel, heute, fall.akte_kennung)
+                zahlen["geaendert"] += 1
+            elif fall.akte_kennung and fall.akte_kennung != aufnahme.akte_kennung:
+                # Angenommen, aber der Sachstand blieb gleich: Die Akte merken wir uns trotzdem.
+                speicher.sachstand_setzen(aufnahme.kennung, aufnahme.sachstand,
+                                          aufnahme.sachstand_seit or heute, fall.akte_kennung)
         except JurNodesFehler:
             zahlen["fehler"] += 1
-            continue
-        if geaendert:
-            speicher.sachstand_setzen(aufnahme.kennung, fall.sachstand.schluessel, heute, fall.akte_kennung)
-            zahlen["geaendert"] += 1
-        elif fall.akte_kennung and fall.akte_kennung != aufnahme.akte_kennung:
-            # Angenommen, aber der Sachstand blieb gleich: Die Akte merken wir uns trotzdem.
-            speicher.sachstand_setzen(aufnahme.kennung, aufnahme.sachstand, aufnahme.sachstand_seit or heute, fall.akte_kennung)
+        except Exception as fehler:                # etwa ein fehlendes Recht in AWS
+            jurnodes.pannen.append(f"Sachstand: {type(fehler).__name__}")
+            zahlen["fehler"] += 1
         try:
             frisch = speicher.nach_kennung(aufnahme.kennung)
-            if frisch is not None and lead.status != "rejected":
+            if frisch is not None and (lead is None or lead.status != "rejected"):
                 zahlen["abgelegt"] += uebergeben(frisch, speicher, jurnodes, partner, stufen)
         except JurNodesFehler:
+            zahlen["fehler"] += 1
+        except Exception as fehler:
+            jurnodes.pannen.append(f"Übergabe: {type(fehler).__name__}")
             zahlen["fehler"] += 1
     return zahlen
 
