@@ -28,7 +28,7 @@ fi
 
 # Ablage für das Programmpaket (nicht für Mandantendaten).
 PAKETE="aktedirekt-einrichtung-$KONTO-$REGION"
-if ! aws s3api head-bucket --bucket "$PAKETE" 2>/dev/null; then
+if ! aws s3api head-bucket --bucket "$PAKETE" >/dev/null 2>&1; then
   aws s3api create-bucket --bucket "$PAKETE" --create-bucket-configuration LocationConstraint="$REGION" >/dev/null
   aws s3api put-public-access-block --bucket "$PAKETE" --public-access-block-configuration \
     BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
