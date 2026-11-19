@@ -292,19 +292,11 @@ Resources:
       Policies:
         - Version: "2012-10-17"
           Statement:
-            # Löschen und Query: für das Aufräumen nie abgeschickter Entwürfe.
+            # Lesen und Ändern, kein Löschen: Dieser Lauf entfernt nichts.
             - Sid: Aufnahmen
               Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:Query, dynamodb:Scan]
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem, dynamodb:Scan]
               Resource: !GetAtt Tabelle.Arn
-            - Sid: DateienAufraeumen
-              Effect: Allow
-              Action: s3:DeleteObject
-              Resource: !Sub "${DateiBucket.Arn}/*"
-            - Sid: DateienAuffinden
-              Effect: Allow
-              Action: s3:ListBucket
-              Resource: !GetAtt DateiBucket.Arn
             - Sid: Geheimnisse
               Effect: Allow
               Action: secretsmanager:GetSecretValue

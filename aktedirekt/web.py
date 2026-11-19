@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from aktedirekt import dateien, zeit
-from aktedirekt.abgleich import als_fall, lead_anlegen
+from aktedirekt.abgleich import ENTWURF_FRIST, alte_entwuerfe, als_fall, entwuerfe_loeschen, lead_anlegen
 from aktedirekt.aufnahme import (ERG, FALLARTEN, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
                                  kurzrubrum)
 from aktedirekt.jurnodes import JurNodes
@@ -529,6 +529,21 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         if nachweis is None:
             raise HTTPException(404, "Diesen Eingang gibt es nicht.")
         return {"geloescht": True, "dateien": nachweis.dateien}
+
+    @app.get("/api/kanzlei/entwuerfe")
+    async def entwuerfe(request: Request) -> dict[str, int]:
+        """Wie viele alte, nie abgeschickte Entwürfe zum Löschen anstehen. Ihr Inhalt
+        geht die Kanzlei nichts an: Er wurde ihr nie geschickt."""
+        kanzlei_von(request)
+        return {"anzahl": len(alte_entwuerfe(speicher, jetzt())), "frist_tage": ENTWURF_FRIST.days}
+
+    @app.post("/api/kanzlei/entwuerfe/loeschen")
+    async def entwuerfe_weg(request: Request) -> dict[str, int]:
+        wer = kanzlei_von(request)
+        daten = await json_lesen(request)
+        if not (isinstance(daten, dict) and daten.get("endgueltig") is True):
+            raise HTTPException(400, "Bitte bestätigen Sie, dass die Entwürfe endgültig gelöscht werden sollen.")
+        return {"geloescht": entwuerfe_loeschen(speicher, jetzt(), wer)}
 
     @app.get("/api/kanzlei/loeschungen")
     async def loeschnachweis(request: Request) -> dict[str, Any]:

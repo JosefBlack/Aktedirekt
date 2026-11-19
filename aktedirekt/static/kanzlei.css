@@ -33,3 +33,7 @@
 .nachweis { margin-top: 28px; }
 .nachweis ul { padding-left: 20px; }
 @media print { .loeschen { display: none !important; } }
+.vorschlag { margin-top: 28px; padding: 14px; background: var(--flaeche); border: 1px solid var(--rand);
+  border-left: 4px solid var(--akzent); border-radius: 10px; }
+.vorschlag p { margin: 0 0 8px; }
+.vorschlag button { margin-top: 10px; }

@@ -16,7 +16,7 @@ nichts außer dem Konto: eigener Schlüssel, eigene Tabelle, eigener Dateispeich
 |---|---|---|
 | API Gateway (HTTP API) | die Adresse des Portals | Zugriffsprotokoll ohne Inhalte und ohne Absenderadresse; Obergrenze 20 Aufrufe je Sekunde |
 | Lambda `aktedirekt-<Stufe>` | die Anwendung: Seiten und Schnittstelle | begrenzt durch die Obergrenze der Adresse |
-| Lambda `aktedirekt-<Stufe>-abgleich` | holt alle 15 Minuten den Sachstand aus jur|nodes und löscht nie abgeschickte Entwürfe nach 30 Tagen | schreibt nur Zahlen ins Protokoll |
+| Lambda `aktedirekt-<Stufe>-abgleich` | holt alle 15 Minuten den Sachstand aus jur|nodes; löscht nichts | schreibt nur Zahlen ins Protokoll |
 | DynamoDB | Aufnahmen, Sitzungen, Übergabecodes, Auskunftsnachweis | KMS, Wiederherstellung auf jeden Zeitpunkt, Löschschutz |
 | S3 | Fotos, Unterlagen, Unterschriften | KMS, nicht öffentlich, nur verschlüsselte Verbindung; Abgeliefertes ohne Übernahme verfällt nach einem Tag |
 | Secrets Manager | jur|nodes-Zugang, Partnerliste (auch der Zugang der Kanzlei) | Werte nach dem Deploy setzen |

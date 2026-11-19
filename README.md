@@ -33,7 +33,7 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (201 Prüfungen, ohne Netz; was eine Ablage braucht,
+Vorhanden und geprüft (203 Prüfungen, ohne Netz; was eine Ablage braucht,
 läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
@@ -114,10 +114,13 @@ Unterschrift, den Zugang des Mandanten und den Vermerk, welcher Partner
 welchen Stand gesehen hat. Vorher ist zu bestätigen, dass in der Akte liegt,
 was dorthin gehört. In jur|nodes ändert das Löschen nichts.
 
-Von selbst gelöscht wird nur, was vor mehr als 30 Tagen begonnen und **nie
-abgeschickt** wurde – abgebrochene Aufnahmen und Fälle vom Tresen, deren Code
-niemand eingelöst hat. Abgeschicktes bleibt, bis die Kanzlei es löscht; eine
-Frist dafür gibt es noch nicht (Löschkonzept offen).
+**Von selbst wird nichts gelöscht.** Was vor mehr als 90 Tagen begonnen und
+nie abgeschickt wurde – abgebrochene Aufnahmen und Fälle vom Tresen, deren Code
+niemand eingelöst hat –, wird der Kanzlei in ihrer Ansicht zum Löschen
+vorgeschlagen, mit der Anzahl und ohne Inhalt (er wurde ihr nie geschickt).
+Gelöscht wird erst, wenn die Kanzlei das bestätigt. Abgeschicktes bleibt, bis
+die Kanzlei es einzeln löscht; eine Frist dafür gibt es noch nicht
+(Löschkonzept offen).
 
 Übrig bleibt je Löschung ein Nachweis ohne Inhalt: Zeitpunkt, wer, Fallart,
 Zahl der Anlagen. In AWS lässt sich die Tabelle 35 Tage lang auf einen

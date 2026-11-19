@@ -71,8 +71,7 @@ def test_geaenderte_partnerliste_wirkt_ohne_neuen_deploy(einstieg, monkeypatch):
 
 def test_abgleich_ohne_eingetragenen_zugang_tut_nichts(einstieg):
     modul, _ = einstieg
-    assert modul.abgleich({}, None) == {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "fehler": 0,
-                                       "entwuerfe_geloescht": 0}
+    assert modul.abgleich({}, None) == {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "fehler": 0}
 
 
 def test_abgleich_mit_zugang_laeuft_gegen_die_ablage(einstieg, monkeypatch):
@@ -80,5 +79,4 @@ def test_abgleich_mit_zugang_laeuft_gegen_die_ablage(einstieg, monkeypatch):
     geheimnisse.put_secret_value(SecretId="jurnodes", SecretString=json.dumps(
         {"url": "https://jurnodes.example", "benutzer": "portal", "schluessel": "geheim"}))
     # Keine Aufnahmen in der Ablage: Der Lauf fragt jur|nodes gar nicht erst.
-    assert modul.abgleich({}, None) == {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "fehler": 0,
-                                       "entwuerfe_geloescht": 0}
+    assert modul.abgleich({}, None) == {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "fehler": 0}

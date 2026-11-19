@@ -87,6 +87,12 @@ async function liste_laden() {
     li.addEventListener("keydown", (ev) => { if (ev.key === "Enter") oeffnen(); });
     liste.append(li);
   }
+  const alt = await aufruf("GET", "/api/kanzlei/entwuerfe");
+  $("#vorschlag").hidden = !alt.anzahl;
+  $("#vorschlag-text").textContent = (alt.anzahl === 1 ? "Ein nie abgeschickter Entwurf ist" : alt.anzahl + " nie abgeschickte Entwürfe sind")
+    + " älter als " + alt.frist_tage + " Tage. Sollen " + (alt.anzahl === 1 ? "er" : "sie") + " gelöscht werden?";
+  $("#vorschlag-haken").checked = false;
+  $("#vorschlag-loeschen").disabled = true;
   const nachweise = (await aufruf("GET", "/api/kanzlei/loeschungen")).loeschungen;
   $("#nachweis").hidden = !nachweise.length;
   $("#loeschungen").textContent = "";
@@ -175,6 +181,15 @@ async function eingang_laden(fall) {
     : "In jur|nodes ist dieser Eingang noch nicht angelegt – nach dem Löschen gibt es ihn nirgends mehr.";
   ansicht("eingang");
 }
+
+$("#vorschlag-haken").addEventListener("change", (e) => { $("#vorschlag-loeschen").disabled = !e.target.checked; });
+$("#vorschlag-loeschen").addEventListener("click", async () => {
+  $("#vorschlag-loeschen").disabled = true;
+  try {
+    await aufruf("POST", "/api/kanzlei/entwuerfe/loeschen", { endgueltig: true });
+    await liste_laden();
+  } catch (fehler) { gescheitert(fehler); }
+});
 
 let offen = "";
 $("#loeschen-oeffnen").addEventListener("click", () => {

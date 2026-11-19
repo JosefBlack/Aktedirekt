@@ -1,9 +1,9 @@
-"""Löschen: einzelne Eingänge durch die Kanzlei, alte Entwürfe von selbst."""
+"""Löschen: einzelne Eingänge und alte Entwürfe - immer nur durch die Kanzlei und auf Bestätigung."""
 from datetime import timedelta
 
 import boto3
 
-from aktedirekt.abgleich import ENTWURF_FRIST, entwuerfe_aufraeumen
+from aktedirekt.abgleich import ENTWURF_FRIST
 from tests.conftest import BUCKET, REGION, hochladen
 from tests.test_aufnahme import ANGABEN
 from tests.test_kuendigung import WERKSTATT, abschicken, beginnen, kanzlei, umgebung  # noqa: F401
@@ -106,7 +106,11 @@ def test_fall_ueber_die_werkstatt_verschwindet_auch_aus_ihrer_liste(umgebung):
     assert speicher.auskuenfte(fall) == []
 
 
-def test_alte_entwuerfe_werden_aufgeraeumt_abgeschicktes_nie(umgebung):
+def test_frist_ist_neunzig_tage():
+    assert ENTWURF_FRIST == timedelta(days=90)
+
+
+def test_alte_entwuerfe_nur_auf_bestaetigung_der_kanzlei_abgeschicktes_nie(umgebung):
     client, speicher, uhr, ablage, _ = umgebung
     alt_kopf, alt = beginnen(client)
     client.put("/api/aufnahme/schritt/vorpruefung", headers=alt_kopf,
@@ -119,16 +123,38 @@ def test_alte_entwuerfe_werden_aufgeraeumt_abgeschicktes_nie(umgebung):
 
     uhr.zeit += ENTWURF_FRIST - timedelta(hours=1)
     _, jung = beginnen(client)                                     # heute begonnen
-    assert entwuerfe_aufraeumen(speicher, uhr()) == 0              # noch ist nichts alt genug
+    k = kanzlei(client)
+    assert client.get("/api/kanzlei/entwuerfe", headers=k).json() == {"anzahl": 0, "frist_tage": 90}
 
     uhr.zeit += timedelta(hours=2)
-    assert entwuerfe_aufraeumen(speicher, uhr()) == 2              # der Entwurf und der Fall vom Tresen
+    k = kanzlei(client)
+    antwort = client.get("/api/kanzlei/entwuerfe", headers=k)
+    assert antwort.json() == {"anzahl": 2, "frist_tage": 90}       # der Entwurf und der Fall vom Tresen
+    # Die Kanzlei erfährt die Zahl, nicht den Inhalt.
+    assert "Muster" not in antwort.text and "B-XY" not in antwort.text
+
+    # Ohne Bestätigung, ohne Anmeldung, als Werkstatt: nichts geschieht.
+    assert client.post("/api/kanzlei/entwuerfe/loeschen", json={}, headers=k).status_code == 400
+    assert client.post("/api/kanzlei/entwuerfe/loeschen", json={"endgueltig": True}).status_code == 401
+    assert client.post("/api/kanzlei/entwuerfe/loeschen", json={"endgueltig": True},
+                       headers=kanzlei(client, "werkstatt-a", WERKSTATT)).status_code == 403
+    assert speicher.laden(alt["zugang"]) is not None and speicher.nach_kennung(tresen["fall"]) is not None
+
+    assert client.post("/api/kanzlei/entwuerfe/loeschen", json={"endgueltig": True}, headers=k).json() == {"geloescht": 2}
     assert speicher.laden(alt["zugang"]) is None and speicher.nach_kennung(tresen["fall"]) is None
     assert speicher.laden(jung["zugang"]) is not None
     assert speicher.laden(abgeschickt).abgeschlossen_am is not None
     assert dateien_im_speicher(ablage) == 2                        # nur noch die des abgeschickten Eingangs
     assert client.post("/api/aufnahme/uebernahme", json={"code": tresen["link"].split("#u=")[1]}).status_code == 410
-    assert entwuerfe_aufraeumen(speicher, uhr()) == 0              # ein zweiter Lauf findet nichts mehr
-    nachweise = speicher.loeschungen()
-    assert sorted((n.art, n.abgeschickt, n.dateien, n.wer) for n in nachweise) == [
-        ("kuendigung", False, 1, "Aufräumen nach 30 Tagen"), ("unfall", False, 0, "Aufräumen nach 30 Tagen")]
+    assert client.get("/api/kanzlei/entwuerfe", headers=k).json()["anzahl"] == 0
+    assert sorted((n.art, n.abgeschickt, n.dateien, n.wer) for n in speicher.loeschungen()) == [
+        ("kuendigung", False, 1, "kanzlei"), ("unfall", False, 0, "kanzlei")]
+
+
+def test_der_zeitgesteuerte_lauf_loescht_nichts():
+    import inspect
+
+    import aktedirekt.abgleich as abgleich
+    import aktedirekt.lambda_handler as einstieg
+    assert "loeschen" not in inspect.getsource(einstieg.abgleich)
+    assert "loeschen" not in inspect.getsource(abgleich.alles_abgleichen)

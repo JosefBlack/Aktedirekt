@@ -24,19 +24,24 @@ from aktedirekt.sachstand import Stufen, sachstand_ableiten
 from aktedirekt.speicher import Speicher
 
 
-# So lange darf eine begonnene, aber nie abgeschickte Aufnahme liegen bleiben.
-ENTWURF_FRIST = timedelta(days=30)
+# Nach dieser Zeit wird eine begonnene, aber nie abgeschickte Aufnahme der
+# Kanzlei zum Löschen vorgeschlagen. Gelöscht wird sie erst, wenn die Kanzlei
+# das bestätigt - von selbst verschwindet nichts.
+ENTWURF_FRIST = timedelta(days=90)
 
 
-def entwuerfe_aufraeumen(speicher: Any, jetzt: datetime) -> int:
-    """Löscht, was vor mehr als 30 Tagen begonnen und nie abgeschickt wurde.
+def alte_entwuerfe(speicher: Any, jetzt: datetime) -> list[str]:
+    """Was vor mehr als 90 Tagen begonnen und nie abgeschickt wurde:
+    abgebrochene Aufnahmen und Fälle vom Tresen, deren Code niemand eingelöst hat."""
+    return speicher.entwuerfe_vor(jetzt - ENTWURF_FRIST)
 
-    Das sind abgebrochene Aufnahmen und Fälle vom Tresen, deren Code der Kunde
-    nie eingelöst hat. Abgeschicktes wird hier nie angefasst.
-    """
+
+def entwuerfe_loeschen(speicher: Any, jetzt: datetime, wer: str) -> int:
+    """Löscht die alten Entwürfe - nur auf ausdrückliche Bestätigung der Kanzlei aufzurufen.
+    Abgeschicktes wird hier nie angefasst."""
     anzahl = 0
-    for kennung in speicher.entwuerfe_vor(jetzt - ENTWURF_FRIST):
-        if speicher.loeschen(kennung, "Aufräumen nach 30 Tagen", jetzt) is not None:
+    for kennung in alte_entwuerfe(speicher, jetzt):
+        if speicher.loeschen(kennung, wer, jetzt) is not None:
             anzahl += 1
     return anzahl
 
@@ -140,7 +145,6 @@ def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerlis
 if __name__ == "__main__":
     from aktedirekt import zeit
     ablage = Speicher(os.environ.get("AKTEDIREKT_DATEN", ".aktedirekt-daten"))
-    print("alte Entwürfe gelöscht:", entwuerfe_aufraeumen(ablage, zeit.jetzt()))
     ergebnis = alles_abgleichen(
         ablage,
         JurNodes(os.environ["AKTEDIREKT_JURNODES_URL"], os.environ["AKTEDIREKT_JURNODES_BENUTZER"],

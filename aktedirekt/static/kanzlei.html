@@ -34,6 +34,12 @@
   <p id="anzahl" class="klein"></p>
   <ul id="eingaenge" class="faelle"></ul>
   <p id="leer" class="klein" hidden>Noch nichts eingegangen.</p>
+  <div class="vorschlag" id="vorschlag" hidden>
+    <p id="vorschlag-text"></p>
+    <p class="klein">Das sind abgebrochene Aufnahmen und Fälle vom Tresen, deren Code niemand eingelöst hat. Sie wurden der Kanzlei nie geschickt und sind deshalb hier nicht einzusehen. Von selbst wird nichts gelöscht.</p>
+    <label class="haken"><input type="checkbox" id="vorschlag-haken"><span>Diese Entwürfe sollen endgültig gelöscht werden.</span></label>
+    <button type="button" id="vorschlag-loeschen" class="schlicht rand gefahr" disabled>Entwürfe löschen</button>
+  </div>
   <details class="link nachweis" id="nachweis" hidden>
     <summary>Löschnachweis</summary>
     <p class="klein">Was gelöscht wurde, ist weg. Hier steht nur, wann, durch wen und wie viel – ohne Namen und Inhalt.</p>
