@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aktedirekt"
+version = "0.1.0.dev"
+description = "Aktedirekt – Schadenaufnahme und Sachstandsauskunft für Verkehrsunfallmandate, angebunden an jur|nodes"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27,<1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["aktedirekt*"]
+
+[tool.setuptools.package-data]
+aktedirekt = ["sachstaende.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

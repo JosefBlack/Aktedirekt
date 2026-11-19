@@ -1,0 +1,25 @@
+{
+  "_hinweis": [
+    "Die Sachstände, die Mandant und Partner (Werkstatt, Sachverständiger) sehen.",
+    "Die Kanzlei darf Bezeichnungen ändern und Stufen ergänzen; die Reihenfolge",
+    "ist die Reihenfolge dieser Liste. 'quelle' sagt, woher die Stufe kommt:",
+    "  jurnodes   - ergibt sich aus Lead und Akte, wird nicht von Hand gesetzt",
+    "  kanzlei    - der Wert der Akteneigenschaft 'Sachstand' in jur|nodes",
+    "Der Schlüssel einer Stufe mit quelle=jurnodes darf nicht geändert werden."
+  ],
+  "akteneigenschaft": "Sachstand",
+  "stufen": [
+    {"schluessel": "aufgenommen", "bezeichnung": "Aufgenommen", "quelle": "jurnodes"},
+    {"schluessel": "nicht_uebernommen", "bezeichnung": "Nicht übernommen", "quelle": "jurnodes"},
+    {"schluessel": "angenommen", "bezeichnung": "Mandat angenommen", "quelle": "jurnodes"},
+    {"schluessel": "unterlagen_fehlen", "bezeichnung": "Unterlagen fehlen", "quelle": "kanzlei"},
+    {"schluessel": "angemeldet", "bezeichnung": "Anspruch angemeldet", "quelle": "kanzlei"},
+    {"schluessel": "mahnstufe_1", "bezeichnung": "Mahnstufe 1", "quelle": "kanzlei"},
+    {"schluessel": "mahnstufe_2", "bezeichnung": "Mahnstufe 2", "quelle": "kanzlei"},
+    {"schluessel": "mahnstufe_3", "bezeichnung": "Mahnstufe 3", "quelle": "kanzlei"},
+    {"schluessel": "teilweise_reguliert", "bezeichnung": "Teilweise reguliert", "quelle": "kanzlei"},
+    {"schluessel": "vollstaendig_reguliert", "bezeichnung": "Vollständig reguliert", "quelle": "kanzlei"},
+    {"schluessel": "gerichtlich", "bezeichnung": "Gerichtliches Verfahren", "quelle": "kanzlei"},
+    {"schluessel": "abgeschlossen", "bezeichnung": "Abgeschlossen", "quelle": "jurnodes"}
+  ]
+}
