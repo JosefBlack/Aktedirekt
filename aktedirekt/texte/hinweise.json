@@ -1,0 +1,12 @@
+{
+  "_hinweis": [
+    "ENTWURF - Wortlaut bitte durch die Kanzlei prüfen und anpassen.",
+    "Was der Mandant im Kündigungsschutz-Fragebogen zu lesen bekommt.",
+    "{datum} wird durch den Tag ersetzt, {telefon} durch die Nummer der Kanzlei."
+  ],
+  "frist": "Gegen eine Kündigung muss in der Regel innerhalb von drei Wochen nach ihrem Erhalt geklagt werden – nach Ihren Angaben also bis spätestens {datum}. Bitte füllen Sie den Fragebogen möglichst heute aus.",
+  "frist_knapp": "Die Zeit drängt: Nach Ihren Angaben muss bis spätestens {datum} geklagt sein. Bitte schicken Sie den Fragebogen heute ab oder rufen Sie in der Kanzlei an{telefon}.",
+  "frist_abgelaufen": "Nach Ihren Angaben ist die Frist von drei Wochen für eine Klage möglicherweise schon abgelaufen. Bitte rufen Sie sofort in der Kanzlei an{telefon}.",
+  "kein_allgemeiner_schutz": "Nach Ihren Angaben ist der allgemeine Kündigungsschutz wahrscheinlich nicht gegeben. Eine Klage kann in seltenen Fällen trotzdem sinnvoll sein. Sie können den Fragebogen weiter ausfüllen oder einen Termin zur Erstberatung vereinbaren{telefon}.",
+  "anderes_anliegen": "Bei einer anderen arbeitsrechtlichen Sache melden Sie sich bitte telefonisch in der Kanzlei, damit wir einen passenden Termin vereinbaren können{telefon}."
+}

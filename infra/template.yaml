@@ -28,6 +28,10 @@ Parameters:
       Schrägstrich am Ende). Beim ersten Deploy leer lassen, danach die Ausgabe
       PortalUrl eintragen und erneut deployen – sie steht im QR-Code vom Tresen
       und begrenzt, von welcher Seite aus Dateien abgeliefert werden dürfen.
+  KanzleiTelefon:
+    Type: String
+    Default: ""
+    Description: Die Nummer, die Mandanten in Hinweisen genannt wird (etwa bei knapper Klagefrist). Leer lassen, dann steht dort keine.
   AbgleichMinuten:
     Type: Number
     Default: 15
@@ -50,6 +54,8 @@ Globals:
         AKTEDIREKT_PARTNER_GEHEIMNIS: !Ref PartnerGeheimnis
         AKTEDIREKT_JURNODES_GEHEIMNIS: !Ref JurNodesGeheimnis
         AKTEDIREKT_BASIS_URL: !Ref BasisUrl
+        AKTEDIREKT_TELEFON: !Ref KanzleiTelefon
+        AKTEDIREKT_EINGANG_THEMA: !Ref EingangThema
 
 Resources:
   # ── Schlüssel und Geheimnisse ────────────────────────────────────────────
@@ -237,8 +243,13 @@ Resources:
           Statement:
             - Sid: Aufnahmen
               Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:Query]
+              # Scan: für die Ansicht der Kanzlei, die alle Eingänge zeigt.
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:Query, dynamodb:Scan]
               Resource: [!GetAtt Tabelle.Arn, !Sub "${Tabelle.Arn}/index/partner"]
+            - Sid: Eingangsmeldung
+              Effect: Allow
+              Action: sns:Publish
+              Resource: !Ref EingangThema
             - Sid: Dateien
               Effect: Allow
               Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
@@ -310,6 +321,22 @@ Resources:
       Protocol: email
       Endpoint: !Ref AlarmEmail
 
+  # Meldet der Kanzlei jeden Eingang - ohne Namen und ohne Inhalt, bei einer
+  # Kündigung mit der Klagefrist. Eigenes Thema, damit sich Eingänge und
+  # Störungen im Postfach unterscheiden lassen.
+  EingangThema:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "aktedirekt-${Stufe}-eingang"
+      KmsMasterKeyId: !Ref Schluessel
+
+  EingangAbonnement:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref EingangThema
+      Protocol: email
+      Endpoint: !Ref AlarmEmail
+
   Budget:
     Type: AWS::Budgets::Budget
     Properties:
@@ -362,6 +389,9 @@ Outputs:
   PortalUrl:
     Description: Adresse des Portals. Als Parameter BasisUrl eintragen und erneut deployen.
     Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com"
+  KanzleiUrl:
+    Description: Eingänge für die Kanzlei.
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/kanzlei"
   FalllisteUrl:
     Description: Anmeldung für Werkstätten und Sachverständige.
     Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/partner"

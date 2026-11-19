@@ -86,3 +86,12 @@ h2 { font-size: 20px; margin: 28px 0 6px; }
 .abschnitte .zustand { font-size: 14px; color: var(--leise); white-space: nowrap; }
 .abschnitte .erledigt .zustand { color: var(--gut); font-weight: 600; }
 input[inputmode] { font-variant-numeric: tabular-nums; }
+.karte { display: flex; flex-direction: column; gap: 4px; width: 100%; margin-top: 12px; padding: 16px;
+  text-align: left; font: inherit; color: var(--schrift); background: var(--flaeche);
+  border: 1.5px solid var(--rand); border-radius: 14px; cursor: pointer; }
+.karte strong { font-size: 20px; }
+.karte span { color: var(--leise); font-size: 15px; }
+#anderes { margin-top: 20px; }
+#hinweise .hinweis { margin: 0 0 12px; font-size: 15px; }
+#hinweise .frist { border-left-color: var(--akzent); }
+#hinweise .warnung { border-left-color: var(--fehler); font-weight: 600; }

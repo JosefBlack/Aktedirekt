@@ -32,18 +32,26 @@ def als_fall(aufnahme: Aufnahme, partner_art: str = "") -> Fall:
     """
     if aufnahme.abgeschlossen_am is None:
         raise ValueError("Die Aufnahme ist noch nicht abgeschickt.")
-    person = aufnahme.angaben.get("person", {})
     herkunft = {"werkstatt": Herkunft.WERKSTATT,
                 "sachverstaendiger": Herkunft.SACHVERSTAENDIGER}.get(partner_art, Herkunft.INTERNET)
+    # Das Datum, um das es geht: beim Unfall der Unfalltag, bei der Kündigung ihr Zugang.
+    if aufnahme.art == "kuendigung":
+        ereignis = aufnahme.angaben.get("vorpruefung", {}).get("erhalten_am", "")
+    else:
+        ereignis = aufnahme.angaben.get("unfall", {}).get("unfalldatum", "")
+    try:
+        ereignistag = date.fromisoformat(ereignis)
+    except ValueError:
+        ereignistag = aufnahme.abgeschlossen_am.date()
     einwilligungen = []
     if aufnahme.partner and aufnahme.einwilligung_partner:
         einwilligungen.append(Einwilligung(aufnahme.partner, aufnahme.abgeschlossen_am,
                                            aufnahme.einwilligung_widerrufen_am))
     return Fall(
         kennung=aufnahme.kennung, herkunft=herkunft, angelegt_am=aufnahme.abgeschlossen_am,
-        mandant_name=f"{person.get('vorname', '')} {person.get('nachname', '')}".strip(),
+        mandant_name=aufnahme.name(),
         kennzeichen=aufnahme.angaben.get("fahrzeug", {}).get("kennzeichen", ""),
-        unfalldatum=date.fromisoformat(aufnahme.angaben["unfall"]["unfalldatum"]),
+        unfalldatum=ereignistag,
         aufgenommen_von=aufnahme.partner if aufnahme.vom_partner else "",
         partner={aufnahme.partner} if aufnahme.partner else set(),
         einwilligungen=einwilligungen,

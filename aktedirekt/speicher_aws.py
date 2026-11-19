@@ -76,7 +76,8 @@ class AwsSpeicher:
     def _aus(e: dict[str, Any]) -> Aufnahme:
         return Aufnahme(
             kennung=e["pk"][2:], angelegt_am=datetime.fromisoformat(e["angelegt_am"]),
-            partner=e.get("partner", ""), angaben={k: dict(v) for k, v in e.get("angaben", {}).items()},
+            partner=e.get("partner", ""), art=e.get("art", "unfall"),
+            angaben={k: dict(v) for k, v in e.get("angaben", {}).items()},
             abgeschlossen_am=_zeit(e.get("abgeschlossen_am")),
             einwilligung_partner=bool(e.get("einwilligung_partner", False)),
             einwilligung_widerrufen_am=_zeit(e.get("einwilligung_widerrufen_am")),
@@ -103,13 +104,13 @@ class AwsSpeicher:
             raise
         return True
 
-    def anlegen(self, jetzt: datetime, partner: str = "") -> tuple[Aufnahme, str]:
+    def anlegen(self, jetzt: datetime, partner: str = "", art: str = "unfall") -> tuple[Aufnahme, str]:
         kennung, zugang = secrets.token_hex(8), secrets.token_urlsafe(32)
         self._tabelle.put_item(Item={
-            "pk": f"A#{kennung}", "sk": "A", "zugang_sha": _pruefsumme(zugang), "partner": partner,
+            "pk": f"A#{kennung}", "sk": "A", "zugang_sha": _pruefsumme(zugang), "partner": partner, "art": art,
             "angelegt_am": jetzt.isoformat(), "angaben": {}, "vom_partner": {}, "sachstand": "aufgenommen"})
         self._tabelle.put_item(Item={"pk": f"Z#{_pruefsumme(zugang)}", "sk": "Z", "aufnahme": kennung})
-        return Aufnahme(kennung=kennung, angelegt_am=jetzt, partner=partner), zugang
+        return Aufnahme(kennung=kennung, angelegt_am=jetzt, partner=partner, art=art), zugang
 
     def laden(self, zugang: str) -> Aufnahme | None:
         if not zugang:
@@ -140,12 +141,13 @@ class AwsSpeicher:
             argumente["ExclusiveStartKey"] = antwort["LastEvaluatedKey"]
         return [self._aus(e) for e in eintraege]
 
-    def _abgeschickte(self, mit_lead: bool) -> list[Aufnahme]:
+    def _abgeschickte(self, mit_lead: bool | None) -> list[Aufnahme]:
         # Geht die ganze Tabelle durch. Für den Abgleich alle Viertelstunde und
         # die Fallzahl einer Kanzlei genügt das; bei sehr vielen Fällen bekäme
         # es einen eigenen Index.
         bedingung = Attr("sk").eq("A") & Attr("abgeschlossen_am").exists()
-        bedingung &= Attr("lead_kennung").exists() if mit_lead else Attr("lead_kennung").not_exists()
+        if mit_lead is not None:
+            bedingung &= Attr("lead_kennung").exists() if mit_lead else Attr("lead_kennung").not_exists()
         eintraege: list[dict[str, Any]] = []
         argumente: dict[str, Any] = {"FilterExpression": bedingung}
         while True:
@@ -161,6 +163,9 @@ class AwsSpeicher:
 
     def mit_lead(self) -> list[Aufnahme]:
         return self._abgeschickte(True)
+
+    def abgeschickte(self) -> list[Aufnahme]:
+        return self._abgeschickte(None)
 
     def schritt_speichern(self, kennung: str, schritt: str, angaben: dict[str, str]) -> None:
         self._aendern(kennung, "SET angaben.#s = :a", {":a": angaben}, namen={"#s": schritt})
@@ -325,6 +330,20 @@ class AwsSpeicher:
                 return self._s3.get_object(Bucket=self._bucket,
                                            Key=f"dateien/{kennung}/{d.kennung}.{d.art}")["Body"].read()
         return None
+
+    def datei_adresse(self, kennung: str, datei_kennung: str, name: str) -> str:
+        """Eine Adresse, unter der die Kanzlei die Datei fünf Minuten lang abholen kann.
+
+        Dateien gehen wie beim Hochladen nicht durch die Anwendung: Sie können
+        größer sein, als AWS dort durchlässt.
+        """
+        for d in self.dateien(kennung):
+            if d.kennung == datei_kennung:
+                sauber = "".join(z if z.isascii() and (z.isalnum() or z in "._- ") else "_" for z in name)[:80]
+                return self._s3.generate_presigned_url("get_object", ExpiresIn=300, Params={
+                    "Bucket": self._bucket, "Key": f"dateien/{kennung}/{d.kennung}.{d.art}",
+                    "ResponseContentDisposition": f'attachment; filename="{sauber or "datei"}"'})
+        return ""
 
     def unterschrift(self, kennung: str) -> bytes | None:
         try:

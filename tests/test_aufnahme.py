@@ -260,7 +260,7 @@ def test_jurnodes_ausfall_verliert_die_aufnahme_nicht(tmp_path):
 def test_seite_und_kopfzeilen(umgebung):
     client = umgebung[0]
     antwort = client.get("/")
-    assert antwort.status_code == 200 and "Unfall melden" in antwort.text
+    assert antwort.status_code == 200 and "Worum geht es?" in antwort.text
     richtlinie = antwort.headers["content-security-policy"]
     assert "default-src 'self'" in richtlinie
     # Nur in AWS darf der Browser noch mit einer zweiten Stelle sprechen: dem Dateispeicher der Kanzlei.

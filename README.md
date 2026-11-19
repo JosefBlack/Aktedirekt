@@ -1,7 +1,8 @@
 # Aktedirekt
 
-Schadenaufnahme und Sachstandsauskunft für Verkehrsunfallmandate der Kanzlei,
-angebunden an jur|nodes. Zunächst nur für die eigene Kanzlei.
+Mandatsaufnahme auf dem Handy für die Kanzlei: Verkehrsunfall (mit
+Sachstandsauskunft für Werkstatt und Sachverständigen) und Kündigungsschutz.
+Angebunden an jur|nodes. Zunächst nur für die eigene Kanzlei.
 
 ## Wozu
 
@@ -32,7 +33,7 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (158 Prüfungen, ohne Netz; was eine Ablage braucht,
+Vorhanden und geprüft (189 Prüfungen, ohne Netz; was eine Ablage braucht,
 läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
@@ -73,9 +74,38 @@ Dann im Browser `http://127.0.0.1:8000/` öffnen; mit
 `http://127.0.0.1:8000/?p=test-werkstatt` läuft die Aufnahme über die
 Beispielwerkstatt aus `testdaten/partner.json`.
 
-Die Fallliste liegt unter `http://127.0.0.1:8000/partner`. Kennung und
+Die Fallliste liegt unter `http://127.0.0.1:8000/partner`, die Ansicht der
+Kanzlei unter `http://127.0.0.1:8000/kanzlei`. Kennung und
 Kennwort der beiden Beispielpartner stehen in `testdaten/partner.json`. Ein
 Kennwort für einen echten Partner erzeugt `python -m aktedirekt.partner`.
+
+## Kündigungsschutz
+
+Zweiter Falltyp nach dem Fragebogen der Kanzlei. Die Startseite fragt, worum
+es geht; `/?f=kuendigung` und `/?f=unfall` führen ohne Frage hinein, ein Link
+einer Werkstatt immer zum Unfall. Fünf Schritte (Vorprüfung, Person,
+Arbeitgeber, Kündigung, besondere Umstände), dann Unterlagen und Unterschrift;
+Familie, Sonderzahlungen und Prozesskostenhilfe folgen als Ergänzung.
+
+Nach der Vorprüfung steht über jeder Seite, bis wann nach den Angaben des
+Mandanten spätestens geklagt sein muss: drei Wochen ab dem genannten Zugang,
+**ohne** Verlängerung über Wochenenden und Feiertage – genannt wird der Tag,
+der in keinem Fall zu spät ist. Bei höchstens sieben Tagen und nach Ablauf
+wird daraus eine Warnung mit der Telefonnummer der Kanzlei. Der Wortlaut steht
+in `aktedirekt/texte/hinweise.json` und ist ein **Entwurf**; die verbindliche
+Fristberechnung bleibt Sache der Kanzlei.
+
+## Ansicht der Kanzlei
+
+Unter `/kanzlei` sieht die Kanzlei nach Anmeldung alle abgeschickten Eingänge,
+Kündigungen mit der nächsten Frist zuerst. Ein Eingang zeigt alle Angaben mit
+Überschriften, die Anlagen zum Öffnen und die Unterschrift mit Zeitpunkt und
+Gerät – und lässt sich für die Akte drucken oder als PDF speichern. Der Zugang
+ist ein Konto der Art `kanzlei` in der Partnerliste; Werkstätten und
+Sachverständige kommen dort nicht hinein.
+
+In AWS meldet außerdem eine E-Mail jeden Eingang: ohne Namen und ohne Inhalt,
+bei einer Kündigung mit der Klagefrist im Betreff.
 
 ## Zwei Stufen
 
@@ -86,8 +116,7 @@ eigene Versicherungen, Einzelheiten zur Gegenseite – ergänzt der Mandant nach
 dem Abschicken auf seiner Statusseite: abschnittsweise, freiwillig, in
 beliebiger Reihenfolge. Was dort steht, sieht kein Partner.
 
-Vorlage war das Repository `kanzlei-frageboegen`. Der Fragebogen zum
-Kündigungsschutz daraus ist noch nicht übernommen.
+Vorlage war das Repository `kanzlei-frageboegen`.
 
 ## Aufnahme am Tresen
 

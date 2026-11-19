@@ -19,7 +19,8 @@ nichts außer dem Konto: eigener Schlüssel, eigene Tabelle, eigener Dateispeich
 | Lambda `aktedirekt-<Stufe>-abgleich` | holt alle 15 Minuten den Sachstand aus jur|nodes | schreibt nur Zahlen ins Protokoll |
 | DynamoDB | Aufnahmen, Sitzungen, Übergabecodes, Auskunftsnachweis | KMS, Wiederherstellung auf jeden Zeitpunkt, Löschschutz |
 | S3 | Fotos, Unterlagen, Unterschriften | KMS, nicht öffentlich, nur verschlüsselte Verbindung; Abgeliefertes ohne Übernahme verfällt nach einem Tag |
-| Secrets Manager | jur|nodes-Zugang, Partnerliste | Werte nach dem Deploy setzen |
+| Secrets Manager | jur|nodes-Zugang, Partnerliste (auch der Zugang der Kanzlei) | Werte nach dem Deploy setzen |
+| SNS `…-eingang` | meldet der Kanzlei jeden Eingang per E-Mail | ohne Namen und Inhalt; bei Kündigung mit Klagefrist |
 | KMS | ein Schlüssel für alles | jährliche Rotation |
 | Budget, Alarme | Kosten (50/80/100 %), Fehler, gescheiterter Abgleich | E-Mail |
 
@@ -42,8 +43,10 @@ Ohne Docker und ohne SAM, in der AWS-Konsole selbst:
 4. Diesen Befehl einfügen, mit der eigenen Adresse für Alarme:
 
 ```bash
-unzip -o aktedirekt-aws.zip -d aktedirekt && bash aktedirekt/einrichten.sh name@kanzlei.example
+unzip -o aktedirekt-aws.zip -d aktedirekt && bash aktedirekt/einrichten.sh name@kanzlei.example "040 000000"
 ```
+
+Die Telefonnummer am Ende ist freiwillig; sie steht in Hinweisen an Mandanten.
 
 Das Skript legt den Stack an, trägt die Adresse des Portals nach, erzeugt zwei
 Probepartner (Werkstatt und Gutachter) und zeigt deren Zugänge einmalig an.
@@ -133,6 +136,8 @@ Aufnahmen bleiben vorgemerkt und werden beim ersten Abgleich nachgeholt.
 ## Was vor echten Mandaten noch fehlt
 
 - eigene Adresse der Kanzlei statt der AWS-Adresse
+- zweiter Faktor für die Ansicht der Kanzlei, die alle Eingänge zeigt; ein Nachweis, wer dort was geöffnet hat
+- Freigabe des Wortlauts aller Hinweise, insbesondere zur Klagefrist
 - Anmeldung mit Einmalcode für Mandanten; zweiter Faktor und eigene
   Anmeldungen je Mitarbeiter für Partner
 - Schranke je Absender (AWS WAF); bisher gibt es nur die Obergrenze insgesamt

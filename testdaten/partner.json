@@ -14,5 +14,13 @@
     "einladung": "test-gutachter",
     "_kennwort_nur_fuer_die_probe": "Gutachter-Test-2026",
     "kennwort_scrypt": "395765a171d273c408349bb5248f6c41$7e743ef28535346dc4e84eda30c2a2c22b31e540e0d2ec10f07baf942b60a1428af7c3476456d084875d2b92ef3fff961b6a523397a9b9993e79039fefb786d2"
+  },
+  {
+    "kennung": "kanzlei-probe",
+    "art": "kanzlei",
+    "name": "Kanzlei (Probe)",
+    "einladung": "",
+    "_kennwort_nur_fuer_die_probe": "Kanzlei-Test-2026",
+    "kennwort_scrypt": "5b2891101385372c7c58df388259a7b0$bacaf0e2f627b1eeb3636d2620a49127a4d3c740b6978a9b2fc9101e584b5461ebe4c6351a48414b4d9de73da9862a89f386ba471995b4c766a649182ab8136d"
   }
 ]

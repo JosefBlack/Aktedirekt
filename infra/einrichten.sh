@@ -3,12 +3,16 @@
 # läuft - gedacht für AWS CloudShell, Region Frankfurt. Braucht nur die
 # AWS-Befehlszeile und Python; beides ist dort vorhanden.
 #
-#   bash einrichten.sh <E-Mail für Alarme>
+#   bash einrichten.sh <E-Mail für Alarme und Eingangsmeldungen> [Telefon der Kanzlei]
+#
+# Das Telefon steht in Hinweisen an Mandanten (etwa bei knapper Klagefrist).
+# Wird es weggelassen, bleibt die bisher eingetragene Nummer.
 #
 # Mehrfach ausführbar: Ein zweiter Lauf aktualisiert, statt neu anzulegen.
 set -euo pipefail
 
 EMAIL="${1:?Bitte die E-Mail-Adresse für Alarme angeben: bash einrichten.sh name@kanzlei.example}"
+TELEFON="${2:-}"
 REGION=eu-central-1
 STUFE=probe
 STACK="aktedirekt-$STUFE"
@@ -38,9 +42,16 @@ aws cloudformation package --template-file template.yaml --s3-bucket "$PAKETE" \
   --output-template-file verpackt.yaml >/dev/null
 
 anlegen() {
-  aws cloudformation deploy --template-file verpackt.yaml --stack-name "$STACK" \
-    --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --no-fail-on-empty-changeset \
-    --parameter-overrides "Stufe=$STUFE" "AlarmEmail=$EMAIL" "BudgetUsd=30" "BasisUrl=$1"
+  # Ohne Angabe bleibt das Telefon, wie es eingetragen ist.
+  if [ -n "$TELEFON" ]; then
+    aws cloudformation deploy --template-file verpackt.yaml --stack-name "$STACK" \
+      --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --no-fail-on-empty-changeset \
+      --parameter-overrides "Stufe=$STUFE" "AlarmEmail=$EMAIL" "BudgetUsd=30" "BasisUrl=$1" "KanzleiTelefon=$TELEFON"
+  else
+    aws cloudformation deploy --template-file verpackt.yaml --stack-name "$STACK" \
+      --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --no-fail-on-empty-changeset \
+      --parameter-overrides "Stufe=$STUFE" "AlarmEmail=$EMAIL" "BudgetUsd=30" "BasisUrl=$1"
+  fi
 }
 ausgabe() {
   aws cloudformation describe-stacks --stack-name "$STACK" \
@@ -70,16 +81,17 @@ else
   anlegen "$URL" || gescheitert
 fi
 
-# Probepartner nur, wenn noch keine Liste eingetragen ist.
+# Probezugänge, soweit sie noch fehlen: Werkstatt, Gutachter und - neu - die Kanzlei.
 GEHEIMNIS=$(ausgabe PartnerGeheimnis)
-if [ "$(aws secretsmanager get-secret-value --secret-id "$GEHEIMNIS" --query SecretString --output text)" = "[]" ]; then
+ALT=$(mktemp); NEU=$(mktemp)
+aws secretsmanager get-secret-value --secret-id "$GEHEIMNIS" --query SecretString --output text > "$ALT"
+if ZUGAENGE=$(python3 probepartner.py "$ALT" "$NEU"); then
+  aws secretsmanager put-secret-value --secret-id "$GEHEIMNIS" --secret-string "file://$NEU" >/dev/null
   echo
-  echo "== Zugänge für die Probe - bitte jetzt notieren, sie werden nicht noch einmal angezeigt:"
-  DATEI=$(mktemp)
-  python3 probepartner.py "$DATEI"
-  aws secretsmanager put-secret-value --secret-id "$GEHEIMNIS" --secret-string "file://$DATEI" >/dev/null
-  rm -f "$DATEI"
+  echo "== Neue Zugänge - bitte jetzt notieren, sie werden nicht noch einmal angezeigt:"
+  echo "$ZUGAENGE"
 fi
+rm -f "$ALT" "$NEU"
 
 echo
 echo "== Probe: Antwortet das Portal?"
@@ -90,5 +102,6 @@ echo
 echo "== Fertig"
 echo "   Unfall melden (Handy):    $URL/"
 echo "   Fallliste (Partner):      $URL/partner"
-echo "   AWS schickt an $EMAIL eine Nachricht 'Subscription Confirmation' -"
-echo "   bitte dort bestätigen, sonst kommen keine Fehleralarme an."
+echo "   Eingänge (Kanzlei):       $URL/kanzlei"
+echo "   AWS schickt an $EMAIL je eine Nachricht 'Subscription Confirmation' für"
+echo "   Störungen und für Eingänge - bitte beide bestätigen, sonst kommt nichts an."

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 
@@ -154,6 +154,141 @@ ERGAENZUNGEN: dict[str, Abschnitt] = {
 # Unter diesem Vorsatz stehen die Ergänzungen bei den Angaben der Aufnahme.
 ERG = "erg_"
 
+# Wie die Felder der Unfallaufnahme in der Ansicht der Kanzlei heißen. Auf dem
+# Handy stehen diese Fragen fest in der Seite; hier nur die Kurzform für die Akte.
+UNFALL_TITEL = {"unfall": "Der Unfall", "fahrzeug": "Fahrzeug des Mandanten",
+                "gegner": "Gegenseite", "person": "Mandant"}
+UNFALL_BEZEICHNUNGEN = {
+    "unfalldatum": "Unfalltag", "unfallzeit": "Unfallzeit", "unfallort": "Unfallort", "hergang": "Hergang",
+    "polizei": "Polizei vor Ort", "polizei_az": "Aktenzeichen der Polizei", "verletzt": "Verletzte",
+    "zeugen": "Zeugen", "kennzeichen": "Kennzeichen", "modell": "Hersteller und Modell",
+    "halter_selbst": "Mandant ist Halter", "halter_name": "Halter", "finanzierung": "Finanziert oder geleast",
+    "vorsteuer": "Vorsteuerabzugsberechtigt", "gegner_bekannt": "Kennzeichen der Gegenseite bekannt",
+    "gegner_kennzeichen": "Kennzeichen der Gegenseite", "gegner_name": "Fahrer oder Halter",
+    "gegner_versicherung": "Versicherung der Gegenseite", "gegner_schadennummer": "Schadennummer",
+    "vorname": "Vorname", "nachname": "Nachname", "strasse": "Straße und Hausnummer", "plz": "PLZ",
+    "ort": "Ort", "telefon": "Telefon", "email": "E-Mail", "rechtsschutz": "Rechtsschutzversicherung",
+    "rechtsschutz_versicherer": "Rechtsschutzversicherer",
+}
+
+_JNU = ("ja", "nein", "unbekannt")
+
+# Der Fragebogen der Kanzlei zum Kündigungsschutz. Anders als beim Unfall gibt
+# es hier keine feste Seite: Das Handy baut die Formulare aus diesen Angaben.
+K_SCHRITTE: dict[str, Abschnitt] = {
+    "vorpruefung": Abschnitt("Ihre Kündigung", "Vier kurze Fragen zur ersten Einordnung.", (
+        Feld("erhalten_am", "datum", pflicht=True, bezeichnung="Wann haben Sie die Kündigung erhalten?",
+             hinweis="der Tag, an dem sie bei Ihnen ankam – nicht das Datum auf dem Schreiben"),
+        Feld("schriftlich", "ja_nein", pflicht=True, bezeichnung="Liegt Ihnen eine schriftliche Kündigung vor?"),
+        Feld("sechs_monate", "auswahl", pflicht=True, auswahl=_JNU,
+             bezeichnung="Arbeiten Sie länger als sechs Monate dort?"),
+        Feld("mehr_als_zehn", "auswahl", pflicht=True, auswahl=_JNU,
+             bezeichnung="Hat der Betrieb regelmäßig mehr als zehn Mitarbeiter?"),
+    )),
+    "kperson": Abschnitt("Ihre Daten", "", (
+        Feld("vorname", "text", pflicht=True, laenge=60, bezeichnung="Vorname"),
+        Feld("nachname", "text", pflicht=True, laenge=60, bezeichnung="Nachname"),
+        Feld("strasse", "text", pflicht=True, bezeichnung="Straße und Hausnummer"),
+        Feld("plz", "plz", pflicht=True, laenge=5, bezeichnung="PLZ"),
+        Feld("ort", "text", pflicht=True, laenge=80, bezeichnung="Ort"),
+        Feld("telefon", "telefon", pflicht=True, laenge=25, bezeichnung="Telefon"),
+        Feld("email", "email", pflicht=True, bezeichnung="E-Mail"),
+        Feld("geburtsdatum", "datum_frei", bezeichnung="Geburtsdatum"),
+        Feld("rechtsschutz", "auswahl", pflicht=True, auswahl=_JNU,
+             bezeichnung="Haben Sie eine Rechtsschutzversicherung?"),
+        Feld("rechtsschutz_versicherer", "text", zeige_wenn=("rechtsschutz", "ja"), bezeichnung="Bei welchem Versicherer?"),
+        Feld("rechtsschutz_nr", "text", laenge=60, zeige_wenn=("rechtsschutz", "ja"),
+             bezeichnung="Versicherungsscheinnummer", hinweis="falls zur Hand"),
+    )),
+    "arbeitgeber": Abschnitt("Ihr Arbeitgeber", "", (
+        Feld("arbeitgeber_name", "text", pflicht=True, laenge=200, bezeichnung="Name des Arbeitgebers",
+             hinweis="wie im Arbeitsvertrag oder auf der Lohnabrechnung"),
+        Feld("arbeitgeber_anschrift", "text", laenge=200, bezeichnung="Anschrift des Arbeitgebers"),
+        Feld("arbeitgeber_telefon", "telefon", laenge=25, bezeichnung="Telefon des Arbeitgebers"),
+        Feld("arbeitsort", "text", bezeichnung="Arbeitsort", hinweis="falls abweichend"),
+        Feld("beschaeftigt_seit", "datum_frei", bezeichnung="Beschäftigt seit", hinweis="ungefähr genügt"),
+        Feld("taetigkeit", "text", bezeichnung="Berufsbezeichnung oder Tätigkeit"),
+        Feld("brutto", "betrag", bezeichnung="Monatliches Bruttogehalt in Euro"),
+        Feld("mitarbeiterzahl", "zahl", bezeichnung="Mitarbeiter im Betrieb", hinweis="geschätzt"),
+        Feld("betriebsrat", "auswahl", auswahl=_JNU, bezeichnung="Gibt es einen Betriebsrat?"),
+    )),
+    "kuendigung": Abschnitt("Die Kündigung", "", (
+        Feld("schreiben_datum", "datum_frei", bezeichnung="Datum auf dem Kündigungsschreiben"),
+        Feld("form", "auswahl", auswahl=("schriftlich", "muendlich", "beides"), bezeichnung="Wie wurde gekündigt?"),
+        Feld("ende_datum", "text", laenge=40, bezeichnung="Zu welchem Datum soll das Arbeitsverhältnis enden?",
+             hinweis="wie im Schreiben genannt"),
+        Feld("fristlos", "auswahl", auswahl=_JNU, bezeichnung="Wurde fristlos gekündigt?"),
+        Feld("abmahnung", "auswahl", auswahl=_JNU, bezeichnung="Gab es vorher eine Abmahnung?"),
+        Feld("schilderung", "lang", pflicht=True, laenge=4000, bezeichnung="Was ist aus Ihrer Sicht passiert?"),
+        Feld("ziel", "lang", laenge=1000, bezeichnung="Was möchten Sie erreichen?",
+             hinweis="zum Beispiel Weiterbeschäftigung, Abfindung, Zeugnis, Lohn"),
+    )),
+    "besonderes": Abschnitt("Besondere Umstände",
+                            "Diese Angaben sind freiwillig. Sie können über besonderen Kündigungsschutz entscheiden.", (
+        Feld("schwerbehindert", "auswahl", auswahl=_JNU, bezeichnung="Sind Sie schwerbehindert oder gleichgestellt?"),
+        Feld("sb_antrag", "auswahl", auswahl=_JNU, bezeichnung="Wurde ein Antrag auf Schwerbehinderung gestellt?"),
+        Feld("sb_antrag_datum", "datum_frei", zeige_wenn=("sb_antrag", "ja"), bezeichnung="Wann wurde der Antrag gestellt?"),
+        Feld("schwanger", "auswahl", auswahl=("ja", "nein", "nicht_relevant"), bezeichnung="Besteht eine Schwangerschaft?"),
+        Feld("funktion", "auswahl", auswahl=_JNU,
+             bezeichnung="Sind Sie Betriebsratsmitglied oder haben Sie eine besondere Funktion?"),
+        Feld("funktion_welche", "text", zeige_wenn=("funktion", "ja"), bezeichnung="Welche Funktion?",
+             hinweis="zum Beispiel Betriebsrat, Datenschutzbeauftragte, Schwerbehindertenvertretung"),
+        Feld("oeffentlicher_dienst", "auswahl", auswahl=_JNU, bezeichnung="Arbeiten Sie im öffentlichen Dienst?"),
+        Feld("ausbildung", "ja_nein", bezeichnung="Besteht ein Ausbildungsverhältnis?"),
+    )),
+}
+
+K_ERGAENZUNGEN: dict[str, Abschnitt] = {
+    "familie": Abschnitt("Familie", "Das kann bei der Auswahl der Gekündigten eine Rolle spielen.", (
+        Feld("familienstand", "text", laenge=40, bezeichnung="Familienstand"),
+        Feld("kinder", "zahl", bezeichnung="Anzahl der Kinder"),
+    )),
+    "verguetung": Abschnitt("Weitere Vergütung", "", (
+        Feld("sonderzahlungen", "text", laenge=200, bezeichnung="Urlaubs- oder Weihnachtsgeld",
+             hinweis="Betrag oder zum Beispiel „ein Monatsgehalt“"),
+    )),
+    "unterlagen": Abschnitt("Unterlagen und Kosten", "", (
+        Feld("arbeitsvertrag", "ja_nein", bezeichnung="Haben Sie einen schriftlichen Arbeitsvertrag?"),
+        Feld("tarifvertrag", "auswahl", auswahl=_JNU, bezeichnung="Gilt ein Tarifvertrag oder eine Betriebsvereinbarung?"),
+        Feld("pkh", "auswahl", auswahl=_JNU, bezeichnung="Möchten Sie Prozesskostenhilfe beantragen?"),
+    )),
+}
+
+
+@dataclass(frozen=True)
+class Fallart:
+    name: str
+    titel: str
+    betreff: str                       # für Nachrichten ohne Umlaute
+    schritte: dict[str, tuple[Feld, ...]]
+    titel_der_schritte: dict[str, str]
+    hinweise_der_schritte: dict[str, str]
+    ergaenzungen: dict[str, Abschnitt]
+    person: str                        # der Schritt mit Namen und Anschrift
+    empfohlen: tuple[str, ...]
+    # Baut das Handy die Formulare der ersten Stufe aus diesen Angaben?
+    dynamisch: bool
+
+
+FALLARTEN: dict[str, Fallart] = {
+    "unfall": Fallart(
+        "unfall", "Verkehrsunfall", "Verkehrsunfall", SCHRITTE, UNFALL_TITEL, {}, ERGAENZUNGEN, "person",
+        ("Fotos vom Schaden und vom Unfallort", "Fahrzeugschein", "Gutachten oder Kostenvoranschlag", "Rechnungen"),
+        False),
+    "kuendigung": Fallart(
+        "kuendigung", "Kündigung", "Kuendigung", {n: a.felder for n, a in K_SCHRITTE.items()},
+        {n: a.titel for n, a in K_SCHRITTE.items()}, {n: a.hinweis for n, a in K_SCHRITTE.items()},
+        K_ERGAENZUNGEN, "kperson",
+        ("Kündigungsschreiben", "Arbeitsvertrag", "die letzten drei Lohnabrechnungen", "Abmahnungen",
+         "Schriftverkehr mit dem Arbeitgeber"),
+        True),
+}
+
+# Drei Wochen ab Zugang der Kündigung. Bewusst ohne Verlängerung über
+# Wochenenden und Feiertage: Genannt wird der Tag, der in keinem Fall zu spät
+# ist. Die verbindliche Fristberechnung bleibt Sache der Kanzlei.
+KLAGEFRIST = timedelta(days=21)
+
 _STEUERZEICHEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _KENNZEICHEN = re.compile(r"^[A-ZÄÖÜ]{1,3}[- ]?[A-Z]{0,2} ?[0-9]{1,4} ?[EH]?$")
 _EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
@@ -282,6 +417,7 @@ class Aufnahme:
     kennung: str
     angelegt_am: datetime
     partner: str = ""
+    art: str = "unfall"
     angaben: dict[str, dict[str, str]] = field(default_factory=dict)
     abgeschlossen_am: datetime | None = None
     einwilligung_partner: bool = False
@@ -302,11 +438,52 @@ class Aufnahme:
                 "fahrzeug": {"kennzeichen": v.get("kennzeichen", "")},
                 "person": {"vorname": v.get("vorname", ""), "nachname": v.get("nachname", "")}}
 
+    @property
+    def fallart(self) -> Fallart:
+        return FALLARTEN.get(self.art, FALLARTEN["unfall"])
+
     def fehlende_schritte(self) -> list[str]:
-        return [s for s in SCHRITTE if s not in self.angaben]
+        return [s for s in self.fallart.schritte if s not in self.angaben]
 
     def ergaenzungen(self) -> dict[str, dict[str, str]]:
-        return {name: self.angaben.get(ERG + name, {}) for name in ERGAENZUNGEN}
+        return {name: self.angaben.get(ERG + name, {}) for name in self.fallart.ergaenzungen}
+
+    def name(self) -> str:
+        person = self.angaben.get(self.fallart.person, {})
+        return f"{person.get('vorname', '')} {person.get('nachname', '')}".strip()
+
+    def klagefrist(self) -> date | None:
+        """Bis wann nach den Angaben des Mandanten spätestens geklagt sein muss - nur bei Kündigung."""
+        if self.art != "kuendigung":
+            return None
+        try:
+            return date.fromisoformat(self.angaben["vorpruefung"]["erhalten_am"]) + KLAGEFRIST
+        except (KeyError, ValueError):
+            return None
+
+    def fuer_die_akte(self) -> list[dict[str, Any]]:
+        """Alle Angaben mit Überschriften und Bezeichnungen, wie die Kanzlei sie liest."""
+        def lesbar(f: Feld, wert: str) -> str:
+            if f.art in ("datum", "datum_frei"):
+                try:
+                    return date.fromisoformat(wert).strftime("%d.%m.%Y")
+                except ValueError:
+                    return wert
+            return wert.replace("_", " ") if f.art == "auswahl" else wert
+
+        art = self.fallart
+        teile: list[dict[str, Any]] = []
+        for schritt, felder in art.schritte.items():
+            werte = self.angaben.get(schritt, {})
+            zeilen = [[f.bezeichnung or UNFALL_BEZEICHNUNGEN.get(f.name, f.name), lesbar(f, werte[f.name])]
+                      for f in felder if werte.get(f.name, "")]
+            teile.append({"titel": art.titel_der_schritte.get(schritt, schritt), "zeilen": zeilen})
+        for name, abschnitt in art.ergaenzungen.items():
+            werte = self.angaben.get(ERG + name, {})
+            zeilen = [[f.bezeichnung, lesbar(f, werte[f.name])] for f in abschnitt.felder if werte.get(f.name, "")]
+            if zeilen:
+                teile.append({"titel": abschnitt.titel + " (ergänzt)", "zeilen": zeilen})
+        return teile
 
 
 # jur|nodes nimmt nur einen begrenzten Zeichenvorrat an (so die Beschreibung
@@ -315,14 +492,20 @@ _NICHT_ERLAUBT = re.compile(r"[^0-9A-Za-zÄÖÜäöüß /.,()\-]")
 
 
 def kurzrubrum(aufnahme: Aufnahme) -> str:
-    person = aufnahme.angaben.get("person", {})
-    gegner = aufnahme.angaben.get("gegner", {})
-    unfall = aufnahme.angaben.get("unfall", {})
-    gegenseite = gegner.get("gegner_kennzeichen") or gegner.get("gegner_name") or "unbekannt"
-    tag = unfall.get("unfalldatum", "")
+    if aufnahme.art == "kuendigung":
+        person = aufnahme.angaben.get("kperson", {})
+        gegenseite = aufnahme.angaben.get("arbeitgeber", {}).get("arbeitgeber_name", "") or "unbekannt"
+        tag = aufnahme.angaben.get("vorpruefung", {}).get("erhalten_am", "")
+        anlass = "Kündigung zugegangen"
+    else:
+        person = aufnahme.angaben.get("person", {})
+        gegner = aufnahme.angaben.get("gegner", {})
+        gegenseite = gegner.get("gegner_kennzeichen") or gegner.get("gegner_name") or "unbekannt"
+        tag = aufnahme.angaben.get("unfall", {}).get("unfalldatum", "")
+        anlass = "Unfall"
     try:
         tag = date.fromisoformat(tag).strftime("%d.%m.%Y")
     except ValueError:
         tag = ""
-    text = f"{person.get('nachname', '')} ./. {gegenseite} (Unfall {tag})"
+    text = f"{person.get('nachname', '')} ./. {gegenseite} ({anlass} {tag})"
     return " ".join(_NICHT_ERLAUBT.sub(" ", text).split())[:120]

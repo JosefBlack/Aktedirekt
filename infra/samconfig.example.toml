@@ -12,4 +12,5 @@ parameter_overrides = [
   "AlarmEmail=it@kanzlei.example",
   "BudgetUsd=30",
   "BasisUrl=",
+  "KanzleiTelefon=",
 ]

@@ -81,6 +81,7 @@ _NEUE_SPALTEN = {
     "sachstand_seit": "TEXT",
     "akte_kennung": "TEXT NOT NULL DEFAULT ''",
     "vom_partner": "TEXT NOT NULL DEFAULT '{}'",
+    "art": "TEXT NOT NULL DEFAULT 'unfall'",
 }
 
 
@@ -128,19 +129,19 @@ class Speicher:
 
     # ---- Aufnahmen -------------------------------------------------------
 
-    def anlegen(self, jetzt: datetime, partner: str = "") -> tuple[Aufnahme, str]:
+    def anlegen(self, jetzt: datetime, partner: str = "", art: str = "unfall") -> tuple[Aufnahme, str]:
         kennung = secrets.token_hex(8)
         zugang = secrets.token_urlsafe(32)
         with closing(self._db()) as db, db:
-            db.execute("INSERT INTO aufnahme (kennung, zugang_sha256, partner, angelegt_am) VALUES (?,?,?,?)",
-                       (kennung, _pruefsumme(zugang), partner, jetzt.isoformat()))
-        return Aufnahme(kennung=kennung, angelegt_am=jetzt, partner=partner), zugang
+            db.execute("INSERT INTO aufnahme (kennung, zugang_sha256, partner, angelegt_am, art) VALUES (?,?,?,?,?)",
+                       (kennung, _pruefsumme(zugang), partner, jetzt.isoformat(), art))
+        return Aufnahme(kennung=kennung, angelegt_am=jetzt, partner=partner, art=art), zugang
 
     @staticmethod
     def _aus_zeile(z: sqlite3.Row) -> Aufnahme:
         return Aufnahme(
             kennung=z["kennung"], angelegt_am=datetime.fromisoformat(z["angelegt_am"]),
-            partner=z["partner"], angaben=json.loads(z["angaben"]),
+            partner=z["partner"], art=z["art"], angaben=json.loads(z["angaben"]),
             abgeschlossen_am=_zeit(z["abgeschlossen_am"]),
             einwilligung_partner=bool(z["einwilligung_partner"]),
             einwilligung_widerrufen_am=_zeit(z["einwilligung_widerrufen_am"]),
@@ -233,6 +234,10 @@ class Speicher:
 
     def mit_lead(self) -> list[Aufnahme]:
         return self._liste("lead_kennung <> ''")
+
+    def abgeschickte(self) -> list[Aufnahme]:
+        """Alles, was Mandanten abgeschickt haben - für die Ansicht der Kanzlei."""
+        return self._liste("1 = 1")
 
     def schritt_speichern(self, kennung: str, schritt: str, angaben: dict[str, str]) -> None:
         with closing(self._db()) as db, db:
@@ -340,6 +345,10 @@ class Speicher:
             if d.kennung == datei_kennung:
                 return (self._ordner / "dateien" / f"{d.kennung}.{d.art}").read_bytes()
         return None
+
+    def datei_adresse(self, kennung: str, datei_kennung: str, name: str) -> str:
+        """Hier leer: Die Datei wird über die Anwendung abgeholt."""
+        return ""
 
     def unterschrift(self, kennung: str) -> bytes | None:
         pfad = self._ordner / "dateien" / f"{kennung}-unterschrift.png"

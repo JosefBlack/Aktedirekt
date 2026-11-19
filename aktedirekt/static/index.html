@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#17324d">
-<title>Unfall melden</title>
+<title>Aktedirekt</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
@@ -14,7 +14,7 @@
 <header>
   <div class="kopf">
     <button type="button" id="zurueck" class="zurueck" aria-label="Zurück" hidden>‹</button>
-    <span id="titel">Unfall melden</span>
+    <span id="titel">Aktedirekt</span>
     <span id="zaehler" class="zaehler"></span>
   </div>
   <div class="balken"><div id="fortschritt"></div></div>
@@ -22,18 +22,23 @@
 
 <main>
 <p id="meldung" class="meldung" role="alert" hidden></p>
+<div id="hinweise"></div>
 
 <section data-seite="start">
-  <h1>Unfall melden</h1>
-  <p id="partnerhinweis" class="hinweis" hidden></p>
-  <p>In etwa fünf Minuten nehmen wir Ihren Unfall auf. Halten Sie, wenn möglich, bereit:</p>
-  <ul>
-    <li>Kennzeichen des anderen Fahrzeugs</li>
-    <li>Fotos vom Schaden und vom Unfallort</li>
-    <li>Ihren Fahrzeugschein</li>
-  </ul>
-  <p class="klein">Ihre Angaben werden nach jedem Schritt gespeichert. Sie können unterbrechen und auf diesem Gerät später weitermachen.</p>
-  <button type="button" class="haupt" id="los">Los geht’s</button>
+  <div id="wahl" hidden>
+    <h1>Worum geht es?</h1>
+    <button type="button" class="karte" data-fallart="unfall"><strong>Verkehrsunfall</strong><span>Unfall melden und Schaden geltend machen</span></button>
+    <button type="button" class="karte" data-fallart="kuendigung"><strong>Kündigung erhalten</strong><span>Kündigungsschutz prüfen lassen – es laufen kurze Fristen</span></button>
+    <p id="anderes" class="klein"></p>
+  </div>
+  <div id="start-inhalt" hidden>
+    <h1 id="start-titel"></h1>
+    <p id="partnerhinweis" class="hinweis" hidden></p>
+    <p id="start-dauer"></p>
+    <ul id="start-bereit"></ul>
+    <p class="klein">Ihre Angaben werden nach jedem Schritt gespeichert. Sie können unterbrechen und auf diesem Gerät später weitermachen.</p>
+    <button type="button" class="haupt" id="los">Los geht’s</button>
+  </div>
 </section>
 
 <form data-seite="unfall" data-schritt="unfall" novalidate hidden>
@@ -109,9 +114,12 @@
   <button type="submit" class="haupt">Weiter</button>
 </form>
 
+<div id="dynamisch"></div>
+
 <section data-seite="fotos" hidden>
   <h1>Fotos und Unterlagen</h1>
-  <p>Schaden, Unfallort, Fahrzeugschein, Gutachten oder Kostenvoranschlag – was Sie haben. Sie können auch später noch etwas nachreichen.</p>
+  <p>Fotografieren Sie, was Sie zur Hand haben. Sie können auch später noch etwas nachreichen. Hilfreich sind:</p>
+  <ul id="empfohlen"></ul>
   <div class="hochladen">
     <label class="knopf">Foto aufnehmen<input type="file" id="kamera" accept="image/*" capture="environment" hidden></label>
     <label class="knopf">Aus Dateien wählen<input type="file" id="auswahl" accept="image/jpeg,image/png,image/heic,image/heif,application/pdf" multiple hidden></label>
@@ -169,7 +177,7 @@
 
 <section data-seite="fertig" hidden>
   <h1>Vielen Dank</h1>
-  <p>Ihre Unfallmeldung ist bei der Kanzlei eingegangen. Wir prüfen sie und melden uns bei Ihnen. Das Mandat kommt erst mit unserer Annahme zustande.</p>
+  <p>Ihre Angaben sind bei der Kanzlei eingegangen. Wir prüfen sie und melden uns bei Ihnen. Das Mandat kommt erst mit unserer Annahme zustande.</p>
   <div class="stand"><span class="klein">Stand</span><strong id="sachstand"></strong></div>
   <div id="auskunft" class="auskunft" hidden>
     <p id="auskunft-text" class="klein"></p>

@@ -31,8 +31,8 @@ from fastapi.staticfiles import StaticFiles
 
 from aktedirekt import dateien, zeit
 from aktedirekt.abgleich import als_fall, lead_anlegen
-from aktedirekt.aufnahme import (ERG, ERGAENZUNGEN, SCHRITTE, TRESEN, Aufnahme, felder_pruefen,
-                                 schritt_pruefen)
+from aktedirekt.aufnahme import (ERG, FALLARTEN, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
+                                 kurzrubrum)
 from aktedirekt.jurnodes import JurNodes
 from aktedirekt.partner import Partnerliste
 from aktedirekt.sachstand import Stufen
@@ -59,13 +59,43 @@ def _text(name: str) -> str:
     return resources.files("aktedirekt").joinpath("texte", name).read_text("utf-8").strip()
 
 
+def _feld(f: Feld) -> dict[str, Any]:
+    return {"name": f.name, "art": f.art, "bezeichnung": f.bezeichnung, "hinweis": f.hinweis,
+            "laenge": f.laenge, "auswahl": list(f.auswahl),
+            "zeige_wenn": list(f.zeige_wenn) if f.zeige_wenn else None}
+
+
+def _abschnitte(abschnitte: dict[str, Abschnitt]) -> list[dict[str, Any]]:
+    return [{"abschnitt": name, "titel": a.titel, "hinweis": a.hinweis, "felder": [_feld(f) for f in a.felder]}
+            for name, a in abschnitte.items()]
+
+
 def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
-              jurnodes: JurNodes | None = None, basis_url: str = "",
+              jurnodes: JurNodes | None = None, basis_url: str = "", telefon: str = "",
+              eingang_melden: Callable[[str, str], None] | None = None,
               jetzt: Callable[[], datetime] = zeit.jetzt) -> FastAPI:
     app = FastAPI(title="Aktedirekt", docs_url=None, redoc_url=None, openapi_url=None)
     stufen = Stufen.laden()
     partnerliste = partner or Partnerliste([])
-    texte = {n: _text(f"{n}.txt") for n in ("vollmacht", "datenschutz", "einwilligung_partner")}
+    texte = {n: _text(f"{n}.txt") for n in ("vollmacht", "vollmacht_kuendigung", "datenschutz",
+                                             "einwilligung_partner")}
+    wortlaut = json.loads(_text("hinweise.json"))
+    anruf = f": {telefon}" if telefon else ""
+
+    def hinweise(aufnahme: Aufnahme) -> list[dict[str, str]]:
+        """Was dem Mandanten über seinen Angaben stehen soll - bisher nur bei Kündigung."""
+        liste: list[dict[str, str]] = []
+        frist = aufnahme.klagefrist()
+        if frist is None:
+            return liste
+        tage = (frist - jetzt().date()).days
+        schluessel = "frist_abgelaufen" if tage < 0 else "frist_knapp" if tage <= 7 else "frist"
+        liste.append({"art": "frist" if schluessel == "frist" else "warnung",
+                      "text": wortlaut[schluessel].format(datum=frist.strftime("%d.%m.%Y"), telefon=anruf)})
+        vor = aufnahme.angaben.get("vorpruefung", {})
+        if vor.get("sechs_monate") == "nein" or vor.get("mehr_als_zehn") == "nein":
+            liste.append({"art": "hinweis", "text": wortlaut["kein_allgemeiner_schutz"].format(telefon=anruf)})
+        return liste
 
     # Der Browser darf nur mit dieser Anwendung sprechen - und, in AWS, Dateien
     # unmittelbar im Dateispeicher der Kanzlei abliefern.
@@ -106,21 +136,27 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             teile.append(stueck)
         return b"".join(teile)
 
-    # Woraus die Oberfläche die Formulare der zweiten Stufe baut.
-    ergaenzung_felder = [
-        {"abschnitt": name, "titel": a.titel, "hinweis": a.hinweis, "felder": [
-            {"name": f.name, "art": f.art, "bezeichnung": f.bezeichnung, "hinweis": f.hinweis,
-             "laenge": f.laenge, "zeige_wenn": list(f.zeige_wenn) if f.zeige_wenn else None}
-            for f in a.felder]}
-        for name, a in ERGAENZUNGEN.items()]
+    # Woraus das Handy seine Formulare baut - je Fallart einmal zusammengestellt.
+    bauplan = {name: {
+        "ergaenzung_felder": _abschnitte(art.ergaenzungen),
+        "schritt_felder": [
+            {"abschnitt": s, "titel": art.titel_der_schritte[s], "hinweis": art.hinweise_der_schritte.get(s, ""),
+             "felder": [_feld(f) for f in felder]} for s, felder in art.schritte.items()] if art.dynamisch else [],
+    } for name, art in FALLARTEN.items()}
 
     def zustand(aufnahme: Aufnahme) -> dict[str, Any]:
         konto = partnerliste.konto(aufnahme.partner)
         name = konto.name if konto else ""
+        art = aufnahme.fallart
         return {
+            "art": art.name,
+            "titel": art.titel,
+            "ablauf": list(art.schritte),
+            "empfohlen": list(art.empfohlen),
+            "hinweise": hinweise(aufnahme),
             "angaben": {s: a for s, a in aufnahme.angaben.items() if not s.startswith(ERG)},
             "ergaenzungen": aufnahme.ergaenzungen(),
-            "ergaenzung_felder": ergaenzung_felder,
+            **bauplan[art.name],
             "vorbelegt": aufnahme.vorbelegt(),
             "dateien": [{"kennung": d.kennung, "name": d.name} for d in speicher.dateien(aufnahme.kennung)],
             "abgeschlossen": aufnahme.abgeschlossen_am is not None,
@@ -129,18 +165,28 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "einwilligung_partner": aufnahme.einwilligung_partner
                                     and aufnahme.einwilligung_widerrufen_am is None,
             "texte": {
-                "vollmacht": texte["vollmacht"],
+                "vollmacht": texte["vollmacht_kuendigung" if art.name == "kuendigung" else "vollmacht"],
                 "datenschutz": texte["datenschutz"],
                 "einwilligung_partner": texte["einwilligung_partner"].replace("{partner}", name) if name else "",
             },
         }
+
+    @app.get("/api/start")
+    async def start_angaben() -> dict[str, Any]:
+        """Was die Startseite braucht, bevor es eine Aufnahme gibt."""
+        return {"fallarten": [{"name": a.name, "titel": a.titel} for a in FALLARTEN.values()],
+                "anderes_anliegen": wortlaut["anderes_anliegen"].format(telefon=anruf)}
 
     @app.post("/api/aufnahme")
     async def beginnen(request: Request) -> JSONResponse:
         daten = await json_lesen(request)
         einladung = daten.get("einladung", "") if isinstance(daten, dict) else ""
         konto = partnerliste.zu_einladung(einladung) if isinstance(einladung, str) and einladung else None
-        aufnahme, zugang = speicher.anlegen(jetzt(), partner=konto.kennung if konto else "")
+        art = daten.get("art", "unfall") if isinstance(daten, dict) else "unfall"
+        # Über eine Werkstatt oder einen Sachverständigen kommt nur der Unfall.
+        if konto is not None or art not in FALLARTEN:
+            art = "unfall"
+        aufnahme, zugang = speicher.anlegen(jetzt(), partner=konto.kennung if konto else "", art=art)
         return JSONResponse({"zugang": zugang, **zustand(aufnahme)})
 
     @app.post("/api/aufnahme/uebernahme")
@@ -161,25 +207,28 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     @app.put("/api/aufnahme/schritt/{schritt}")
     async def schritt(schritt: str, request: Request) -> JSONResponse:
         aufnahme = aufnahme_von(request)
-        if schritt not in SCHRITTE:
+        felder = aufnahme.fallart.schritte.get(schritt)
+        if felder is None:
             raise HTTPException(404, "Diesen Schritt gibt es nicht.")
         if aufnahme.abgeschlossen_am:
             raise HTTPException(409, "Die Aufnahme ist bereits abgeschickt.")
-        sauber, fehler = schritt_pruefen(schritt, await json_lesen(request), jetzt().date())
+        sauber, fehler = felder_pruefen(felder, await json_lesen(request), jetzt().date())
         if fehler:
             return JSONResponse({"fehler": fehler}, status_code=422)
         speicher.schritt_speichern(aufnahme.kennung, schritt, sauber)
-        return JSONResponse({"fehler": {}})
+        aufnahme.angaben[schritt] = sauber
+        return JSONResponse({"fehler": {}, "angaben": sauber, "hinweise": hinweise(aufnahme)})
 
     @app.put("/api/aufnahme/ergaenzung/{abschnitt}")
     async def ergaenzen(abschnitt: str, request: Request) -> JSONResponse:
         """Zweite Stufe: weitere Angaben nach dem Abschicken, abschnittsweise und freiwillig."""
         aufnahme = aufnahme_von(request)
-        if abschnitt not in ERGAENZUNGEN:
+        ergaenzung = aufnahme.fallart.ergaenzungen.get(abschnitt)
+        if ergaenzung is None:
             raise HTTPException(404, "Diesen Abschnitt gibt es nicht.")
         if aufnahme.abgeschlossen_am is None:
-            raise HTTPException(409, "Bitte schicken Sie zuerst die Unfallmeldung ab.")
-        sauber, fehler = felder_pruefen(ERGAENZUNGEN[abschnitt].felder, await json_lesen(request), jetzt().date())
+            raise HTTPException(409, "Bitte schicken Sie zuerst Ihre Angaben ab.")
+        sauber, fehler = felder_pruefen(ergaenzung.felder, await json_lesen(request), jetzt().date())
         if fehler:
             return JSONResponse({"fehler": fehler}, status_code=422)
         speicher.schritt_speichern(aufnahme.kennung, ERG + abschnitt, sauber)
@@ -289,6 +338,21 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         assert fertig is not None
         if jurnodes is not None:
             lead_anlegen(fertig, speicher, jurnodes, partnerliste, zeitpunkt.date())
+        if eingang_melden is not None:
+            # Ohne Namen und ohne Inhalt: Die Nachricht geht unverschlüsselt per E-Mail.
+            frist = fertig.klagefrist()
+            betreff = f"Aktedirekt: neuer Eingang {fertig.fallart.betreff}"
+            zeilen = [f"Art: {fertig.fallart.titel}", f"Eingegangen: {zeitpunkt.strftime('%d.%m.%Y %H:%M')} Uhr"]
+            if frist is not None:
+                betreff += f" - Klagefrist bis {frist.strftime('%d.%m.%Y')}"
+                zeilen.append(f"Klagefrist nach Angabe des Mandanten spätestens: {frist.strftime('%d.%m.%Y')} "
+                              "(drei Wochen ab Zugang, ohne Prüfung durch die Kanzlei)")
+            zeilen.append("Einzelheiten nach Anmeldung: " + (basis_url or str(request.base_url)).rstrip("/") + "/kanzlei")
+            try:
+                eingang_melden(betreff, "\n".join(zeilen))
+            except Exception:
+                # Die Aufnahme ist gespeichert; eine gescheiterte Nachricht darf sie nicht gefährden.
+                pass
         return JSONResponse({"fehler": {}, **zustand(fertig)})
 
     @app.delete("/api/aufnahme/einwilligung")
@@ -400,11 +464,80 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             })
         return {"name": konto.name, "einladung": konto.einladung, "faelle": liste}
 
+    # ---- Kanzlei -----------------------------------------------------------
+
+    def kanzlei_von(request: Request) -> None:
+        konto = partnerliste.konto(speicher.sitzung_partner(sitzung_von(request), jetzt()))
+        if konto is None:
+            raise HTTPException(401, "Bitte anmelden.")
+        if konto.art != "kanzlei":
+            raise HTTPException(403, "Dieser Bereich ist der Kanzlei vorbehalten.")
+
+    def kopfdaten(aufnahme: Aufnahme) -> dict[str, Any]:
+        konto = partnerliste.konto(aufnahme.partner)
+        frist = aufnahme.klagefrist()
+        assert aufnahme.abgeschlossen_am is not None
+        return {"fall": aufnahme.kennung, "art": aufnahme.fallart.titel, "mandant": aufnahme.name(),
+                "eingegangen_am": aufnahme.abgeschlossen_am.isoformat(timespec="minutes"),
+                "klagefrist": frist.isoformat() if frist else "",
+                "tage_bis_frist": (frist - jetzt().date()).days if frist else None,
+                "vermittler": konto.name if konto else "",
+                "kurzrubrum": kurzrubrum(aufnahme),
+                "sachstand": stufen.bezeichnung(aufnahme.sachstand),
+                "in_jurnodes": bool(aufnahme.lead_kennung)}
+
+    @app.get("/api/kanzlei/eingaenge")
+    async def eingaenge(request: Request) -> dict[str, Any]:
+        kanzlei_von(request)
+        liste = [kopfdaten(a) for a in speicher.abgeschickte()]
+        # Was eine Frist hat, steht oben - die nächste zuerst.
+        liste.sort(key=lambda e: (e["klagefrist"] == "", e["klagefrist"], e["eingegangen_am"]))
+        return {"eingaenge": liste}
+
+    def eingang_von(fall: str, request: Request) -> Aufnahme:
+        kanzlei_von(request)
+        aufnahme = speicher.nach_kennung(fall)
+        if aufnahme is None or aufnahme.abgeschlossen_am is None:
+            raise HTTPException(404, "Diesen Eingang gibt es nicht.")
+        return aufnahme
+
+    @app.get("/api/kanzlei/eingaenge/{fall}")
+    async def eingang(fall: str, request: Request) -> dict[str, Any]:
+        aufnahme = eingang_von(fall, request)
+        unterschrift = speicher.unterschrift(aufnahme.kennung)
+        nachweis = speicher.nachweis(aufnahme.kennung)
+        return {**kopfdaten(aufnahme), "teile": aufnahme.fuer_die_akte(),
+                "dateien": [{"kennung": d.kennung, "name": d.name, "groesse": d.groesse}
+                            for d in speicher.dateien(aufnahme.kennung)],
+                "unterschrift": ("data:image/png;base64," + base64.b64encode(unterschrift).decode())
+                                if unterschrift else "",
+                "nachweis": {"zeitpunkt": nachweis.get("zeitpunkt", ""), "geraet": nachweis.get("geraet", "")},
+                "einwilligung_partner": aufnahme.einwilligung_partner
+                                        and aufnahme.einwilligung_widerrufen_am is None}
+
+    @app.get("/api/kanzlei/eingaenge/{fall}/dateien/{datei}")
+    async def datei_abholen(fall: str, datei: str, request: Request) -> Response:
+        """Die Datei selbst - oder, in AWS, die Adresse, unter der sie fünf Minuten lang abzuholen ist."""
+        aufnahme = eingang_von(fall, request)
+        eintrag = next((d for d in speicher.dateien(aufnahme.kennung) if d.kennung == datei), None)
+        if eintrag is None:
+            raise HTTPException(404, "Diese Datei gibt es nicht.")
+        adresse = speicher.datei_adresse(aufnahme.kennung, datei, eintrag.name)
+        if adresse:
+            return JSONResponse({"adresse": adresse})
+        inhalt = speicher.datei_inhalt(aufnahme.kennung, datei)
+        arten = {"jpg": "image/jpeg", "png": "image/png", "pdf": "application/pdf", "heic": "image/heic"}
+        return Response(inhalt, media_type=arten.get(eintrag.art, "application/octet-stream"))
+
     statisch = resources.files("aktedirekt").joinpath("static")
 
     @app.get("/")
     async def start() -> FileResponse:
         return FileResponse(str(statisch.joinpath("index.html")))
+
+    @app.get("/kanzlei")
+    async def kanzleiseite() -> FileResponse:
+        return FileResponse(str(statisch.joinpath("kanzlei.html")))
 
     @app.get("/partner")
     async def partnerseite() -> FileResponse:
@@ -417,6 +550,19 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
 def _geheimnis(name: str, region: str) -> str:
     import boto3
     return boto3.client("secretsmanager", region_name=region).get_secret_value(SecretId=name)["SecretString"]
+
+
+def _sns_melder(thema: str, region: str) -> Callable[[str, str], None] | None:
+    """Meldet einen Eingang über das Nachrichtenthema der Kanzlei - oder gar nicht, wenn keines eingestellt ist."""
+    if not thema:
+        return None
+    import boto3
+    sns = boto3.client("sns", region_name=region)
+
+    def melden(betreff: str, text: str) -> None:
+        # Der Betreff einer solchen Nachricht verträgt nur einfache Zeichen.
+        sns.publish(TopicArn=thema, Subject=betreff.encode("ascii", "replace").decode()[:100], Message=text)
+    return melden
 
 
 def app_aus_umgebung() -> FastAPI:
@@ -434,12 +580,15 @@ def app_aus_umgebung() -> FastAPI:
         speicher: Any = AwsSpeicher(umgebung["AKTEDIREKT_TABELLE"], umgebung["AKTEDIREKT_BUCKET"], region)
         partner = Partnerliste.aus_text(_geheimnis(umgebung["AKTEDIREKT_PARTNER_GEHEIMNIS"], region))
         jurnodes = jurnodes_aus_geheimnis(_geheimnis(umgebung["AKTEDIREKT_JURNODES_GEHEIMNIS"], region))
-        return app_bauen(speicher, partner=partner, jurnodes=jurnodes, basis_url=basis_url)
+        return app_bauen(speicher, partner=partner, jurnodes=jurnodes, basis_url=basis_url,
+                         telefon=umgebung.get("AKTEDIREKT_TELEFON", ""),
+                         eingang_melden=_sns_melder(umgebung.get("AKTEDIREKT_EINGANG_THEMA", ""), region))
     jurnodes = None
     if umgebung.get("AKTEDIREKT_JURNODES_URL"):
         jurnodes = JurNodes(umgebung["AKTEDIREKT_JURNODES_URL"], umgebung["AKTEDIREKT_JURNODES_BENUTZER"],
                             umgebung["AKTEDIREKT_JURNODES_SCHLUESSEL"])
     return app_bauen(Speicher(umgebung.get("AKTEDIREKT_DATEN", ".aktedirekt-daten")), basis_url=basis_url,
+                     telefon=umgebung.get("AKTEDIREKT_TELEFON", ""),
                      partner=Partnerliste.laden(umgebung.get("AKTEDIREKT_PARTNER")), jurnodes=jurnodes)
 
 

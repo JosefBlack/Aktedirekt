@@ -40,7 +40,7 @@ def einstieg(ablage, monkeypatch):
 def test_seite_und_aufnahme_ueber_api_gateway(einstieg):
     modul, _ = einstieg
     seite = modul.handler(ereignis("GET", "/"), None)
-    assert seite["statusCode"] == 200 and "Unfall melden" in seite["body"]
+    assert seite["statusCode"] == 200 and "Worum geht es?" in seite["body"]
     assert "aktedirekt-test-dateien.s3.eu-central-1.amazonaws.com" in seite["headers"]["content-security-policy"]
     assert modul.handler(ereignis("GET", "/partner"), None)["statusCode"] == 200
 

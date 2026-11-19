@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17324d">
+<meta name="robots" content="noindex">
+<title>Eingänge</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="partner.css">
+<link rel="stylesheet" href="kanzlei.css">
+</head>
+<body class="partner kanzlei">
+<header>
+  <div class="kopf">
+    <button type="button" id="zurueck" class="zurueck" aria-label="Zur Liste" hidden>‹</button>
+    <span id="titel">Eingänge</span>
+    <button type="button" id="abmelden" class="schlicht" hidden>Abmelden</button>
+  </div>
+</header>
+<main>
+<p id="meldung" class="meldung" role="alert" hidden></p>
+
+<form id="anmeldung" novalidate hidden>
+  <h1>Kanzlei</h1>
+  <label>Kennung<input type="text" name="kennung" maxlength="80" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+  <label>Kennwort<input type="password" name="kennwort" maxlength="200" autocomplete="current-password"></label>
+  <button type="submit" class="haupt">Anmelden</button>
+</form>
+
+<section id="liste" hidden>
+  <h1>Eingänge</h1>
+  <p id="anzahl" class="klein"></p>
+  <ul id="eingaenge" class="faelle"></ul>
+  <p id="leer" class="klein" hidden>Noch nichts eingegangen.</p>
+</section>
+
+<section id="eingang" hidden>
+  <div class="werkzeuge">
+    <button type="button" id="drucken" class="schlicht rand">Drucken oder als PDF speichern</button>
+  </div>
+  <article id="blatt"></article>
+</section>
+</main>
+<script src="kanzlei.js"></script>
+</body>
+</html>
