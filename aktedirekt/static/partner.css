@@ -1,0 +1,34 @@
+body.partner main { max-width: 760px; }
+body.partner .kopf { max-width: 760px; }
+input[type=password], input[type=search] {
+  display: block; width: 100%; margin-top: 6px; padding: 12px; min-height: 50px;
+  font: inherit; color: inherit; background: var(--flaeche);
+  border: 1.5px solid var(--rand); border-radius: 10px; -webkit-appearance: none; appearance: none; }
+.schlicht { min-height: 44px; padding: 0 12px; border: 0; background: none; color: var(--schrift);
+  font: inherit; cursor: pointer; }
+.schlicht.rand { border: 1.5px solid var(--rand); border-radius: 10px; background: var(--flaeche); margin-top: 6px; }
+.link { background: var(--flaeche); border: 1px solid var(--rand); border-radius: 10px; padding: 4px 12px; }
+.link summary { min-height: 44px; display: flex; align-items: center; font-weight: 600; cursor: pointer; }
+.link .zeile { align-items: stretch; margin-bottom: 10px; }
+.link .zeile input { flex: 1; min-width: 0; }
+.suche { margin-top: 20px; }
+.faelle { list-style: none; padding: 0; margin: 8px 0 0; }
+.faelle li { background: var(--flaeche); border: 1px solid var(--rand); border-radius: 12px;
+  padding: 14px; margin-top: 10px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
+.faelle .wer { font-weight: 600; font-size: 18px; overflow-wrap: anywhere; }
+.faelle .kfz { color: var(--leise); font-size: 15px; grid-column: 1; }
+.faelle .stand { grid-column: 2; grid-row: 1 / span 2; margin: 0; padding: 0; border: 0; background: none;
+  align-items: flex-end; text-align: right; }
+.faelle .marke { display: inline-block; padding: 6px 12px; border-radius: 999px; font-weight: 600;
+  font-size: 15px; background: var(--grund); border: 1.5px solid var(--rand); }
+.faelle .marke.laeuft { border-color: var(--akzent); }
+.faelle .marke.gut { border-color: var(--gut); color: var(--gut); }
+.faelle .marke.ende { color: var(--leise); }
+.faelle .seit { color: var(--leise); font-size: 14px; margin-top: 4px; }
+.faelle .fehlt { grid-column: 1 / -1; font-size: 15px; border-top: 1px solid var(--rand);
+  padding-top: 8px; margin-top: 6px; }
+.fuss { margin-top: 28px; }
+@media (max-width: 420px) {
+  .faelle li { grid-template-columns: 1fr; }
+  .faelle .stand { grid-column: 1; grid-row: auto; align-items: flex-start; text-align: left; margin-top: 8px; }
+}

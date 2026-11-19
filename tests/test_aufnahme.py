@@ -9,13 +9,13 @@ from fastapi.testclient import TestClient
 from aktedirekt.aufnahme import Aufnahme, kurzrubrum, schritt_pruefen
 from aktedirekt.dateien import art_erkennen
 from aktedirekt.jurnodes import JurNodes
+from aktedirekt.partner import PartnerKonto, Partnerliste
 from aktedirekt.speicher import Speicher
 from aktedirekt.web import app_bauen
 
 HEUTE = date(2026, 11, 19)
 JETZT = datetime(2026, 11, 19, 10, 0)
-PARTNER = {"test-werkstatt": {"kennung": "werkstatt-a", "art": "werkstatt",
-                              "name": "Autohaus Beispiel", "einladung": "test-werkstatt"}}
+PARTNER = Partnerliste([PartnerKonto("werkstatt-a", "werkstatt", "Autohaus Beispiel", "test-werkstatt")])
 ANGABEN = {
     "unfall": {"unfalldatum": "2026-11-17", "unfallort": "Hauptstr. 1, Berlin",
                "hergang": "Auffahrunfall an der Ampel.", "polizei": "nein", "verletzt": "nein"},
@@ -230,7 +230,7 @@ def test_jurnodes_ausfall_verliert_die_aufnahme_nicht(tmp_path):
     assert antwort.status_code == 200
     aufnahme = speicher.laden(zugang)
     assert aufnahme.abgeschlossen_am == JETZT and aufnahme.lead_kennung == ""
-    assert speicher.ohne_lead() == [aufnahme.kennung]
+    assert [a.kennung for a in speicher.ohne_lead()] == [aufnahme.kennung]
 
 
 def test_seite_und_kopfzeilen(umgebung):

@@ -157,8 +157,11 @@ class Aufnahme:
     angaben: dict[str, dict[str, str]] = field(default_factory=dict)
     abgeschlossen_am: datetime | None = None
     einwilligung_partner: bool = False
+    einwilligung_widerrufen_am: datetime | None = None
     lead_kennung: str = ""
+    akte_kennung: str = ""
     sachstand: str = "aufgenommen"
+    sachstand_seit: date | None = None
 
     def fehlende_schritte(self) -> list[str]:
         return [s for s in SCHRITTE if s not in self.angaben]

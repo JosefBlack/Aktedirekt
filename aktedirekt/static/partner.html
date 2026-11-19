@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17324d">
+<meta name="robots" content="noindex">
+<title>Fallliste</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="partner.css">
+</head>
+<body class="partner">
+<header>
+  <div class="kopf">
+    <span id="titel">Fallliste</span>
+    <button type="button" id="abmelden" class="schlicht" hidden>Abmelden</button>
+  </div>
+</header>
+<main>
+<p id="meldung" class="meldung" role="alert" hidden></p>
+
+<form id="anmeldung" novalidate hidden>
+  <h1>Anmelden</h1>
+  <p class="klein">Für Werkstätten und Sachverständige, die mit der Kanzlei zusammenarbeiten.</p>
+  <label>Kennung<input type="text" name="kennung" maxlength="80" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+  <label>Kennwort<input type="password" name="kennwort" maxlength="200" autocomplete="current-password"></label>
+  <button type="submit" class="haupt">Anmelden</button>
+</form>
+
+<section id="liste" hidden>
+  <h1 id="name"></h1>
+  <details class="link">
+    <summary>Link für Ihre Kunden</summary>
+    <p class="klein">Über diesen Link meldet Ihr Kunde seinen Unfall. Er entscheidet dabei selbst, ob Sie den Stand sehen dürfen.</p>
+    <div class="zeile"><input type="text" id="kundenlink" readonly aria-label="Link für Kunden"><button type="button" id="kopieren" class="schlicht rand">Kopieren</button></div>
+  </details>
+  <label class="suche">Suchen<input type="search" id="suche" placeholder="Name oder Kennzeichen" autocomplete="off"></label>
+  <p id="anzahl" class="klein"></p>
+  <ul id="faelle" class="faelle"></ul>
+  <p id="leer" class="klein" hidden>Noch keine Fälle. Hier erscheint ein Fall, sobald Ihr Kunde seinen Unfall abgeschickt und der Auskunft an Sie zugestimmt hat.</p>
+  <p class="klein fuss">Sie sehen den Stand in Stichworten. Zu Beträgen und Einzelheiten gibt die Kanzlei Ihrem Kunden selbst Auskunft.</p>
+</section>
+</main>
+<script src="partner.js"></script>
+</body>
+</html>

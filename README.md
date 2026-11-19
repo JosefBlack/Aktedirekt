@@ -32,12 +32,14 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (60 Prüfungen, ohne Netz):
+Vorhanden und geprüft (79 Prüfungen, ohne Netz):
 
 | Datei | Inhalt |
 |---|---|
 | `aktedirekt/static/` | Schadenaufnahme für das Handy: sechs Schritte, Fotos, Unterschrift |
 | `aktedirekt/web.py` | Schnittstelle dazu; legt nach dem Abschicken den Lead in jur|nodes an |
+| `aktedirekt/static/partner.html` | Fallliste für Werkstatt und Sachverständigen, mit Anmeldung und Suche |
+| `aktedirekt/partner.py` | Partnerkonten, Kennwortprüfung, Sperre nach Fehlversuchen |
 | `aktedirekt/aufnahme.py` | welche Angaben es gibt und wann sie gelten |
 | `aktedirekt/dateien.py` | welche Dateien angenommen werden (JPG, PNG, HEIC, PDF bis 15 MB) |
 | `aktedirekt/speicher.py` | Ablage für Entwicklung und Vorführung (SQLite, Ordner) |
@@ -46,14 +48,15 @@ Vorhanden und geprüft (60 Prüfungen, ohne Netz):
 | `aktedirekt/sicht.py` | die Sicht eines Partners auf einen Fall |
 | `aktedirekt/sachstand.py`, `sachstaende.json` | Stufen und ihre Ableitung aus jur|nodes; die Liste ist von der Kanzlei pflegbar |
 | `aktedirekt/jurnodes.py` | Lead anlegen und lesen, Aktenstatus, Akteneigenschaft |
-| `aktedirekt/abgleich.py` | Sachstand eines Falls aus jur|nodes holen |
+| `aktedirekt/abgleich.py` | Abgleich mit jur|nodes: Leads nachholen, Sachstand lesen (`python -m aktedirekt.abgleich`) |
 
 **Nur mit Testdaten benutzen.** Vor echten Mandaten fehlen: Betrieb in AWS mit
-verschlüsselter Ablage, Anmeldung mit Einmalcode (bisher merkt sich nur das
-Gerät den Zugang), Begrenzung der Aufrufe, Prüfung der Dateien auf
+verschlüsselter Ablage, Anmeldung mit Einmalcode für Mandanten (bisher merkt
+sich nur das Gerät den Zugang), zweiter Faktor und eigene Anmeldungen je
+Mitarbeiter für Partner, Begrenzung der Aufrufe, Prüfung der Dateien auf
 Schadsoftware, Übergabe von Angaben und Dateien an jur|nodes (bisher nur
-Kurzrubrum und Vermittler), Benachrichtigung des Mandanten, die Fallliste für
-Partner. Der jur|nodes-Client ist nach der Beschreibung des Herstellers
+Kurzrubrum und Vermittler), Benachrichtigung des Mandanten, zeitgesteuerter
+Abgleich, fehlende Unterlagen aus jur|nodes. Der jur|nodes-Client ist nach der Beschreibung des Herstellers
 (Fassung 1.0.2) gebaut und **gegen den Server der Kanzlei noch nicht
 gelaufen**.
 
@@ -66,6 +69,19 @@ gelaufen**.
 Dann im Browser `http://127.0.0.1:8000/` öffnen; mit
 `http://127.0.0.1:8000/?p=test-werkstatt` läuft die Aufnahme über die
 Beispielwerkstatt aus `testdaten/partner.json`.
+
+Die Fallliste liegt unter `http://127.0.0.1:8000/partner`. Kennung und
+Kennwort der beiden Beispielpartner stehen in `testdaten/partner.json`. Ein
+Kennwort für einen echten Partner erzeugt `python -m aktedirekt.partner`.
+
+## Was ein Partner sieht
+
+Nur Fälle, die über seinen Link kamen, abgeschickt sind und bei denen der
+Mandant der Auskunft zugestimmt hat: Name, Kennzeichen, Unfalldatum, Sachstand
+mit Datum. Ohne Zustimmung oder nach Widerruf erscheint der Fall nicht - auch
+nicht als „übergeben", denn schon dass jemand die Kanzlei beauftragt hat,
+unterliegt der Verschwiegenheit. Welchen Stand ein Partner wann erstmals und
+zuletzt gesehen hat, wird festgehalten.
 
 ## Oberfläche für den Mandanten
 

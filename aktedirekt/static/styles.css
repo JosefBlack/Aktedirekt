@@ -76,3 +76,5 @@ button.neben { min-height: 44px; font-weight: 400; }
   border-radius: 10px; padding: 12px; margin: 16px 0; display: flex; flex-direction: column; }
 .stand strong { font-size: 20px; }
 [hidden] { display: none !important; }
+.auskunft { margin: -4px 0 20px; }
+.auskunft p { margin: 0; }

@@ -4,9 +4,9 @@ Das ist die Ablage für Entwicklung und Vorführung. **Für echte Mandate ist
 sie nicht gedacht** - dort liegen die Daten verschlüsselt in der Datenbank
 und im Dateispeicher des Kanzlei-AWS-Kontos.
 
-Der Zugang eines Mandanten zu seiner Aufnahme ist ein langer Zufallswert.
-Gespeichert wird nur dessen Prüfsumme: Wer die Datenbank liest, kann damit
-keine Aufnahme öffnen.
+Zugänge (der eines Mandanten zu seiner Aufnahme, die Sitzung eines Partners)
+sind lange Zufallswerte. Gespeichert wird nur deren Prüfsumme: Wer die
+Datenbank liest, kann damit nichts öffnen.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import secrets
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from aktedirekt.aufnahme import Aufnahme
@@ -43,7 +43,27 @@ CREATE TABLE IF NOT EXISTS datei (
   groesse INTEGER NOT NULL,
   hochgeladen_am TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS sitzung (
+  sha256 TEXT PRIMARY KEY,
+  partner TEXT NOT NULL,
+  laeuft_ab TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS auskunft (
+  partner TEXT NOT NULL,
+  aufnahme TEXT NOT NULL,
+  sachstand TEXT NOT NULL,
+  erstmals_am TEXT NOT NULL,
+  zuletzt_am TEXT NOT NULL,
+  PRIMARY KEY (partner, aufnahme, sachstand)
+);
 """
+
+# Spalten, die nach der ersten Fassung dazugekommen sind.
+_NEUE_SPALTEN = {
+    "einwilligung_widerrufen_am": "TEXT",
+    "sachstand_seit": "TEXT",
+    "akte_kennung": "TEXT NOT NULL DEFAULT ''",
+}
 
 
 @dataclass(frozen=True)
@@ -54,8 +74,21 @@ class Datei:
     groesse: int
 
 
+@dataclass(frozen=True)
+class Auskunft:
+    partner: str
+    aufnahme: str
+    sachstand: str
+    erstmals_am: datetime
+    zuletzt_am: datetime
+
+
 def _pruefsumme(zugang: str) -> str:
     return hashlib.sha256(zugang.encode("utf-8")).hexdigest()
+
+
+def _zeit(wert: str | None) -> datetime | None:
+    return datetime.fromisoformat(wert) if wert else None
 
 
 class Speicher:
@@ -64,12 +97,18 @@ class Speicher:
         (self._ordner / "dateien").mkdir(parents=True, exist_ok=True)
         with closing(self._db()) as db, db:
             db.executescript(_SCHEMA)
+            vorhanden = {z["name"] for z in db.execute("PRAGMA table_info(aufnahme)")}
+            for name, art in _NEUE_SPALTEN.items():
+                if name not in vorhanden:
+                    db.execute(f"ALTER TABLE aufnahme ADD COLUMN {name} {art}")
 
     def _db(self) -> sqlite3.Connection:
         db = sqlite3.connect(self._ordner / "aktedirekt.sqlite3")
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys = ON")
         return db
+
+    # ---- Aufnahmen -------------------------------------------------------
 
     def anlegen(self, jetzt: datetime, partner: str = "") -> tuple[Aufnahme, str]:
         kennung = secrets.token_hex(8)
@@ -84,9 +123,11 @@ class Speicher:
         return Aufnahme(
             kennung=z["kennung"], angelegt_am=datetime.fromisoformat(z["angelegt_am"]),
             partner=z["partner"], angaben=json.loads(z["angaben"]),
-            abgeschlossen_am=datetime.fromisoformat(z["abgeschlossen_am"]) if z["abgeschlossen_am"] else None,
+            abgeschlossen_am=_zeit(z["abgeschlossen_am"]),
             einwilligung_partner=bool(z["einwilligung_partner"]),
-            lead_kennung=z["lead_kennung"], sachstand=z["sachstand"])
+            einwilligung_widerrufen_am=_zeit(z["einwilligung_widerrufen_am"]),
+            lead_kennung=z["lead_kennung"], akte_kennung=z["akte_kennung"], sachstand=z["sachstand"],
+            sachstand_seit=date.fromisoformat(z["sachstand_seit"]) if z["sachstand_seit"] else None)
 
     def laden(self, zugang: str) -> Aufnahme | None:
         if not zugang:
@@ -95,6 +136,28 @@ class Speicher:
             z = db.execute("SELECT * FROM aufnahme WHERE zugang_sha256 = ?",
                            (_pruefsumme(zugang),)).fetchone()
         return self._aus_zeile(z) if z else None
+
+    def nach_kennung(self, kennung: str) -> Aufnahme | None:
+        with closing(self._db()) as db:
+            z = db.execute("SELECT * FROM aufnahme WHERE kennung = ?", (kennung,)).fetchone()
+        return self._aus_zeile(z) if z else None
+
+    def _liste(self, bedingung: str, *werte: str) -> list[Aufnahme]:
+        with closing(self._db()) as db:
+            zeilen = db.execute("SELECT * FROM aufnahme WHERE abgeschlossen_am IS NOT NULL AND "
+                                + bedingung + " ORDER BY abgeschlossen_am DESC", werte).fetchall()
+        return [self._aus_zeile(z) for z in zeilen]
+
+    def des_partners(self, partner: str) -> list[Aufnahme]:
+        """Abgeschickte Aufnahmen, die über diesen Partner kamen."""
+        return self._liste("partner = ?", partner) if partner else []
+
+    def ohne_lead(self) -> list[Aufnahme]:
+        """Abgeschickte Aufnahmen, die jur|nodes noch nicht kennt."""
+        return self._liste("lead_kennung = ''")
+
+    def mit_lead(self) -> list[Aufnahme]:
+        return self._liste("lead_kennung <> ''")
 
     def schritt_speichern(self, kennung: str, schritt: str, angaben: dict[str, str]) -> None:
         with closing(self._db()) as db, db:
@@ -108,31 +171,34 @@ class Speicher:
                      nachweis: dict[str, str], unterschrift: bytes) -> None:
         (self._ordner / "dateien" / f"{kennung}-unterschrift.png").write_bytes(unterschrift)
         with closing(self._db()) as db, db:
-            db.execute("UPDATE aufnahme SET abgeschlossen_am = ?, einwilligung_partner = ?, nachweis = ? "
-                       "WHERE kennung = ? AND abgeschlossen_am IS NULL",
+            db.execute("UPDATE aufnahme SET abgeschlossen_am = ?, einwilligung_partner = ?, nachweis = ?, "
+                       "sachstand_seit = ? WHERE kennung = ? AND abgeschlossen_am IS NULL",
                        (jetzt.isoformat(), int(einwilligung_partner),
-                        json.dumps(nachweis, ensure_ascii=False), kennung))
+                        json.dumps(nachweis, ensure_ascii=False), jetzt.date().isoformat(), kennung))
 
     def nachweis(self, kennung: str) -> dict[str, str]:
         with closing(self._db()) as db:
             z = db.execute("SELECT nachweis FROM aufnahme WHERE kennung = ?", (kennung,)).fetchone()
         return json.loads(z["nachweis"]) if z else {}
 
+    def einwilligung_widerrufen(self, kennung: str, jetzt: datetime) -> None:
+        """Der erste Widerruf zählt; ein zweiter ändert den Zeitpunkt nicht."""
+        with closing(self._db()) as db, db:
+            db.execute("UPDATE aufnahme SET einwilligung_widerrufen_am = ? WHERE kennung = ? "
+                       "AND einwilligung_partner = 1 AND einwilligung_widerrufen_am IS NULL",
+                       (jetzt.isoformat(), kennung))
+
     def lead_setzen(self, kennung: str, lead_kennung: str) -> None:
         with closing(self._db()) as db, db:
             db.execute("UPDATE aufnahme SET lead_kennung = ? WHERE kennung = ?", (lead_kennung, kennung))
 
-    def ohne_lead(self) -> list[str]:
-        """Abgeschlossene Aufnahmen, die jur|nodes noch nicht kennt."""
-        with closing(self._db()) as db:
-            zeilen = db.execute("SELECT kennung FROM aufnahme WHERE abgeschlossen_am IS NOT NULL "
-                                "AND lead_kennung = '' ORDER BY abgeschlossen_am").fetchall()
-        return [z["kennung"] for z in zeilen]
+    def sachstand_setzen(self, kennung: str, sachstand: str, seit: date, akte_kennung: str = "") -> None:
+        with closing(self._db()) as db, db:
+            db.execute("UPDATE aufnahme SET sachstand = ?, sachstand_seit = ?, "
+                       "akte_kennung = CASE WHEN ? <> '' THEN ? ELSE akte_kennung END WHERE kennung = ?",
+                       (sachstand, seit.isoformat(), akte_kennung, akte_kennung, kennung))
 
-    def nach_kennung(self, kennung: str) -> Aufnahme | None:
-        with closing(self._db()) as db:
-            z = db.execute("SELECT * FROM aufnahme WHERE kennung = ?", (kennung,)).fetchone()
-        return self._aus_zeile(z) if z else None
+    # ---- Dateien ---------------------------------------------------------
 
     def dateien(self, kennung: str) -> list[Datei]:
         with closing(self._db()) as db:
@@ -160,3 +226,47 @@ class Speicher:
             db.execute("DELETE FROM datei WHERE kennung = ?", (datei_kennung,))
         (self._ordner / "dateien" / f"{datei_kennung}.{z['art']}").unlink(missing_ok=True)
         return True
+
+    # ---- Sitzungen der Partner ------------------------------------------
+
+    def sitzung_anlegen(self, partner: str, jetzt: datetime, laeuft_ab: datetime) -> str:
+        sitzung = secrets.token_urlsafe(32)
+        with closing(self._db()) as db, db:
+            # Aufräumen: nur, was bereits abgelaufen ist. Andere laufende
+            # Sitzungen desselben Partners (Rechner und Handy) bleiben.
+            db.execute("DELETE FROM sitzung WHERE laeuft_ab <= ?", (jetzt.isoformat(),))
+            db.execute("INSERT INTO sitzung VALUES (?,?,?)",
+                       (_pruefsumme(sitzung), partner, laeuft_ab.isoformat()))
+        return sitzung
+
+    def sitzung_partner(self, sitzung: str, jetzt: datetime) -> str:
+        """Kennung des angemeldeten Partners - leer, wenn die Sitzung nicht (mehr) gilt."""
+        if not sitzung:
+            return ""
+        with closing(self._db()) as db:
+            z = db.execute("SELECT partner, laeuft_ab FROM sitzung WHERE sha256 = ?",
+                           (_pruefsumme(sitzung),)).fetchone()
+        if not z or datetime.fromisoformat(z["laeuft_ab"]) <= jetzt:
+            return ""
+        return z["partner"]
+
+    def sitzung_beenden(self, sitzung: str) -> None:
+        with closing(self._db()) as db, db:
+            db.execute("DELETE FROM sitzung WHERE sha256 = ?", (_pruefsumme(sitzung),))
+
+    # ---- Nachweis der Auskünfte -----------------------------------------
+
+    def auskunft_vermerken(self, partner: str, aufnahme: str, sachstand: str, jetzt: datetime) -> None:
+        """Hält fest, welchen Stand ein Partner wann erstmals und zuletzt gesehen hat."""
+        with closing(self._db()) as db, db:
+            db.execute("INSERT INTO auskunft VALUES (?,?,?,?,?) ON CONFLICT (partner, aufnahme, sachstand) "
+                       "DO UPDATE SET zuletzt_am = excluded.zuletzt_am",
+                       (partner, aufnahme, sachstand, jetzt.isoformat(), jetzt.isoformat()))
+
+    def auskuenfte(self, aufnahme: str) -> list[Auskunft]:
+        with closing(self._db()) as db:
+            zeilen = db.execute("SELECT * FROM auskunft WHERE aufnahme = ? ORDER BY erstmals_am",
+                                (aufnahme,)).fetchall()
+        return [Auskunft(z["partner"], z["aufnahme"], z["sachstand"],
+                         datetime.fromisoformat(z["erstmals_am"]), datetime.fromisoformat(z["zuletzt_am"]))
+                for z in zeilen]

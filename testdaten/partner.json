@@ -1,4 +1,18 @@
 [
-  {"kennung": "werkstatt-beispiel", "art": "werkstatt", "name": "Autohaus Beispiel GmbH", "einladung": "test-werkstatt"},
-  {"kennung": "sv-beispiel", "art": "sachverstaendiger", "name": "Sachverständigenbüro Beispiel", "einladung": "test-gutachter"}
+  {
+    "kennung": "werkstatt-beispiel",
+    "art": "werkstatt",
+    "name": "Autohaus Beispiel GmbH",
+    "einladung": "test-werkstatt",
+    "_kennwort_nur_fuer_die_probe": "Werkstatt-Test-2026",
+    "kennwort_scrypt": "1db7de3e062e100749ef0172da50da05$e8f878939815e9f26aea745df4463ddfee5572ae62be45570723bdb449c2773147a7e2a96ce4b0ec2bd1e3c3a43c6950680456214a417cdc3fc188c171209851"
+  },
+  {
+    "kennung": "sv-beispiel",
+    "art": "sachverstaendiger",
+    "name": "Sachverständigenbüro Beispiel",
+    "einladung": "test-gutachter",
+    "_kennwort_nur_fuer_die_probe": "Gutachter-Test-2026",
+    "kennwort_scrypt": "395765a171d273c408349bb5248f6c41$7e743ef28535346dc4e84eda30c2a2c22b31e540e0d2ec10f07baf942b60a1428af7c3476456d084875d2b92ef3fff961b6a523397a9b9993e79039fefb786d2"
+  }
 ]

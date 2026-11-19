@@ -248,10 +248,19 @@ abschluss.addEventListener("submit", async (e) => {
   sperren(abschluss, false);
 });
 
+$("#widerrufen").addEventListener("click", async () => {
+  try {
+    zustand = { ...zustand, ...(await aufruf("DELETE", "/api/aufnahme/einwilligung")) };
+    fertig();
+  } catch (fehler) { melden(fehler.message); }
+});
+
 // ---- Ablauf -------------------------------------------------------------
 
 function fertig() {
   $("#sachstand").textContent = zustand.sachstand;
+  $("#auskunft").hidden = !zustand.einwilligung_partner;
+  $("#auskunft-text").textContent = zustand.partner + " darf diesen Stand sehen.";
   dateien_zeigen();
   zeigen("fertig");
 }

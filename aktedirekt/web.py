@@ -6,8 +6,12 @@ merkt ihn sich auf dem Gerät und schickt ihn bei jedem Aufruf in der Kopfzeile
 Zugriffsprotokoll und keinem Verlauf landet. Auf einem anderen Gerät lässt
 sich die Aufnahme deshalb noch nicht fortsetzen.
 
-Noch nicht enthalten und vor echten Mandaten nötig: Anmeldung mit Einmalcode,
-Begrenzung der Aufrufe je Absender, Prüfung der Dateien auf Schadsoftware.
+Werkstatt und Sachverständiger melden sich mit Kennung und Kennwort an und
+sehen ihre Fallliste. Was darin steht, bestimmt allein ``aktedirekt.sicht``.
+
+Noch nicht enthalten und vor echten Mandaten nötig: Anmeldung mit Einmalcode
+für Mandanten, zweiter Faktor für Partner, Begrenzung der Aufrufe je Absender,
+Prüfung der Dateien auf Schadsoftware.
 """
 
 from __future__ import annotations
@@ -16,9 +20,8 @@ import base64
 import hashlib
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from importlib import resources
-from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Request
@@ -26,15 +29,19 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from aktedirekt import dateien
-from aktedirekt.aufnahme import SCHRITTE, Aufnahme, kurzrubrum, schritt_pruefen
-from aktedirekt.jurnodes import JurNodes, JurNodesFehler
+from aktedirekt.abgleich import als_fall, lead_anlegen
+from aktedirekt.aufnahme import SCHRITTE, Aufnahme, schritt_pruefen
+from aktedirekt.jurnodes import JurNodes
+from aktedirekt.partner import Partnerliste
 from aktedirekt.sachstand import Stufen
+from aktedirekt.sicht import partner_sicht
 from aktedirekt.speicher import Speicher
 
 MAX_JSON = 600 * 1024
 MAX_UNTERSCHRIFT = 400 * 1024
 MIN_UNTERSCHRIFT = 800
 _PNG = b"\x89PNG\r\n\x1a\n"
+SITZUNG_DAUER = timedelta(hours=8)
 
 _KOPFZEILEN = {
     "Content-Security-Policy": "default-src 'self'; img-src 'self' blob: data:; "
@@ -50,21 +57,12 @@ def _text(name: str) -> str:
     return resources.files("aktedirekt").joinpath("texte", name).read_text("utf-8").strip()
 
 
-def partner_laden(pfad: Path | str | None) -> dict[str, dict[str, str]]:
-    """Partner nach Einladungscode. Ohne Datei gibt es keine Partner."""
-    if not pfad:
-        return {}
-    eintraege = json.loads(Path(pfad).read_text("utf-8"))
-    return {e["einladung"]: e for e in eintraege}
-
-
-def app_bauen(speicher: Speicher, *, partner: dict[str, dict[str, str]] | None = None,
+def app_bauen(speicher: Speicher, *, partner: Partnerliste | None = None,
               jurnodes: JurNodes | None = None,
               jetzt: Callable[[], datetime] = datetime.now) -> FastAPI:
     app = FastAPI(title="Aktedirekt", docs_url=None, redoc_url=None, openapi_url=None)
     stufen = Stufen.laden()
-    nach_einladung = partner or {}
-    nach_kennung = {p["kennung"]: p for p in nach_einladung.values()}
+    partnerliste = partner or Partnerliste([])
     texte = {n: _text(f"{n}.txt") for n in ("vollmacht", "datenschutz", "einwilligung_partner")}
 
     @app.middleware("http")
@@ -99,14 +97,16 @@ def app_bauen(speicher: Speicher, *, partner: dict[str, dict[str, str]] | None =
         return b"".join(teile)
 
     def zustand(aufnahme: Aufnahme) -> dict[str, Any]:
-        p = nach_kennung.get(aufnahme.partner)
-        name = p["name"] if p else ""
+        konto = partnerliste.konto(aufnahme.partner)
+        name = konto.name if konto else ""
         return {
             "angaben": aufnahme.angaben,
             "dateien": [{"kennung": d.kennung, "name": d.name} for d in speicher.dateien(aufnahme.kennung)],
             "abgeschlossen": aufnahme.abgeschlossen_am is not None,
             "sachstand": stufen.bezeichnung(aufnahme.sachstand),
             "partner": name,
+            "einwilligung_partner": aufnahme.einwilligung_partner
+                                    and aufnahme.einwilligung_widerrufen_am is None,
             "texte": {
                 "vollmacht": texte["vollmacht"],
                 "datenschutz": texte["datenschutz"],
@@ -114,24 +114,12 @@ def app_bauen(speicher: Speicher, *, partner: dict[str, dict[str, str]] | None =
             },
         }
 
-    def lead_anlegen(aufnahme: Aufnahme) -> None:
-        """Meldet die Aufnahme an jur|nodes. Scheitert das, bleibt sie vorgemerkt."""
-        if jurnodes is None or aufnahme.lead_kennung:
-            return
-        p = nach_kennung.get(aufnahme.partner)
-        try:
-            lead = jurnodes.lead_anlegen(kurzrubrum(aufnahme), vermittler=p["name"] if p else "",
-                                         datum=jetzt().date())
-        except JurNodesFehler:
-            return
-        speicher.lead_setzen(aufnahme.kennung, lead.kennung)
-
     @app.post("/api/aufnahme")
     async def beginnen(request: Request) -> JSONResponse:
         daten = await json_lesen(request)
         einladung = daten.get("einladung", "") if isinstance(daten, dict) else ""
-        p = nach_einladung.get(einladung) if isinstance(einladung, str) else None
-        aufnahme, zugang = speicher.anlegen(jetzt(), partner=p["kennung"] if p else "")
+        konto = partnerliste.zu_einladung(einladung) if isinstance(einladung, str) and einladung else None
+        aufnahme, zugang = speicher.anlegen(jetzt(), partner=konto.kennung if konto else "")
         return JSONResponse({"zugang": zugang, **zustand(aufnahme)})
 
     @app.get("/api/aufnahme")
@@ -220,14 +208,75 @@ def app_bauen(speicher: Speicher, *, partner: dict[str, dict[str, str]] | None =
         speicher.abschliessen(aufnahme.kennung, zeitpunkt, einwilligung, nachweis, unterschrift)
         fertig = speicher.nach_kennung(aufnahme.kennung)
         assert fertig is not None
-        lead_anlegen(fertig)
+        if jurnodes is not None:
+            lead_anlegen(fertig, speicher, jurnodes, partnerliste, zeitpunkt.date())
         return JSONResponse({"fehler": {}, **zustand(fertig)})
+
+    @app.delete("/api/aufnahme/einwilligung")
+    async def widerrufen(request: Request) -> dict[str, Any]:
+        """Der Mandant nimmt die Auskunft an den Partner zurück - sofort wirksam."""
+        aufnahme = aufnahme_von(request)
+        speicher.einwilligung_widerrufen(aufnahme.kennung, jetzt())
+        neu = speicher.nach_kennung(aufnahme.kennung)
+        assert neu is not None
+        return zustand(neu)
+
+    # ---- Werkstatt und Sachverständiger ---------------------------------
+
+    def sitzung_von(request: Request) -> str:
+        kopf = request.headers.get("authorization", "")
+        return kopf[7:] if kopf.lower().startswith("bearer ") else ""
+
+    @app.post("/api/partner/anmeldung")
+    async def anmelden(request: Request) -> dict[str, str]:
+        daten = await json_lesen(request)
+        kennung = daten.get("kennung", "") if isinstance(daten, dict) else ""
+        kennwort = daten.get("kennwort", "") if isinstance(daten, dict) else ""
+        konto = None
+        if isinstance(kennung, str) and isinstance(kennwort, str) and len(kennung) <= 80 and len(kennwort) <= 200:
+            konto = partnerliste.anmelden(kennung.strip(), kennwort, jetzt())
+        if konto is None:
+            # Eine Antwort für alles: falsche Kennung, falsches Kennwort, gesperrt.
+            raise HTTPException(401, "Die Anmeldung hat nicht geklappt. Nach mehreren Fehlversuchen "
+                                     "ist die Kennung für eine Viertelstunde gesperrt.")
+        return {"sitzung": speicher.sitzung_anlegen(konto.kennung, jetzt(), jetzt() + SITZUNG_DAUER), "name": konto.name}
+
+    @app.post("/api/partner/abmeldung")
+    async def abmelden(request: Request) -> Response:
+        speicher.sitzung_beenden(sitzung_von(request))
+        return Response(status_code=204)
+
+    @app.get("/api/partner/faelle")
+    async def faelle(request: Request) -> dict[str, Any]:
+        zeitpunkt = jetzt()
+        konto = partnerliste.konto(speicher.sitzung_partner(sitzung_von(request), zeitpunkt))
+        if konto is None:
+            raise HTTPException(401, "Bitte anmelden.")
+        liste = []
+        for aufnahme in speicher.des_partners(konto.kennung):
+            sicht = partner_sicht(als_fall(aufnahme, konto.art), konto.kennung, zeitpunkt, stufen)
+            if sicht is None:
+                continue
+            speicher.auskunft_vermerken(konto.kennung, aufnahme.kennung, sicht.sachstand, zeitpunkt)
+            liste.append({
+                "fall": sicht.fall, "mandant": sicht.mandant_name, "kennzeichen": sicht.kennzeichen,
+                "unfalldatum": sicht.unfalldatum.isoformat(),
+                "uebergeben_am": sicht.uebergeben_am.isoformat(),
+                "sachstand": sicht.sachstand,
+                "sachstand_seit": sicht.sachstand_seit.isoformat() if sicht.sachstand_seit else "",
+                "fehlende_unterlagen": list(sicht.fehlende_unterlagen),
+            })
+        return {"name": konto.name, "einladung": konto.einladung, "faelle": liste}
 
     statisch = resources.files("aktedirekt").joinpath("static")
 
     @app.get("/")
     async def start() -> FileResponse:
         return FileResponse(str(statisch.joinpath("index.html")))
+
+    @app.get("/partner")
+    async def partnerseite() -> FileResponse:
+        return FileResponse(str(statisch.joinpath("partner.html")))
 
     app.mount("/", StaticFiles(directory=str(statisch)), name="static")
     return app
@@ -240,4 +289,4 @@ def app_aus_umgebung() -> FastAPI:
                             os.environ["AKTEDIREKT_JURNODES_BENUTZER"],
                             os.environ["AKTEDIREKT_JURNODES_SCHLUESSEL"])
     return app_bauen(Speicher(os.environ.get("AKTEDIREKT_DATEN", ".aktedirekt-daten")),
-                     partner=partner_laden(os.environ.get("AKTEDIREKT_PARTNER")), jurnodes=jurnodes)
+                     partner=Partnerliste.laden(os.environ.get("AKTEDIREKT_PARTNER")), jurnodes=jurnodes)
