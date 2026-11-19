@@ -7,3 +7,4 @@ __pycache__/
 .aktedirekt-daten/
 infra/samconfig.toml
 .aws-sam/
+ausgabe/

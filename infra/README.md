@@ -13,7 +13,7 @@ nichts außer dem Konto: eigener Schlüssel, eigene Tabelle, eigener Dateispeich
 | Baustein | Zweck | Grundsatz |
 |---|---|---|
 | API Gateway (HTTP API) | die Adresse des Portals | Zugriffsprotokoll ohne Inhalte und ohne Absenderadresse; Obergrenze 20 Aufrufe je Sekunde |
-| Lambda `aktedirekt-<Stufe>` | die Anwendung: Seiten und Schnittstelle | höchstens 10 gleichzeitig |
+| Lambda `aktedirekt-<Stufe>` | die Anwendung: Seiten und Schnittstelle | begrenzt durch die Obergrenze der Adresse |
 | Lambda `aktedirekt-<Stufe>-abgleich` | holt alle 15 Minuten den Sachstand aus jur|nodes | schreibt nur Zahlen ins Protokoll |
 | DynamoDB | Aufnahmen, Sitzungen, Übergabecodes, Auskunftsnachweis | KMS, Wiederherstellung auf jeden Zeitpunkt, Löschschutz |
 | S3 | Fotos, Unterlagen, Unterschriften | KMS, nicht öffentlich, nur verschlüsselte Verbindung; Abgeliefertes ohne Übernahme verfällt nach einem Tag |
@@ -27,6 +27,28 @@ Minuten gilt und genau die angekündigte Größe annimmt. Danach prüft die
 Anwendung den Inhalt und übernimmt oder verwirft ihn.
 
 Tabelle und Dateispeicher bleiben beim Löschen des Stacks **erhalten**.
+
+## Der kurze Weg: ein Paket, ein Befehl
+
+Ohne Docker und ohne SAM, in der AWS-Konsole selbst:
+
+1. `bash infra/paket_bauen.sh` baut `ausgabe/aktedirekt-aws.zip` (die Funktion
+   samt Abhängigkeiten für Python 3.12 auf arm64, die Vorlage, das Skript).
+2. In der AWS-Konsole oben rechts **Frankfurt** wählen und **CloudShell**
+   öffnen (das Symbol `>_` in der oberen Leiste).
+3. *Aktionen → Datei hochladen* und `aktedirekt-aws.zip` wählen.
+4. Diesen Befehl einfügen, mit der eigenen Adresse für Alarme:
+
+```bash
+unzip -o aktedirekt-aws.zip -d aktedirekt && bash aktedirekt/einrichten.sh name@kanzlei.example
+```
+
+Das Skript legt den Stack an, trägt die Adresse des Portals nach, erzeugt zwei
+Probepartner (Werkstatt und Gutachter) und zeigt deren Zugänge einmalig an.
+Es lässt sich wiederholen; ein zweiter Lauf aktualisiert. Scheitert es, nennt
+es die Gründe, die AWS angibt.
+
+Der lange Weg mit SAM steht darunter und führt zum selben Ergebnis.
 
 ## Voraussetzungen
 

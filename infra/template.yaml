@@ -42,7 +42,6 @@ Globals:
     Runtime: python3.12
     Architectures: [arm64]
     MemorySize: 1024
-    CodeUri: ../
     Environment:
       Variables:
         AKTEDIREKT_SPEICHER: aws
@@ -67,13 +66,15 @@ Resources:
             Principal: { AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root" }
             Action: "kms:*"
             Resource: "*"
-          - Sid: DiensteImKonto
+          # Protokolle: in der Form, die AWS für verschlüsselte Protokollgruppen vorgibt.
+          - Sid: Protokolle
             Effect: Allow
-            Principal: { Service: [logs.amazonaws.com, s3.amazonaws.com, dynamodb.amazonaws.com] }
-            Action: ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey*", "kms:DescribeKey"]
+            Principal: { Service: !Sub "logs.${AWS::Region}.amazonaws.com" }
+            Action: ["kms:Encrypt*", "kms:Decrypt*", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:Describe*"]
             Resource: "*"
             Condition:
-              StringEquals: { "aws:SourceAccount": !Ref AWS::AccountId }
+              ArnLike:
+                "kms:EncryptionContext:aws:logs:arn": !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
           # Damit ein Alarm das verschlüsselte Alarmthema überhaupt erreicht.
           - Sid: Alarme
             Effect: Allow
@@ -109,7 +110,8 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      TableName: !Sub "aktedirekt-${Stufe}"
+      # Ohne festen Namen: Die Tabelle bleibt beim Löschen des Stacks stehen,
+      # und ein fester Name stünde einem neuen Anlauf im Weg.
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - { AttributeName: pk, AttributeType: S }
@@ -138,7 +140,6 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      BucketName: !Sub "aktedirekt-${Stufe}-dateien-${AWS::AccountId}"
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -224,9 +225,9 @@ Resources:
     DependsOn: FunktionProtokoll
     Properties:
       FunctionName: !Sub "aktedirekt-${Stufe}"
+      CodeUri: ../
       Handler: aktedirekt.lambda_handler.handler
       Timeout: 29
-      ReservedConcurrentExecutions: 10
       Events:
         Alles:
           Type: HttpApi
@@ -269,9 +270,9 @@ Resources:
     DependsOn: AbgleichProtokoll
     Properties:
       FunctionName: !Sub "aktedirekt-${Stufe}-abgleich"
+      CodeUri: ../
       Handler: aktedirekt.lambda_handler.abgleich
       Timeout: 300
-      ReservedConcurrentExecutions: 1
       Events:
         Takt:
           Type: ScheduleV2
