@@ -132,7 +132,7 @@ def test_liste_zeigt_eigene_angaben_ohne_auskunft(umgebung):
     daten = anlegen(client, kopf)
     erwartet = [{"fall": daten["fall"], "mandant": "Erika Muster", "kennzeichen": "B-XY 123",
                  "unfalldatum": "2026-11-17", "uebergeben_am": "2026-11-19", "sachstand": "",
-                 "sachstand_seit": "", "fehlende_unterlagen": [], "am_tresen": True}]
+                 "sachstand_seit": "", "fehlende_unterlagen": [], "am_tresen": True, "unterlagen": []}]
     assert faelle(client, kopf) == erwartet
     # Der Kunde übernimmt, ändert seinen Namen, schickt ab - und willigt nicht ein:
     # Die Liste sieht genauso aus wie vorher.

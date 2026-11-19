@@ -76,6 +76,20 @@
     <p class="klein">Diesen Link können Sie Ihrem Kunden schicken.</p>
     <div class="zeile"><input type="text" id="uebergabelink" readonly aria-label="Link für den Kunden"><button type="button" id="link-kopieren" class="schlicht rand">Kopieren</button></div>
   </details>
+  <button type="button" class="neben" id="uebergabe-unterlagen">Unterlagen zu diesem Fall hochladen</button>
+  <button type="button" class="haupt" data-zur-liste>Fertig</button>
+</section>
+
+<section id="unterlagen" hidden>
+  <h1 id="unterlagen-titel"></h1>
+  <p>Kostenvoranschlag, Gutachten, Rechnung oder Fotos – als Foto oder PDF, je Datei bis 15 MB. Die Kanzlei und Ihr Kunde sehen, dass die Unterlage von Ihnen kommt.</p>
+  <div class="hochladen">
+    <label class="knopf">Foto aufnehmen<input type="file" id="u-kamera" accept="image/*" capture="environment" hidden></label>
+    <label class="knopf">Aus Dateien wählen<input type="file" id="u-auswahl" accept="image/jpeg,image/png,image/heic,image/heif,application/pdf" multiple hidden></label>
+  </div>
+  <p id="u-stand" class="klein" hidden></p>
+  <ul id="u-liste" class="dateien"></ul>
+  <p class="klein">Ein Versehen können Sie am Tag des Hochladens selbst zurücknehmen; danach wenden Sie sich bitte an die Kanzlei.</p>
   <button type="button" class="haupt" data-zur-liste>Fertig</button>
 </section>
 </main>

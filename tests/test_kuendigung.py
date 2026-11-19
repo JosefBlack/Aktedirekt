@@ -219,7 +219,7 @@ def test_eingang_im_einzelnen_mit_anlage_und_unterschrift(umgebung):
     assert ["Besteht eine Schwangerschaft?", "nicht relevant"] in e["teile"][4]["zeilen"]
     assert e["teile"][5]["zeilen"] == [["Möchten Sie Prozesskostenhilfe beantragen?", "ja"]]
     assert e["unterschrift"].startswith("data:image/png;base64,") and e["nachweis"]["zeitpunkt"]
-    assert e["dateien"] == [{"kennung": datei["kennung"], "name": "kündigung.pdf", "groesse": len(inhalt)}]
+    assert e["dateien"] == [{"kennung": datei["kennung"], "name": "kündigung.pdf", "groesse": len(inhalt), "von": ""}]
 
     abholen = client.get(f"/api/kanzlei/eingaenge/{fall}/dateien/{datei['kennung']}", headers=k)
     assert abholen.status_code == 200

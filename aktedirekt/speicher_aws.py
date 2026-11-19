@@ -263,11 +263,13 @@ class AwsSpeicher:
             ConsistentRead=True)["Items"]
 
     def dateien(self, kennung: str) -> list[Datei]:
-        return [Datei(e["datei"], e["name"], e["art"], int(e["groesse"])) for e in self._teile(kennung, "D#")]
+        return [Datei(e["datei"], e["name"], e["art"], int(e["groesse"]), e.get("von", ""),
+                      datetime.fromisoformat(e["sk"].split("#")[1])) for e in self._teile(kennung, "D#")]
 
-    def upload_vorbereiten(self, kennung: str, name: str, groesse: int, jetzt: datetime) -> tuple[str, str]:
+    def upload_vorbereiten(self, kennung: str, name: str, groesse: int, jetzt: datetime,
+                           von: str = "") -> tuple[str, str]:
         datei_kennung = secrets.token_hex(12)
-        self._tabelle.put_item(Item={"pk": f"A#{kennung}", "sk": f"W#{datei_kennung}", "name": name,
+        self._tabelle.put_item(Item={"pk": f"A#{kennung}", "sk": f"W#{datei_kennung}", "name": name, "von": von,
                                      "groesse": groesse, "ablauf": _ablauf(jetzt + timedelta(days=1))})
         # Die Länge ist mit unterschrieben: Abgeliefert werden kann nur genau
         # die angekündigte Größe, und die hat die Anwendung vorher begrenzt.
@@ -279,6 +281,10 @@ class AwsSpeicher:
     def _wartend(self, kennung: str, datei_kennung: str) -> dict[str, Any] | None:
         return self._tabelle.get_item(Key={"pk": f"A#{kennung}", "sk": f"W#{datei_kennung}"},
                                       ConsistentRead=True).get("Item")
+
+    def upload_von(self, kennung: str, datei_kennung: str) -> str | None:
+        w = self._wartend(kennung, datei_kennung)
+        return w.get("von", "") if w else None
 
     def upload_inhalt(self, kennung: str, datei_kennung: str, inhalt: bytes) -> bool:
         """In AWS liefert der Browser unmittelbar an S3; über die Anwendung geht nichts."""
@@ -306,9 +312,10 @@ class AwsSpeicher:
         self._s3.copy_object(Bucket=self._bucket, Key=ziel, CopySource={"Bucket": self._bucket, "Key": quelle})
         groesse = int(self._s3.head_object(Bucket=self._bucket, Key=ziel)["ContentLength"])
         self._s3.delete_object(Bucket=self._bucket, Key=quelle)
-        datei = Datei(datei_kennung, w["name"], art, groesse)
+        datei = Datei(datei_kennung, w["name"], art, groesse, w.get("von", ""), jetzt)
         self._tabelle.put_item(Item={"pk": f"A#{kennung}", "sk": f"D#{jetzt.isoformat()}#{datei_kennung}",
-                                     "datei": datei_kennung, "name": datei.name, "art": art, "groesse": groesse})
+                                     "datei": datei_kennung, "name": datei.name, "art": art, "groesse": groesse,
+                                     "von": datei.von})
         self._tabelle.delete_item(Key={"pk": f"A#{kennung}", "sk": f"W#{datei_kennung}"})
         return datei
 

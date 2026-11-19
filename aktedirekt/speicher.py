@@ -105,6 +105,9 @@ class Datei:
     name: str
     art: str
     groesse: int
+    # Wer sie eingereicht hat: leer für den Mandanten, sonst die Kennung des Partners.
+    von: str = ""
+    hochgeladen_am: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -145,6 +148,9 @@ class Speicher:
             for name, art in _NEUE_SPALTEN.items():
                 if name not in vorhanden:
                     db.execute(f"ALTER TABLE aufnahme ADD COLUMN {name} {art}")
+            for tabelle in ("datei", "upload"):
+                if "von" not in {z["name"] for z in db.execute(f"PRAGMA table_info({tabelle})")}:
+                    db.execute(f"ALTER TABLE {tabelle} ADD COLUMN von TEXT NOT NULL DEFAULT ''")
 
     def _db(self) -> sqlite3.Connection:
         db = sqlite3.connect(self._ordner / "aktedirekt.sqlite3")
@@ -312,21 +318,29 @@ class Speicher:
         with closing(self._db()) as db:
             zeilen = db.execute("SELECT * FROM datei WHERE aufnahme = ? ORDER BY hochgeladen_am, kennung",
                                 (kennung,)).fetchall()
-        return [Datei(z["kennung"], z["name"], z["art"], z["groesse"]) for z in zeilen]
+        return [Datei(z["kennung"], z["name"], z["art"], z["groesse"], z["von"],
+                      datetime.fromisoformat(z["hochgeladen_am"])) for z in zeilen]
 
     # Hochladen geht in drei Schritten, damit ein Foto in AWS nicht durch die
     # Anwendung muss, sondern unmittelbar in den Dateispeicher geht:
     # vorbereiten -> Inhalt abliefern -> übernehmen (nach Prüfung) oder verwerfen.
 
-    def upload_vorbereiten(self, kennung: str, name: str, groesse: int, jetzt: datetime) -> tuple[str, str]:
+    def upload_vorbereiten(self, kennung: str, name: str, groesse: int, jetzt: datetime,
+                           von: str = "") -> tuple[str, str]:
         """Gibt (Kennung der Datei, Adresse zum Abliefern) zurück.
 
         Die Adresse ist hier leer: Abgeliefert wird bei der Anwendung selbst.
         """
         datei_kennung = secrets.token_hex(12)
         with closing(self._db()) as db, db:
-            db.execute("INSERT INTO upload VALUES (?,?,?,?)", (datei_kennung, kennung, name, groesse))
+            db.execute("INSERT INTO upload (kennung, aufnahme, name, groesse, von) VALUES (?,?,?,?,?)",
+                       (datei_kennung, kennung, name, groesse, von))
         return datei_kennung, ""
+
+    def upload_von(self, kennung: str, datei_kennung: str) -> str | None:
+        """Wer diese Datei angekündigt hat - ``None``, wenn es die Ankündigung nicht gibt."""
+        z = self._wartend(kennung, datei_kennung)
+        return z["von"] if z else None
 
     def _wartend(self, kennung: str, datei_kennung: str) -> sqlite3.Row | None:
         with closing(self._db()) as db:
@@ -354,11 +368,13 @@ class Speicher:
         # Der Name auf der Platte ist ein Zufallswert; der Name des Mandanten
         # steht nur in der Datenbank und kann deshalb keinen Pfad bilden.
         (ordner / f"{datei_kennung}.eingang").replace(ordner / f"{datei_kennung}.{art}")
-        datei = Datei(datei_kennung, z["name"], art, (ordner / f"{datei_kennung}.{art}").stat().st_size)
+        datei = Datei(datei_kennung, z["name"], art, (ordner / f"{datei_kennung}.{art}").stat().st_size,
+                      z["von"], jetzt)
         with closing(self._db()) as db, db:
             db.execute("DELETE FROM upload WHERE kennung = ?", (datei_kennung,))
-            db.execute("INSERT INTO datei VALUES (?,?,?,?,?,?)",
-                       (datei.kennung, kennung, datei.name, art, datei.groesse, jetzt.isoformat()))
+            db.execute("INSERT INTO datei (kennung, aufnahme, name, art, groesse, hochgeladen_am, von) "
+                       "VALUES (?,?,?,?,?,?,?)",
+                       (datei.kennung, kennung, datei.name, art, datei.groesse, jetzt.isoformat(), datei.von))
         return datei
 
     def upload_verwerfen(self, kennung: str, datei_kennung: str) -> None:

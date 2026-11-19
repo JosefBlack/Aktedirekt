@@ -9,6 +9,9 @@ from __future__ import annotations
 
 MAX_BYTES = 15 * 1024 * 1024
 MAX_ANZAHL = 30
+# Was ein Partner je Fall einreichen kann - gezählt für sich, damit seine
+# Unterlagen dem Mandanten keinen Platz nehmen und umgekehrt.
+MAX_ANZAHL_PARTNER = 10
 
 _HEIF = {b"heic", b"heix", b"hevc", b"mif1", b"msf1", b"heif"}
 

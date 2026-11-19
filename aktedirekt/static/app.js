@@ -242,8 +242,9 @@ function dateien_zeigen() {
     liste.textContent = "";
     for (const d of zustand.dateien) {
       const li = knoten("li");
-      li.append(knoten("span", {}, d.name));
-      if (!zustand.abgeschlossen) {
+      li.append(knoten("span", {}, d.name + (d.von ? " · von " + d.von : "")));
+      // Was die Werkstatt eingereicht hat, nimmt der Mandant nicht heraus.
+      if (!zustand.abgeschlossen && !d.von) {
         const weg = knoten("button", { type: "button", "aria-label": d.name + " entfernen" }, "×");
         weg.addEventListener("click", async () => {
           try {

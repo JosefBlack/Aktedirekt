@@ -151,7 +151,7 @@ async function eingang_laden(fall) {
     const anlagen = teil("ul", "anlagen");
     for (const d of e.dateien) {
       const li = teil("li");
-      li.append(teil("span", "", d.name + " (" + Math.max(1, Math.round(d.groesse / 1024)) + " KB)"));
+      li.append(teil("span", "", d.name + " (" + Math.max(1, Math.round(d.groesse / 1024)) + " KB)" + (d.von ? " · eingereicht von " + d.von : "")));
       const knopf = teil("button", "schlicht rand", "Öffnen");
       knopf.type = "button";
       knopf.addEventListener("click", () => datei_oeffnen(fall, d).catch(gescheitert));

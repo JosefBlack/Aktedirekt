@@ -47,6 +47,8 @@ _PNG = b"\x89PNG\r\n\x1a\n"
 SITZUNG_DAUER = timedelta(hours=8)
 # So lange kann der Kunde den Code vom Tresen auf seinem Gerät einlösen.
 UEBERGABE_DAUER = timedelta(hours=72)
+# So lange kann ein Partner eine versehentlich eingereichte Unterlage selbst zurücknehmen.
+ENTFERNEN_FRIST = timedelta(hours=24)
 
 _KOPFZEILEN = {
     "X-Content-Type-Options": "nosniff",
@@ -146,6 +148,10 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
              "felder": [_feld(f) for f in felder]} for s, felder in art.schritte.items()] if art.dynamisch else [],
     } for name, art in FALLARTEN.items()}
 
+    def einreicher(von: str) -> str:
+        konto = partnerliste.konto(von)
+        return konto.name if konto else ("Partner" if von else "")
+
     def zustand(aufnahme: Aufnahme) -> dict[str, Any]:
         konto = partnerliste.konto(aufnahme.partner)
         name = konto.name if konto else ""
@@ -160,7 +166,9 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "ergaenzungen": aufnahme.ergaenzungen(),
             **bauplan[art.name],
             "vorbelegt": aufnahme.vorbelegt(),
-            "dateien": [{"kennung": d.kennung, "name": d.name} for d in speicher.dateien(aufnahme.kennung)],
+            # Der Mandant sieht, was zu seinem Fall eingereicht wurde - auch von wem.
+            "dateien": [{"kennung": d.kennung, "name": d.name, "von": einreicher(d.von)}
+                        for d in speicher.dateien(aufnahme.kennung)],
             "abgeschlossen": aufnahme.abgeschlossen_am is not None,
             "sachstand": stufen.bezeichnung(aufnahme.sachstand),
             "partner": name,
@@ -236,10 +244,16 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         speicher.schritt_speichern(aufnahme.kennung, ERG + abschnitt, sauber)
         return JSONResponse({"fehler": {}, "ergaenzungen": {**aufnahme.ergaenzungen(), abschnitt: sauber}})
 
-    @app.post("/api/aufnahme/dateien")
-    async def hochladen(request: Request) -> dict[str, str]:
-        """Kündigt eine Datei an und sagt, wohin der Browser sie schickt."""
-        aufnahme = aufnahme_von(request)
+    # Hochladen in drei Schritten - für den Mandanten und, mit eigener Obergrenze,
+    # für den Partner. ``von`` ist leer für den Mandanten, sonst die Kennung des Partners.
+
+    def eigene(aufnahme: Aufnahme, von: str) -> list[Any]:
+        return [d for d in speicher.dateien(aufnahme.kennung) if d.von == von]
+
+    def grenze(von: str) -> int:
+        return dateien.MAX_ANZAHL_PARTNER if von else dateien.MAX_ANZAHL
+
+    async def datei_ankuendigen(aufnahme: Aufnahme, von: str, request: Request, wohin: str) -> dict[str, str]:
         daten = await json_lesen(request)
         name = daten.get("name", "") if isinstance(daten, dict) else ""
         groesse = daten.get("groesse") if isinstance(daten, dict) else None
@@ -247,47 +261,58 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             raise HTTPException(400, "Die Angaben konnten nicht gelesen werden.")
         if groesse > dateien.MAX_BYTES:
             raise HTTPException(413, "Das ist zu groß.")
-        if len(speicher.dateien(aufnahme.kennung)) >= dateien.MAX_ANZAHL:
-            raise HTTPException(409, f"Es sind höchstens {dateien.MAX_ANZAHL} Dateien möglich.")
+        if len(eigene(aufnahme, von)) >= grenze(von):
+            raise HTTPException(409, f"Es sind höchstens {grenze(von)} Dateien möglich.")
         anzeige = "".join(z for z in name if z.isprintable() and z not in "/\\")[:80] or "Datei"
-        kennung, adresse = speicher.upload_vorbereiten(aufnahme.kennung, anzeige, groesse, jetzt())
-        return {"kennung": kennung, "adresse": adresse or f"/api/aufnahme/dateien/{kennung}/inhalt"}
+        kennung, adresse = speicher.upload_vorbereiten(aufnahme.kennung, anzeige, groesse, jetzt(), von)
+        return {"kennung": kennung, "adresse": adresse or f"{wohin}/{kennung}/inhalt"}
 
-    @app.put("/api/aufnahme/dateien/{datei}/inhalt")
-    async def abliefern_hier(datei: str, request: Request) -> Response:
+    async def datei_abliefern(aufnahme: Aufnahme, von: str, datei: str, request: Request) -> Response:
         """Nur außerhalb von AWS: Dort nimmt der Dateispeicher den Inhalt selbst an."""
-        aufnahme = aufnahme_von(request)
         inhalt = await koerper_lesen(request, dateien.MAX_BYTES)
-        if not speicher.upload_inhalt(aufnahme.kennung, datei, inhalt):
+        # Abliefern darf nur, wer angekündigt hat.
+        if speicher.upload_von(aufnahme.kennung, datei) != von or not speicher.upload_inhalt(aufnahme.kennung, datei, inhalt):
             raise HTTPException(404, "Diese Datei gibt es nicht.")
         return Response(status_code=204)
 
-    @app.post("/api/aufnahme/dateien/{datei}/fertig")
-    async def uebernehmen_datei(datei: str, request: Request) -> dict[str, str]:
+    def datei_uebernehmen(aufnahme: Aufnahme, von: str, datei: str) -> dict[str, str]:
         """Prüft das Abgelieferte und nimmt es zur Aufnahme - oder verwirft es."""
-        aufnahme = aufnahme_von(request)
-        anfang = speicher.upload_anfang(aufnahme.kennung, datei)
+        anfang = speicher.upload_anfang(aufnahme.kennung, datei) if speicher.upload_von(aufnahme.kennung, datei) == von else None
         if anfang is None:
             raise HTTPException(404, "Diese Datei gibt es nicht.")
         art = dateien.art_erkennen(anfang[0])
         zu_gross = anfang[1] > dateien.MAX_BYTES
-        zu_viele = len(speicher.dateien(aufnahme.kennung)) >= dateien.MAX_ANZAHL
+        zu_viele = len(eigene(aufnahme, von)) >= grenze(von)
         if not art or zu_gross or zu_viele:
             speicher.upload_verwerfen(aufnahme.kennung, datei)
             if zu_gross:
                 raise HTTPException(413, "Das ist zu groß.")
             if zu_viele:
-                raise HTTPException(409, f"Es sind höchstens {dateien.MAX_ANZAHL} Dateien möglich.")
+                raise HTTPException(409, f"Es sind höchstens {grenze(von)} Dateien möglich.")
             raise HTTPException(415, "Bitte ein Foto (JPG, PNG, HEIC) oder ein PDF hochladen.")
         fertig = speicher.upload_uebernehmen(aufnahme.kennung, datei, art, jetzt())
         return {"kennung": fertig.kennung, "name": fertig.name}
+
+    @app.post("/api/aufnahme/dateien")
+    async def hochladen(request: Request) -> dict[str, str]:
+        """Kündigt eine Datei an und sagt, wohin der Browser sie schickt."""
+        return await datei_ankuendigen(aufnahme_von(request), "", request, "/api/aufnahme/dateien")
+
+    @app.put("/api/aufnahme/dateien/{datei}/inhalt")
+    async def abliefern_hier(datei: str, request: Request) -> Response:
+        return await datei_abliefern(aufnahme_von(request), "", datei, request)
+
+    @app.post("/api/aufnahme/dateien/{datei}/fertig")
+    async def uebernehmen_datei(datei: str, request: Request) -> dict[str, str]:
+        return datei_uebernehmen(aufnahme_von(request), "", datei)
 
     @app.delete("/api/aufnahme/dateien/{datei}")
     async def entfernen(datei: str, request: Request) -> Response:
         aufnahme = aufnahme_von(request)
         if aufnahme.abgeschlossen_am:
             raise HTTPException(409, "Nach dem Abschicken kann nichts mehr entfernt werden.")
-        if not speicher.datei_entfernen(aufnahme.kennung, datei):
+        # Was ein Partner eingereicht hat, entfernt der Mandant nicht.
+        if not any(d.kennung == datei for d in eigene(aufnahme, "")) or not speicher.datei_entfernen(aufnahme.kennung, datei):
             raise HTTPException(404, "Diese Datei gibt es nicht.")
         return Response(status_code=204)
 
@@ -474,6 +499,58 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             raise HTTPException(409, "Ihr Kunde hat die Aufnahme bereits auf seinem Gerät geöffnet.")
         return neu
 
+    def unterlagen(aufnahme: Aufnahme, partner: str) -> list[dict[str, Any]]:
+        """Was dieser Partner selbst zum Fall eingereicht hat - nichts vom Mandanten, nichts von anderen."""
+        return [{"kennung": d.kennung, "name": d.name,
+                 "entfernbar": d.hochgeladen_am is not None and jetzt() - d.hochgeladen_am < ENTFERNEN_FRIST}
+                for d in eigene(aufnahme, partner)]
+
+    def fall_von(fall: str, request: Request) -> tuple[Any, Aufnahme]:
+        """Der Fall, wenn er in der Liste dieses Partners steht - sonst dieselbe Antwort wie für Unbekanntes."""
+        konto = konto_von(request)
+        aufnahme = speicher.nach_kennung(fall)
+        sichtbar = False
+        if aufnahme is not None and aufnahme.partner == konto.kennung:
+            sichtbar = bool(aufnahme.vom_partner)
+            if not sichtbar and aufnahme.abgeschlossen_am is not None:
+                sicht = partner_sicht(als_fall(aufnahme, konto.art), konto.kennung, jetzt(), stufen)
+                sichtbar = sicht is not None and bool(sicht.sachstand)
+        if aufnahme is None or not sichtbar:
+            raise HTTPException(404, "Diesen Fall gibt es nicht.")
+        return konto, aufnahme
+
+    @app.post("/api/partner/faelle/{fall}/dateien")
+    async def partner_hochladen(fall: str, request: Request) -> dict[str, str]:
+        """Werkstatt oder Sachverständiger reichen Unterlagen zum Fall ein."""
+        konto, aufnahme = fall_von(fall, request)
+        return await datei_ankuendigen(aufnahme, konto.kennung, request, f"/api/partner/faelle/{fall}/dateien")
+
+    @app.put("/api/partner/faelle/{fall}/dateien/{datei}/inhalt")
+    async def partner_abliefern(fall: str, datei: str, request: Request) -> Response:
+        konto, aufnahme = fall_von(fall, request)
+        return await datei_abliefern(aufnahme, konto.kennung, datei, request)
+
+    @app.post("/api/partner/faelle/{fall}/dateien/{datei}/fertig")
+    async def partner_uebernehmen(fall: str, datei: str, request: Request) -> dict[str, str]:
+        konto, aufnahme = fall_von(fall, request)
+        return datei_uebernehmen(aufnahme, konto.kennung, datei)
+
+    @app.delete("/api/partner/faelle/{fall}/dateien/{datei}")
+    async def partner_entfernen(fall: str, datei: str, request: Request) -> Response:
+        """Ein Versehen lässt sich einen Tag lang selbst zurücknehmen.
+
+        Die Grenze hängt allein an der Zeit seit dem Hochladen - nicht am Stand
+        des Falls: Sonst verriete die Antwort, ob der Kunde schon abgeschickt hat.
+        """
+        konto, aufnahme = fall_von(fall, request)
+        eintrag = next((d for d in eigene(aufnahme, konto.kennung) if d.kennung == datei), None)
+        if eintrag is None:
+            raise HTTPException(404, "Diese Datei gibt es nicht.")
+        if eintrag.hochgeladen_am is None or jetzt() - eintrag.hochgeladen_am >= ENTFERNEN_FRIST:
+            raise HTTPException(409, "Das lässt sich nur am Tag des Hochladens zurücknehmen. Bitte wenden Sie sich an die Kanzlei.")
+        speicher.datei_entfernen(aufnahme.kennung, datei)
+        return Response(status_code=204)
+
     @app.get("/api/partner/faelle")
     async def faelle(request: Request) -> dict[str, Any]:
         zeitpunkt = jetzt()
@@ -496,7 +573,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                         "unfalldatum": eigen.get("unfalldatum", ""),
                         "uebergeben_am": aufnahme.angelegt_am.date().isoformat(),
                         "sachstand": "", "sachstand_seit": "", "fehlende_unterlagen": [],
-                        "am_tresen": True,
+                        "am_tresen": True, "unterlagen": unterlagen(aufnahme, konto.kennung),
                     })
                 continue
             speicher.auskunft_vermerken(konto.kennung, aufnahme.kennung, sicht.sachstand, zeitpunkt)
@@ -507,7 +584,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 "sachstand": sicht.sachstand,
                 "sachstand_seit": sicht.sachstand_seit.isoformat() if sicht.sachstand_seit else "",
                 "fehlende_unterlagen": list(sicht.fehlende_unterlagen),
-                "am_tresen": bool(aufnahme.vom_partner),
+                "am_tresen": bool(aufnahme.vom_partner), "unterlagen": unterlagen(aufnahme, konto.kennung),
             })
         return {"name": konto.name, "einladung": konto.einladung, "faelle": liste}
 
@@ -556,7 +633,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         unterschrift = speicher.unterschrift(aufnahme.kennung)
         nachweis = speicher.nachweis(aufnahme.kennung)
         return {**kopfdaten(aufnahme), "teile": aufnahme.fuer_die_akte(),
-                "dateien": [{"kennung": d.kennung, "name": d.name, "groesse": d.groesse}
+                "dateien": [{"kennung": d.kennung, "name": d.name, "groesse": d.groesse, "von": einreicher(d.von)}
                             for d in speicher.dateien(aufnahme.kennung)],
                 "unterschrift": ("data:image/png;base64," + base64.b64encode(unterschrift).decode())
                                 if unterschrift else "",

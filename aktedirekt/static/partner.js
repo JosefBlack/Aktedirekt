@@ -80,6 +80,11 @@ function zeigen() {
       li.append(nochmal);
     }
     if (f.fehlende_unterlagen.length) li.append(teil("div", "fehlt", "Es fehlt noch: " + f.fehlende_unterlagen.join(", ")));
+    const hoch = teil("button", "schlicht rand nochmal", f.unterlagen.length
+      ? "Unterlagen (" + f.unterlagen.length + " eingereicht)" : "Unterlagen hochladen");
+    hoch.type = "button";
+    hoch.addEventListener("click", () => unterlagen_oeffnen(f));
+    li.append(hoch);
     liste.append(li);
   }
   $("#leer").hidden = faelle.length > 0;
@@ -101,11 +106,89 @@ async function laden() {
 }
 
 function ansicht(name) {
-  for (const id of ["anmeldung", "liste", "tresen", "uebergabe"]) $("#" + id).hidden = id !== name;
+  for (const id of ["anmeldung", "liste", "tresen", "uebergabe", "unterlagen"]) $("#" + id).hidden = id !== name;
   window.scrollTo(0, 0);
 }
 
+// ---- Unterlagen zum Fall ---------------------------------------------------
+
+let unterlagen_fall = null;
+
+function unterlagen_liste() {
+  const liste = $("#u-liste");
+  liste.textContent = "";
+  for (const d of unterlagen_fall.unterlagen) {
+    const li = teil("li");
+    li.append(teil("span", "", d.name));
+    if (d.entfernbar) {
+      const weg = teil("button", "", "×");
+      weg.type = "button";
+      weg.setAttribute("aria-label", d.name + " zurücknehmen");
+      weg.addEventListener("click", async () => {
+        melden("");
+        try {
+          await aufruf("DELETE", "/api/partner/faelle/" + unterlagen_fall.fall + "/dateien/" + d.kennung);
+          unterlagen_fall.unterlagen = unterlagen_fall.unterlagen.filter((x) => x.kennung !== d.kennung);
+          unterlagen_liste();
+        } catch (fehler) { fehler.status === 401 ? abgemeldet("Bitte erneut anmelden.") : melden(fehler.message); }
+      });
+      li.append(weg);
+    }
+    liste.append(li);
+  }
+}
+
+function unterlagen_oeffnen(f) {
+  melden("");
+  unterlagen_fall = { fall: f.fall, unterlagen: f.unterlagen.slice() };
+  $("#unterlagen-titel").textContent = "Unterlagen zu " + f.mandant;
+  unterlagen_liste();
+  ansicht("unterlagen");
+}
+
+// Drei Schritte wie beim Mandanten: ankündigen, abliefern, prüfen lassen.
+async function unterlage_hochladen(datei) {
+  if (datei.size > 15 * 1024 * 1024) throw new Error("zu groß (höchstens 15 MB)");
+  const basis = "/api/partner/faelle/" + unterlagen_fall.fall + "/dateien";
+  const ziel = await aufruf("POST", basis, { name: datei.name, groesse: datei.size });
+  const hier = ziel.adresse.startsWith("/");
+  let antwort;
+  try {
+    antwort = await fetch(ziel.adresse, { method: "PUT", body: datei, headers: hier ? { Authorization: "Bearer " + sitzung } : {} });
+  } catch (e) { throw new Error("keine Verbindung"); }
+  if (!antwort.ok) throw new Error("das Hochladen hat nicht geklappt");
+  return aufruf("POST", basis + "/" + ziel.kennung + "/fertig");
+}
+
+for (const id of ["u-kamera", "u-auswahl"]) {
+  $("#" + id).addEventListener("change", async (e) => {
+    const dateien = Array.from(e.target.files);
+    e.target.value = "";
+    melden("");
+    let nr = 0;
+    for (const datei of dateien) {
+      nr += 1;
+      $("#u-stand").hidden = false;
+      $("#u-stand").textContent = "Lade " + nr + " von " + dateien.length + " hoch …";
+      try {
+        const neu = await unterlage_hochladen(datei);
+        unterlagen_fall.unterlagen.push({ kennung: neu.kennung, name: neu.name, entfernbar: true });
+        unterlagen_liste();
+      } catch (fehler) {
+        if (fehler.status === 401) { abgemeldet("Bitte erneut anmelden."); break; }
+        melden("„" + datei.name + "“: " + fehler.message);
+      }
+    }
+    $("#u-stand").hidden = true;
+  });
+}
+
+let letzter_fall = null;
+$("#uebergabe-unterlagen").addEventListener("click", () => { if (letzter_fall) unterlagen_oeffnen(letzter_fall); });
+
 function uebergabe_zeigen(daten) {
+  $("#uebergabe-unterlagen").hidden = !daten.fall;
+  if (daten.fall) letzter_fall = { fall: daten.fall, mandant: daten.mandant || "diesem Fall", unterlagen: [] };
   $("#qr").src = daten.qr;
   $("#uebergabelink").value = daten.link;
   $("#link-kopieren").textContent = "Kopieren";
@@ -139,7 +222,7 @@ $("#tresen").addEventListener("submit", async (e) => {
     if (antwort.status === 401) abgemeldet("Bitte erneut anmelden.");
     else if (antwort.status === 422) tresen_fehler(daten.fehler || {});
     else if (!antwort.ok) melden("Das hat nicht geklappt. Bitte noch einmal versuchen.");
-    else uebergabe_zeigen(daten);
+    else uebergabe_zeigen({ ...daten, mandant: (form.vorname.value + " " + form.nachname.value).trim() });
   } catch (fehler) { melden("Keine Verbindung. Bitte später noch einmal versuchen."); }
   form.querySelector("button.haupt").disabled = false;
 });

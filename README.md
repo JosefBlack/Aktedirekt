@@ -33,7 +33,7 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (222 Prüfungen, ohne Netz; was eine Ablage braucht,
+Vorhanden und geprüft (238 Prüfungen, ohne Netz; was eine Ablage braucht,
 läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
@@ -159,6 +159,21 @@ auch keinen neuen Code erzeugen. Ohne Einwilligung des Kunden sieht der Partner
 dauerhaft nur, was er selbst eingetragen hat, mit dem Vermerk „Noch keine
 Auskunft" - gleich, ob der Kunde noch nicht begonnen, abgeschickt oder die
 Auskunft abgelehnt hat.
+
+## Unterlagen vom Partner
+
+Werkstatt und Sachverständiger können zu jedem Fall in ihrer Liste Unterlagen
+einreichen – Kostenvoranschlag, Gutachten, Rechnung, Fotos –, am Tresen auch
+schon, bevor der Kunde den Code eingelöst hat. Geprüft wird der Inhalt wie beim
+Mandanten; je Partner und Fall sind es höchstens zehn Dateien, gezählt für
+sich.
+
+Mandant und Kanzlei sehen, von wem eine Unterlage kommt. Der Partner sieht nur,
+was er selbst eingereicht hat – nichts vom Mandanten. Ein Versehen kann er 24
+Stunden lang selbst zurücknehmen; die Grenze hängt allein an der Zeit seit dem
+Hochladen und nicht am Stand des Falls, damit die Antwort nicht verrät, ob der
+Kunde schon abgeschickt hat. Der Mandant kann Unterlagen des Partners nicht
+entfernen.
 
 ## Was ein Partner sieht
 
