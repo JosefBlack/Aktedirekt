@@ -1,0 +1,10 @@
+{
+  "name": "Aktedirekt – Unfall melden",
+  "short_name": "Aktedirekt",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f5f7",
+  "theme_color": "#17324d",
+  "lang": "de",
+  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}

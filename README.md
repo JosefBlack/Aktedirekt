@@ -32,24 +32,44 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (31 Prüfungen, ohne Netz):
+Vorhanden und geprüft (60 Prüfungen, ohne Netz):
 
 | Datei | Inhalt |
 |---|---|
+| `aktedirekt/static/` | Schadenaufnahme für das Handy: sechs Schritte, Fotos, Unterschrift |
+| `aktedirekt/web.py` | Schnittstelle dazu; legt nach dem Abschicken den Lead in jur|nodes an |
+| `aktedirekt/aufnahme.py` | welche Angaben es gibt und wann sie gelten |
+| `aktedirekt/dateien.py` | welche Dateien angenommen werden (JPG, PNG, HEIC, PDF bis 15 MB) |
+| `aktedirekt/speicher.py` | Ablage für Entwicklung und Vorführung (SQLite, Ordner) |
+| `aktedirekt/texte/` | Vollmacht, Datenschutz, Einwilligung – **Entwürfe, von der Kanzlei zu ersetzen** |
 | `aktedirekt/domain.py` | Fall, Partner, Einwilligung |
 | `aktedirekt/sicht.py` | die Sicht eines Partners auf einen Fall |
 | `aktedirekt/sachstand.py`, `sachstaende.json` | Stufen und ihre Ableitung aus jur|nodes; die Liste ist von der Kanzlei pflegbar |
 | `aktedirekt/jurnodes.py` | Lead anlegen und lesen, Aktenstatus, Akteneigenschaft |
 | `aktedirekt/abgleich.py` | Sachstand eines Falls aus jur|nodes holen |
 
-Noch nicht vorhanden: Datenbank, Anmeldung, Oberflächen, Upload, Vollmacht,
-AWS-Infrastruktur. Der jur|nodes-Client ist nach der Beschreibung des
-Herstellers (Fassung 1.0.2) gebaut und **gegen den Server der Kanzlei noch
-nicht gelaufen**.
+**Nur mit Testdaten benutzen.** Vor echten Mandaten fehlen: Betrieb in AWS mit
+verschlüsselter Ablage, Anmeldung mit Einmalcode (bisher merkt sich nur das
+Gerät den Zugang), Begrenzung der Aufrufe, Prüfung der Dateien auf
+Schadsoftware, Übergabe von Angaben und Dateien an jur|nodes (bisher nur
+Kurzrubrum und Vermittler), Benachrichtigung des Mandanten, die Fallliste für
+Partner. Der jur|nodes-Client ist nach der Beschreibung des Herstellers
+(Fassung 1.0.2) gebaut und **gegen den Server der Kanzlei noch nicht
+gelaufen**.
+
+## Ausprobieren
+
+```bash
+.venv/bin/python -m aktedirekt
+```
+
+Dann im Browser `http://127.0.0.1:8000/` öffnen; mit
+`http://127.0.0.1:8000/?p=test-werkstatt` läuft die Aufnahme über die
+Beispielwerkstatt aus `testdaten/partner.json`.
 
 ## Oberfläche für den Mandanten
 
-Geplant als Web-App, die sich auf dem Handy wie eine App verhält (Symbol auf
+Gebaut als Web-App, die sich auf dem Handy wie eine App verhält (Symbol auf
 dem Startbildschirm, Kamera für Fotos und Unterlagen, Unterschrift mit dem
 Finger). Der Mandant öffnet einen Link oder QR-Code und muss nichts
 installieren. Eine App in den Stores von Apple und Google kann später

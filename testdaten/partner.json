@@ -1,0 +1,4 @@
+[
+  {"kennung": "werkstatt-beispiel", "art": "werkstatt", "name": "Autohaus Beispiel GmbH", "einladung": "test-werkstatt"},
+  {"kennung": "sv-beispiel", "art": "sachverstaendiger", "name": "Sachverständigenbüro Beispiel", "einladung": "test-gutachter"}
+]

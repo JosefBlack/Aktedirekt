@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17324d">
+<title>Unfall melden</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="kopf">
+    <button type="button" id="zurueck" class="zurueck" aria-label="Zurück" hidden>‹</button>
+    <span id="titel">Unfall melden</span>
+    <span id="zaehler" class="zaehler"></span>
+  </div>
+  <div class="balken"><div id="fortschritt"></div></div>
+</header>
+
+<main>
+<p id="meldung" class="meldung" role="alert" hidden></p>
+
+<section data-seite="start">
+  <h1>Unfall melden</h1>
+  <p id="partnerhinweis" class="hinweis" hidden></p>
+  <p>In etwa fünf Minuten nehmen wir Ihren Unfall auf. Halten Sie, wenn möglich, bereit:</p>
+  <ul>
+    <li>Kennzeichen des anderen Fahrzeugs</li>
+    <li>Fotos vom Schaden und vom Unfallort</li>
+    <li>Ihren Fahrzeugschein</li>
+  </ul>
+  <p class="klein">Ihre Angaben werden nach jedem Schritt gespeichert. Sie können unterbrechen und auf diesem Gerät später weitermachen.</p>
+  <button type="button" class="haupt" id="los">Los geht’s</button>
+</section>
+
+<form data-seite="unfall" data-schritt="unfall" novalidate hidden>
+  <h1>Der Unfall</h1>
+  <label>Wann war der Unfall?
+    <input type="date" name="unfalldatum" required></label>
+  <p class="fehler" data-fehler="unfalldatum"></p>
+  <label>Uhrzeit <span class="frei">falls bekannt</span>
+    <input type="time" name="unfallzeit"></label>
+  <p class="fehler" data-fehler="unfallzeit"></p>
+  <label>Wo war der Unfall?
+    <input type="text" name="unfallort" maxlength="200" autocomplete="off" placeholder="Straße, Ort"></label>
+  <p class="fehler" data-fehler="unfallort"></p>
+  <label>Was ist passiert?
+    <textarea name="hergang" rows="5" maxlength="4000" placeholder="In Ihren eigenen Worten"></textarea></label>
+  <p class="fehler" data-fehler="hergang"></p>
+  <fieldset><legend>War die Polizei vor Ort?</legend>
+    <div class="wahl"><label><input type="radio" name="polizei" value="ja"><span>Ja</span></label><label><input type="radio" name="polizei" value="nein"><span>Nein</span></label></div></fieldset>
+  <p class="fehler" data-fehler="polizei"></p>
+  <label data-zeige-wenn="polizei=ja">Aktenzeichen der Polizei <span class="frei">falls bekannt</span>
+    <input type="text" name="polizei_az" maxlength="60" autocomplete="off"></label>
+  <p class="fehler" data-fehler="polizei_az"></p>
+  <fieldset><legend>Wurde jemand verletzt?</legend>
+    <div class="wahl"><label><input type="radio" name="verletzt" value="ja"><span>Ja</span></label><label><input type="radio" name="verletzt" value="nein"><span>Nein</span></label></div></fieldset>
+  <p class="fehler" data-fehler="verletzt"></p>
+  <label>Zeugen <span class="frei">Name und Telefon, falls vorhanden</span>
+    <textarea name="zeugen" rows="2" maxlength="1000"></textarea></label>
+  <p class="fehler" data-fehler="zeugen"></p>
+  <button type="submit" class="haupt">Weiter</button>
+</form>
+
+<form data-seite="fahrzeug" data-schritt="fahrzeug" novalidate hidden>
+  <h1>Ihr Fahrzeug</h1>
+  <label>Kennzeichen
+    <input type="text" name="kennzeichen" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="B-XY 123"></label>
+  <p class="fehler" data-fehler="kennzeichen"></p>
+  <label>Hersteller und Modell <span class="frei">freiwillig</span>
+    <input type="text" name="modell" maxlength="120" autocomplete="off"></label>
+  <p class="fehler" data-fehler="modell"></p>
+  <fieldset><legend>Sind Sie selbst Halter des Fahrzeugs?</legend>
+    <div class="wahl"><label><input type="radio" name="halter_selbst" value="ja"><span>Ja</span></label><label><input type="radio" name="halter_selbst" value="nein"><span>Nein</span></label></div></fieldset>
+  <p class="fehler" data-fehler="halter_selbst"></p>
+  <label data-zeige-wenn="halter_selbst=nein">Wer ist Halter?
+    <input type="text" name="halter_name" maxlength="120" autocomplete="off"></label>
+  <p class="fehler" data-fehler="halter_name"></p>
+  <fieldset><legend>Ist das Fahrzeug finanziert oder geleast?</legend>
+    <div class="wahl drei"><label><input type="radio" name="finanzierung" value="nein"><span>Nein</span></label><label><input type="radio" name="finanzierung" value="finanziert"><span>Finanziert</span></label><label><input type="radio" name="finanzierung" value="geleast"><span>Geleast</span></label></div></fieldset>
+  <p class="fehler" data-fehler="finanzierung"></p>
+  <fieldset><legend>Sind Sie zum Vorsteuerabzug berechtigt?</legend>
+    <p class="klein">Das betrifft in der Regel nur Fahrzeuge, die zu einem Betrieb gehören.</p>
+    <div class="wahl"><label><input type="radio" name="vorsteuer" value="ja"><span>Ja</span></label><label><input type="radio" name="vorsteuer" value="nein"><span>Nein</span></label></div></fieldset>
+  <p class="fehler" data-fehler="vorsteuer"></p>
+  <button type="submit" class="haupt">Weiter</button>
+</form>
+
+<form data-seite="gegner" data-schritt="gegner" novalidate hidden>
+  <h1>Das andere Fahrzeug</h1>
+  <fieldset><legend>Kennen Sie das Kennzeichen des anderen Fahrzeugs?</legend>
+    <div class="wahl"><label><input type="radio" name="gegner_bekannt" value="ja"><span>Ja</span></label><label><input type="radio" name="gegner_bekannt" value="nein"><span>Nein</span></label></div></fieldset>
+  <p class="fehler" data-fehler="gegner_bekannt"></p>
+  <label data-zeige-wenn="gegner_bekannt=ja">Kennzeichen
+    <input type="text" name="gegner_kennzeichen" maxlength="12" autocapitalize="characters" autocomplete="off"></label>
+  <p class="fehler" data-fehler="gegner_kennzeichen"></p>
+  <label>Name des Fahrers oder Halters <span class="frei">falls bekannt</span>
+    <input type="text" name="gegner_name" maxlength="120" autocomplete="off"></label>
+  <p class="fehler" data-fehler="gegner_name"></p>
+  <label>Versicherung des anderen <span class="frei">falls bekannt</span>
+    <input type="text" name="gegner_versicherung" maxlength="120" autocomplete="off"></label>
+  <p class="fehler" data-fehler="gegner_versicherung"></p>
+  <label>Schadennummer <span class="frei">falls schon vergeben</span>
+    <input type="text" name="gegner_schadennummer" maxlength="60" autocomplete="off"></label>
+  <p class="fehler" data-fehler="gegner_schadennummer"></p>
+  <button type="submit" class="haupt">Weiter</button>
+</form>
+
+<section data-seite="fotos" hidden>
+  <h1>Fotos und Unterlagen</h1>
+  <p>Schaden, Unfallort, Fahrzeugschein, Gutachten oder Kostenvoranschlag – was Sie haben. Sie können auch später noch etwas nachreichen.</p>
+  <div class="hochladen">
+    <label class="knopf">Foto aufnehmen<input type="file" id="kamera" accept="image/*" capture="environment" hidden></label>
+    <label class="knopf">Aus Dateien wählen<input type="file" id="auswahl" accept="image/jpeg,image/png,image/heic,image/heif,application/pdf" multiple hidden></label>
+  </div>
+  <p id="ladestand" class="klein" hidden></p>
+  <ul id="dateiliste" class="dateien"></ul>
+  <button type="button" class="haupt" id="fotos-weiter">Weiter</button>
+</section>
+
+<form data-seite="person" data-schritt="person" novalidate hidden>
+  <h1>Ihre Daten</h1>
+  <label>Vorname<input type="text" name="vorname" maxlength="60" autocomplete="given-name"></label>
+  <p class="fehler" data-fehler="vorname"></p>
+  <label>Nachname<input type="text" name="nachname" maxlength="60" autocomplete="family-name"></label>
+  <p class="fehler" data-fehler="nachname"></p>
+  <label>Straße und Hausnummer<input type="text" name="strasse" maxlength="120" autocomplete="street-address"></label>
+  <p class="fehler" data-fehler="strasse"></p>
+  <div class="zeile">
+    <label class="schmal">PLZ<input type="text" name="plz" maxlength="5" inputmode="numeric" autocomplete="postal-code"></label>
+    <label>Ort<input type="text" name="ort" maxlength="80" autocomplete="address-level2"></label>
+  </div>
+  <p class="fehler" data-fehler="plz"></p><p class="fehler" data-fehler="ort"></p>
+  <label>Telefon<input type="tel" name="telefon" maxlength="25" autocomplete="tel"></label>
+  <p class="fehler" data-fehler="telefon"></p>
+  <label>E-Mail<input type="email" name="email" maxlength="120" autocomplete="email"></label>
+  <p class="fehler" data-fehler="email"></p>
+  <fieldset><legend>Haben Sie eine Rechtsschutzversicherung?</legend>
+    <div class="wahl"><label><input type="radio" name="rechtsschutz" value="ja"><span>Ja</span></label><label><input type="radio" name="rechtsschutz" value="nein"><span>Nein</span></label></div></fieldset>
+  <p class="fehler" data-fehler="rechtsschutz"></p>
+  <label data-zeige-wenn="rechtsschutz=ja">Bei welchem Versicherer? <span class="frei">falls bekannt</span>
+    <input type="text" name="rechtsschutz_versicherer" maxlength="120" autocomplete="off"></label>
+  <p class="fehler" data-fehler="rechtsschutz_versicherer"></p>
+  <button type="submit" class="haupt">Weiter</button>
+</form>
+
+<form data-seite="abschluss" novalidate hidden>
+  <h1>Auftrag und Unterschrift</h1>
+  <p class="fehler" data-fehler="_"></p>
+  <div class="text" id="text-vollmacht"></div>
+  <label class="haken"><input type="checkbox" name="vollmacht"><span>Ich erteile den Auftrag und die Vollmacht.</span></label>
+  <p class="fehler" data-fehler="vollmacht"></p>
+  <div class="text" id="text-datenschutz"></div>
+  <label class="haken"><input type="checkbox" name="datenschutz"><span>Zur Kenntnis genommen.</span></label>
+  <p class="fehler" data-fehler="datenschutz"></p>
+  <div id="block-partner" hidden>
+    <div class="text" id="text-partner"></div>
+    <label class="haken"><input type="checkbox" name="einwilligung_partner"><span>Einverstanden <span class="frei">freiwillig</span></span></label>
+  </div>
+  <p class="ueber">Ihre Unterschrift</p>
+  <div class="unterschrift"><canvas id="unterschrift" aria-label="Feld für die Unterschrift"></canvas></div>
+  <button type="button" class="neben" id="loeschen">Unterschrift löschen</button>
+  <p class="fehler" data-fehler="unterschrift"></p>
+  <button type="submit" class="haupt">Verbindlich abschicken</button>
+</form>
+
+<section data-seite="fertig" hidden>
+  <h1>Vielen Dank</h1>
+  <p>Ihre Unfallmeldung ist bei der Kanzlei eingegangen. Wir prüfen sie und melden uns bei Ihnen. Das Mandat kommt erst mit unserer Annahme zustande.</p>
+  <div class="stand"><span class="klein">Stand</span><strong id="sachstand"></strong></div>
+  <p>Sie können weitere Fotos und Unterlagen nachreichen:</p>
+  <div class="hochladen">
+    <label class="knopf">Foto aufnehmen<input type="file" id="kamera2" accept="image/*" capture="environment" hidden></label>
+    <label class="knopf">Aus Dateien wählen<input type="file" id="auswahl2" accept="image/jpeg,image/png,image/heic,image/heif,application/pdf" multiple hidden></label>
+  </div>
+  <p id="ladestand2" class="klein" hidden></p>
+  <ul id="dateiliste2" class="dateien"></ul>
+</section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
