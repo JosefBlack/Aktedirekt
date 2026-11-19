@@ -133,13 +133,15 @@ Anmeldung erscheint wieder der QR-Code.
 Erst, wenn es in jur|nodes einen **eigenen Schnittstellenbenutzer** für
 Aktedirekt gibt (Rechte: `write:leads`, `read:leads`, `read:records`,
 `search:records_subject`, `write:file`) und die Akteneigenschaft „Sachstand" angelegt ist.
-Den Wert in der AWS-Konsole eintragen (Secrets Manager →
-`aktedirekt/probe/jurnodes` → *Wert abrufen* → *Bearbeiten*), nicht auf der
-Befehlszeile – dort bliebe der Schlüssel im Verlauf stehen:
+Eingetragen wird der Zugang in der CloudShell; das Skript fragt Adresse,
+Benutzer und Schlüssel ab (der Schlüssel erscheint dabei nicht auf dem
+Bildschirm und nicht im Verlauf) und prüft ihn, bevor es ihn speichert:
 
-```json
-{"url": "https://…", "benutzer": "…", "schluessel": "…"}
+```bash
+bash aktedirekt/verwalten.sh jurnodes
 ```
+
+Wieder herausnehmen: `bash aktedirekt/verwalten.sh jurnodes-aus`.
 
 Solange die Felder leer sind, meldet Aktedirekt nichts an jur|nodes; die
 Aufnahmen bleiben vorgemerkt und werden beim ersten Abgleich nachgeholt.

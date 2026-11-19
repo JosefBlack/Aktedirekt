@@ -5,6 +5,9 @@
 #   bash verwalten.sh faktor <Kennung>     setzt den zweiten Faktor zurück (Handy verloren, neue App);
 #                                          bei der nächsten Anmeldung wird er neu eingerichtet
 #   bash verwalten.sh liste                zeigt die Kennungen (ohne Kennwörter)
+#   bash verwalten.sh jurnodes             trägt den Zugang zu jur|nodes ein (fragt Adresse, Benutzer und
+#                                          Schlüssel ab; der Schlüssel erscheint nicht auf dem Bildschirm)
+#   bash verwalten.sh jurnodes-aus         nimmt den Zugang wieder heraus; das Portal meldet dann nichts mehr
 set -euo pipefail
 REGION=eu-central-1
 STACK=aktedirekt-probe
@@ -48,7 +51,36 @@ PY
       --key "{\"pk\": {\"S\": \"T#$KENNUNG\"}, \"sk\": {\"S\": \"T\"}}"
     echo "Der zweite Faktor für $KENNUNG ist zurückgesetzt. Bei der nächsten Anmeldung erscheint wieder der QR-Code."
     ;;
+  jurnodes)
+    ZIEL=$(ausgabe JurNodesGeheimnis)
+    read -r -p "Adresse der Schnittstelle (https://…): " J_URL
+    read -r -p "Benutzername: " J_BENUTZER
+    read -r -s -p "Schlüssel (wird nicht angezeigt): " J_SCHLUESSEL; echo
+    J_URL="${J_URL%/}"
+    case "$J_URL" in https://*) ;; *) echo "Die Adresse muss mit https:// beginnen."; exit 1;; esac
+    [ -n "$J_BENUTZER" ] && [ -n "$J_SCHLUESSEL" ] || { echo "Benutzername und Schlüssel dürfen nicht leer sein."; exit 1; }
+    # Probe: einen Lead lesen, den es nicht gibt. 401 heißt abgewiesen; alles
+    # andere heißt, dass jur|nodes Benutzer und Schlüssel annimmt.
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 \
+      -H "X-Auth-User: $J_BENUTZER" -H "X-Auth-Key: $J_SCHLUESSEL" -H "Accept: application/json" \
+      "$J_URL/lead?identifier=probe-aktedirekt" || echo "000")
+    case "$STATUS" in
+      000) echo "jur|nodes ist unter dieser Adresse nicht erreichbar. Nichts wurde eingetragen."; exit 1;;
+      401) echo "jur|nodes weist Benutzer oder Schlüssel ab - oder das Recht read:leads fehlt. Nichts wurde eingetragen."; exit 1;;
+      *)   echo "jur|nodes nimmt den Zugang an (Antwort $STATUS auf die Probe).";;
+    esac
+    J_URL="$J_URL" J_BENUTZER="$J_BENUTZER" J_SCHLUESSEL="$J_SCHLUESSEL" python3 -c 'import json,os,sys
+json.dump({"url": os.environ["J_URL"], "benutzer": os.environ["J_BENUTZER"], "schluessel": os.environ["J_SCHLUESSEL"]}, open(sys.argv[1], "w"))' "$NEU"
+    aws secretsmanager put-secret-value --secret-id "$ZIEL" --secret-string "file://$NEU" >/dev/null
+    echo "Eingetragen. Nach spätestens fünf Minuten meldet das Portal neue Eingänge an jur|nodes;"
+    echo "der Abgleich alle 15 Minuten holt Liegengebliebenes nach."
+    ;;
+  jurnodes-aus)
+    aws secretsmanager put-secret-value --secret-id "$(ausgabe JurNodesGeheimnis)" \
+      --secret-string '{"url": "", "benutzer": "", "schluessel": ""}' >/dev/null
+    echo "Der Zugang ist herausgenommen. Neue Eingänge bleiben im Portal vorgemerkt."
+    ;;
   *)
-    echo "Aufruf: bash verwalten.sh kennwort <Kennung> | faktor <Kennung> | liste"; exit 1
+    echo "Aufruf: bash verwalten.sh kennwort <Kennung> | faktor <Kennung> | liste | jurnodes | jurnodes-aus"; exit 1
     ;;
 esac
