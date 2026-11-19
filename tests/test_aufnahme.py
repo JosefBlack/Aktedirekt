@@ -80,7 +80,7 @@ def test_kennzeichen_ungueltig(wert):
 
 def test_kurzrubrum_nur_mit_erlaubten_zeichen():
     a = Aufnahme("k", JETZT, angaben={**ANGABEN, "person": {**ANGABEN["person"], "nachname": "Mü<ster>\"; --"}})
-    assert kurzrubrum(a) == "Mü ster -- ./. M-AB 4567 (Unfall 17.11.2026)"
+    assert kurzrubrum(a) == "Mü ster -- ./. M-AB 4567 (Unfall 17.11.26)"
 
 
 def test_dateiart_nach_inhalt():
@@ -147,7 +147,7 @@ def test_ganzer_ablauf_mit_werkstatt(umgebung):
 
     aufnahme = speicher.laden(zugang)
     assert aufnahme.einwilligung_partner is True and aufnahme.lead_kennung == "L-1"
-    assert leads == [{"model": {"shortRubrum": "Muster ./. M-AB 4567 (Unfall 17.11.2026)",
+    assert leads == [{"model": {"shortRubrum": "Muster ./. M-AB 4567 (Unfall 17.11.26)",
                                 "leadDate": "2026-11-19", "broker": "Autohaus Beispiel"}}]
     nachweis = speicher.nachweis(aufnahme.kennung)
     assert nachweis["zeitpunkt"] == JETZT.isoformat() and len(nachweis["vollmacht_sha256"]) == 64

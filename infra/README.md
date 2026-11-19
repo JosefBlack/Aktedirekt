@@ -16,7 +16,7 @@ nichts außer dem Konto: eigener Schlüssel, eigene Tabelle, eigener Dateispeich
 |---|---|---|
 | API Gateway (HTTP API) | die Adresse des Portals | Zugriffsprotokoll ohne Inhalte und ohne Absenderadresse; Obergrenze 20 Aufrufe je Sekunde |
 | Lambda `aktedirekt-<Stufe>` | die Anwendung: Seiten und Schnittstelle | begrenzt durch die Obergrenze der Adresse |
-| Lambda `aktedirekt-<Stufe>-abgleich` | holt alle 15 Minuten den Sachstand aus jur|nodes; löscht nichts | schreibt nur Zahlen ins Protokoll |
+| Lambda `aktedirekt-<Stufe>-abgleich` | holt alle 15 Minuten den Sachstand aus jur|nodes und legt dort Aufnahme, Unterschrift und Anlagen ab; löscht nichts | schreibt nur Zahlen ins Protokoll |
 | DynamoDB | Aufnahmen, Sitzungen, Übergabecodes, Auskunftsnachweis | KMS, Wiederherstellung auf jeden Zeitpunkt, Löschschutz |
 | S3 | Fotos, Unterlagen, Unterschriften | KMS, nicht öffentlich, nur verschlüsselte Verbindung; Abgeliefertes ohne Übernahme verfällt nach einem Tag |
 | Secrets Manager | jur|nodes-Zugang, Partnerliste (auch der Zugang der Kanzlei) | Werte nach dem Deploy setzen |
@@ -132,7 +132,7 @@ Anmeldung erscheint wieder der QR-Code.
 
 Erst, wenn es in jur|nodes einen **eigenen Schnittstellenbenutzer** für
 Aktedirekt gibt (Rechte: `write:leads`, `read:leads`, `read:records`,
-`search:records_subject`) und die Akteneigenschaft „Sachstand" angelegt ist.
+`search:records_subject`, `write:file`) und die Akteneigenschaft „Sachstand" angelegt ist.
 Den Wert in der AWS-Konsole eintragen (Secrets Manager →
 `aktedirekt/probe/jurnodes` → *Wert abrufen* → *Bearbeiten*), nicht auf der
 Befehlszeile – dort bliebe der Schlüssel im Verlauf stehen:

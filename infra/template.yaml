@@ -295,8 +295,17 @@ Resources:
             # Lesen und Ändern, kein Löschen: Dieser Lauf entfernt nichts.
             - Sid: Aufnahmen
               Effect: Allow
-              Action: [dynamodb:GetItem, dynamodb:UpdateItem, dynamodb:Scan]
+              Action: [dynamodb:GetItem, dynamodb:UpdateItem, dynamodb:Scan, dynamodb:Query]
               Resource: !GetAtt Tabelle.Arn
+            # Dateien nur lesen - um sie in jur|nodes abzulegen.
+            - Sid: DateienLesen
+              Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub "${DateiBucket.Arn}/dateien/*"
+            - Sid: DateienAuffinden
+              Effect: Allow
+              Action: s3:ListBucket
+              Resource: !GetAtt DateiBucket.Arn
             - Sid: Geheimnisse
               Effect: Allow
               Action: secretsmanager:GetSecretValue

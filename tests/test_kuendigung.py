@@ -198,7 +198,7 @@ def test_liste_fristen_zuerst_und_nur_abgeschicktes(umgebung):
     assert [(e["art"], e["klagefrist"], e["tage_bis_frist"]) for e in liste] == [
         ("Kündigung", "2026-12-01", 12), ("Kündigung", "2026-12-08", 19), ("Verkehrsunfall", "", None)]
     assert liste[2]["vermittler"] == "Autohaus Beispiel" and liste[2]["mandant"] == "Erika Muster"
-    assert liste[0]["kurzrubrum"] == "Weber ./. Beispiel Logistik GmbH (Kündigung zugegangen 10.11.2026)"
+    assert liste[0]["kurzrubrum"] == "Weber ./. Beispiel Logistik GmbH (Kdg. 10.11.26)"
 
 
 def test_eingang_im_einzelnen_mit_anlage_und_unterschrift(umgebung):

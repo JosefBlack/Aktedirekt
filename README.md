@@ -33,7 +33,7 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (238 Prüfungen, ohne Netz; was eine Ablage braucht,
+Vorhanden und geprüft (256 Prüfungen, ohne Netz; was eine Ablage braucht,
 läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
@@ -58,8 +58,7 @@ läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 **Nur mit Testdaten benutzen.** Aktedirekt läuft seit dem 19.11.2026 als Stufe
 `probe` im AWS-Konto der Kanzlei; was vor echten Mandaten fehlt, steht in
-[infra/README.md](infra/README.md). Außerdem offen: Übergabe von Angaben und
-Dateien an jur|nodes (bisher nur Kurzrubrum und Vermittler), Benachrichtigung
+[infra/README.md](infra/README.md). Außerdem offen: Benachrichtigung
 des Mandanten, fehlende Unterlagen aus jur|nodes. Der jur|nodes-Client ist nach
 der Beschreibung des Herstellers (Fassung 1.0.2) gebaut und **gegen den Server
 der Kanzlei noch nicht gelaufen**.
@@ -114,6 +113,26 @@ Kennwort gehört deshalb vor die erste Anmeldung.
 
 In AWS meldet außerdem eine E-Mail jeden Eingang: ohne Namen und ohne Inhalt,
 bei einer Kündigung mit der Klagefrist im Betreff.
+
+## Übergabe an jur|nodes
+
+Beim Abschicken entsteht in jur|nodes ein Lead mit Kurzrubrum (höchstens 50
+Zeichen, mehr nimmt jur|nodes nicht an) und Vermittler. Der zeitgesteuerte
+Lauf legt danach in dessen Dateiordner ab:
+
+- die Aufnahme als PDF (`aktedirekt/akte_pdf.py`) – neu, sobald der Mandant
+  etwas ergänzt oder nachreicht,
+- die Unterschrift als Bild,
+- jede Anlage, auch später nachgereichte und die vom Partner.
+
+Ist der Lead angenommen, geht alles Weitere in den Ordner der Akte. Was schon
+abgelegt ist, wird je Aufnahme festgehalten; ein abgebrochener Lauf macht beim
+nächsten Mal weiter und legt nichts doppelt ab. Ein abgelehnter Lead bekommt
+nichts mehr.
+
+**Gegen den Server der Kanzlei ist das noch nicht gelaufen.** Es folgt der
+Beschreibung des Herstellers und dem, was jusperfect an diesem Server gelernt
+hat (Ordner und Umbenennen in Kopfzeilen, Datei als Formularteil).
 
 ## Löschen
 
@@ -201,8 +220,8 @@ dieselbe Oberfläche einhüllen.
 ## Offen
 
 1. Ein eigener Schnittstellenbenutzer für Aktedirekt mit den Rechten
-   `write:leads`, `read:leads`, `read:records`, `search:records_subject`
-   (später Kontakte und Dateien).
+   `write:leads`, `read:leads`, `read:records`, `search:records_subject`,
+   `write:file`.
 2. Die Akteneigenschaft „Sachstand" in jur|nodes als Auswahlfeld mit den
    Bezeichnungen aus `sachstaende.json`.
 3. Deckt web|nodes, der Mandantenkanal von jur|nodes, einen Teil der

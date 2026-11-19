@@ -11,11 +11,13 @@ und liest zweitens zu jedem Fall den Sachstand.
 
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import date, datetime, timedelta
 
 from typing import Any
 
+from aktedirekt import akte_pdf
 from aktedirekt.aufnahme import Aufnahme, kurzrubrum
 from aktedirekt.domain import Einwilligung, Fall, Herkunft, Sachstand
 from aktedirekt.jurnodes import JurNodes, JurNodesFehler
@@ -83,7 +85,8 @@ def als_fall(aufnahme: Aufnahme, partner_art: str = "") -> Fall:
         lead_kennung=aufnahme.lead_kennung, akte_kennung=aufnahme.akte_kennung)
 
 
-def fall_abgleichen(fall: Fall, jurnodes: JurNodes, stufen: Stufen, heute: date) -> bool:
+def fall_abgleichen(fall: Fall, jurnodes: JurNodes, stufen: Stufen, heute: date,
+                    lead: Any = None) -> bool:
     """Aktualisiert ``fall`` und sagt, ob sich der Sachstand geändert hat.
 
     Scheitert ein Aufruf, bleibt der Fall, wie er ist - der Fehler geht an den
@@ -91,7 +94,7 @@ def fall_abgleichen(fall: Fall, jurnodes: JurNodes, stufen: Stufen, heute: date)
     """
     if not fall.lead_kennung:
         return False
-    lead = jurnodes.lead(fall.lead_kennung)
+    lead = lead or jurnodes.lead(fall.lead_kennung)
     akte_status = eigenschaft = ""
     if lead.status == "accepted" and lead.akte_kennung:
         akte_status = jurnodes.akte_status(lead.akte_kennung)
@@ -120,10 +123,93 @@ def lead_anlegen(aufnahme: Aufnahme, speicher: Speicher, jurnodes: JurNodes,
     return True
 
 
+_ERLAUBT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZäöüÄÖÜß0123456789 ._-()"
+_ARTEN = {"jpg": "image/jpeg", "png": "image/png", "pdf": "application/pdf", "heic": "image/heic"}
+
+
+def _dateiname(name: str, art: str) -> str:
+    """Ein Name, den jur|nodes annimmt: nur dessen erlaubte Zeichen, mit passender Endung."""
+    # Als Endung gilt nur, was wie eine aussieht - sonst gehört der Punkt zum Namen.
+    vorn, punkt, hinten = name.rpartition(".")
+    stamm = vorn if punkt and hinten.isalnum() and len(hinten) <= 5 else name
+    sauber = "".join(z if z in _ERLAUBT else "_" for z in stamm).strip(" ._")[:80] or "Datei"
+    return f"{sauber}.{art}"
+
+
+def blatt_fuer_die_akte(aufnahme: Aufnahme, speicher: Any, partner: Partnerliste, stufen: Stufen) -> bytes:
+    """Die Aufnahme als PDF, wie sie in die Akte gehört."""
+    assert aufnahme.abgeschlossen_am is not None
+    kopf = [f"{aufnahme.fallart.titel} · eingegangen über Aktedirekt am "
+            f"{aufnahme.abgeschlossen_am.strftime('%d.%m.%Y um %H:%M')} Uhr"]
+    konto = partner.konto(aufnahme.partner)
+    if konto:
+        einwilligung = aufnahme.einwilligung_partner and aufnahme.einwilligung_widerrufen_am is None
+        kopf.append(f"Vermittelt durch {konto.name} · Auskunft über den Sachstand: "
+                    + ("eingewilligt" if einwilligung else "nicht eingewilligt oder widerrufen"))
+    frist = aufnahme.klagefrist()
+    if frist:
+        kopf.append(f"Klagefrist nach Angabe des Mandanten spätestens {frist.strftime('%d.%m.%Y')} "
+                    "(drei Wochen ab genanntem Zugang, nicht geprüft)")
+    nachweis = speicher.nachweis(aufnahme.kennung)
+    kopf.append("Auftrag und Vollmacht am Bildschirm unterschrieben; Unterschrift liegt als Bild bei. "
+                f"Gerät: {nachweis.get('geraet', '')[:120]}")
+    anlagen = []
+    for d in speicher.dateien(aufnahme.kennung):
+        einreicher = partner.konto(d.von)
+        anlagen.append(_dateiname(d.name, d.art) + (f" (eingereicht von {einreicher.name if einreicher else 'Partner'})" if d.von else ""))
+    return akte_pdf.erzeugen(kurzrubrum(aufnahme), kopf, aufnahme.fuer_die_akte(), anlagen)
+
+
+def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: Partnerliste,
+               stufen: Stufen) -> int:
+    """Legt in jur|nodes ab, was dort noch fehlt, und gibt die Zahl der abgelegten Dateien zurück.
+
+    Abgelegt werden: die Aufnahme als PDF (neu, sobald der Mandant etwas
+    ergänzt hat), die Unterschrift und jede Anlage - auch später nachgereichte.
+    Nach jeder Datei wird der Stand festgehalten: Bricht der Lauf ab, macht der
+    nächste dort weiter und legt nichts doppelt ab.
+    """
+    if not aufnahme.lead_kennung or aufnahme.abgeschlossen_am is None:
+        return 0
+    stand = {"dateien": list(aufnahme.jurnodes.get("dateien", [])), "blatt": aufnahme.jurnodes.get("blatt", ""),
+             "unterschrift": bool(aufnahme.jurnodes.get("unterschrift", False))}
+    ausstehend = [d for d in speicher.dateien(aufnahme.kennung) if d.kennung not in stand["dateien"]]
+    blatt = blatt_fuer_die_akte(aufnahme, speicher, partner, stufen)
+    summe = hashlib.sha256(blatt).hexdigest()
+    if summe == stand["blatt"] and stand["unterschrift"] and not ausstehend:
+        return 0                                   # nichts Neues - jur|nodes wird gar nicht erst gefragt
+    # Wohin: in den Ordner der Akte, sobald es sie gibt, sonst in den des Leads.
+    ordner = jurnodes.akte_ordner(aufnahme.akte_kennung) if aufnahme.akte_kennung else jurnodes.lead(aufnahme.lead_kennung).ordner
+    if not ordner:
+        return 0
+    anzahl = 0
+    if summe != stand["blatt"]:
+        zeit = datetime.now().strftime("%Y-%m-%d %H%M")
+        jurnodes.datei_ablegen(ordner, f"Aufnahme Aktedirekt {zeit}.pdf", blatt, "application/pdf")
+        stand["blatt"] = summe
+        speicher.jurnodes_setzen(aufnahme.kennung, stand)
+        anzahl += 1
+    if not stand["unterschrift"]:
+        bild = speicher.unterschrift(aufnahme.kennung)
+        if bild:
+            jurnodes.datei_ablegen(ordner, "Unterschrift Aktedirekt.png", bild, "image/png")
+            anzahl += 1
+        stand["unterschrift"] = True
+        speicher.jurnodes_setzen(aufnahme.kennung, stand)
+    for d in ausstehend:
+        inhalt = speicher.datei_inhalt(aufnahme.kennung, d.kennung)
+        if inhalt is not None:
+            jurnodes.datei_ablegen(ordner, _dateiname(d.name, d.art), inhalt, _ARTEN.get(d.art, "application/octet-stream"))
+            anzahl += 1
+        stand["dateien"].append(d.kennung)
+        speicher.jurnodes_setzen(aufnahme.kennung, stand)
+    return anzahl
+
+
 def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerliste,
                      stufen: Stufen, heute: date) -> dict[str, int]:
     """Ein Durchlauf. Ein Fehler bei einem Fall hält die übrigen nicht auf."""
-    zahlen = {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "fehler": 0}
+    zahlen = {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "abgelegt": 0, "fehler": 0}
     for aufnahme in speicher.ohne_lead():
         if lead_anlegen(aufnahme, speicher, jurnodes, partner, heute):
             zahlen["leads_nachgeholt"] += 1
@@ -132,13 +218,23 @@ def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerlis
     for aufnahme in speicher.mit_lead():
         fall = als_fall(aufnahme)
         try:
-            geaendert = fall_abgleichen(fall, jurnodes, stufen, heute)
+            lead = jurnodes.lead(aufnahme.lead_kennung)
+            geaendert = fall_abgleichen(fall, jurnodes, stufen, heute, lead)
         except JurNodesFehler:
             zahlen["fehler"] += 1
             continue
         if geaendert:
             speicher.sachstand_setzen(aufnahme.kennung, fall.sachstand.schluessel, heute, fall.akte_kennung)
             zahlen["geaendert"] += 1
+        elif fall.akte_kennung and fall.akte_kennung != aufnahme.akte_kennung:
+            # Angenommen, aber der Sachstand blieb gleich: Die Akte merken wir uns trotzdem.
+            speicher.sachstand_setzen(aufnahme.kennung, aufnahme.sachstand, aufnahme.sachstand_seit or heute, fall.akte_kennung)
+        try:
+            frisch = speicher.nach_kennung(aufnahme.kennung)
+            if frisch is not None and lead.status != "rejected":
+                zahlen["abgelegt"] += uebergeben(frisch, speicher, jurnodes, partner, stufen)
+        except JurNodesFehler:
+            zahlen["fehler"] += 1
     return zahlen
 
 

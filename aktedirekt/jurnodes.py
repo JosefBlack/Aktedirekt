@@ -10,7 +10,8 @@ Repository jusperfect unter ``schnittstelle/``). Zwei Eigenheiten daraus:
 
 Gebraucht werden diese Rechte des Schnittstellenbenutzers:
 ``write:leads`` (anlegen), ``read:leads``, ``read:records``,
-``search:records_subject``. jur|nodes meldet keine Änderungen von sich aus;
+``search:records_subject`` und, für die Übergabe von Aufnahme und Anlagen,
+``write:file``. jur|nodes meldet keine Änderungen von sich aus;
 der Sachstand wird deshalb in Abständen abgefragt.
 
 Gegen den Server der Kanzlei ist dieser Client noch nicht gelaufen.
@@ -34,6 +35,8 @@ class Lead:
     kennung: str
     status: str  # created | accepted | rejected
     akte_kennung: str = ""
+    # Der Dateiordner, den jur|nodes zum Lead angelegt hat (0, wenn es keinen nennt).
+    ordner: int = 0
 
 
 class JurNodes:
@@ -73,16 +76,21 @@ class JurNodes:
     def _lead(daten: Any) -> Lead:
         if not isinstance(daten, dict) or not daten.get("identifier"):
             raise JurNodesFehler("jur|nodes hat keinen Lead geliefert.")
+        try:
+            ordner = int(daten.get("fileFolderId") or 0)
+        except (TypeError, ValueError):
+            ordner = 0
         return Lead(kennung=str(daten["identifier"]), status=str(daten.get("status") or ""),
-                    akte_kennung=str(daten.get("acceptedRecord") or ""))
+                    akte_kennung=str(daten.get("acceptedRecord") or ""), ordner=ordner)
 
     def lead_anlegen(self, kurzrubrum: str, vermittler: str = "",
                      datum: date | None = None) -> Lead:
         """Legt den Eingang an. Angenommen oder abgelehnt wird er in jur|nodes."""
-        modell: dict[str, Any] = {"shortRubrum": kurzrubrum,
+        # Beides nimmt jur|nodes nur bis 50 Zeichen an.
+        modell: dict[str, Any] = {"shortRubrum": kurzrubrum[:50],
                                   "leadDate": (datum or date.today()).isoformat()}
         if vermittler:
-            modell["broker"] = vermittler
+            modell["broker"] = vermittler[:50]
         return self._lead(self._aufruf("POST", "/lead", json={"model": modell}))
 
     def lead(self, kennung: str) -> Lead:
@@ -91,6 +99,31 @@ class JurNodes:
     def akte_status(self, akte_kennung: str) -> str:
         daten = self._aufruf("GET", "/record", params={"identifier": akte_kennung})
         return str(daten.get("recordStatus") or "") if isinstance(daten, dict) else ""
+
+    def akte_ordner(self, akte_kennung: str) -> int:
+        """Der Dateiordner der Akte - 0, wenn jur|nodes keinen nennt."""
+        daten = self._aufruf("GET", "/record", params={"identifier": akte_kennung})
+        try:
+            return int(daten.get("fileFolderId") or 0) if isinstance(daten, dict) else 0
+        except (TypeError, ValueError):
+            return 0
+
+    def datei_ablegen(self, ordner: int, name: str, inhalt: bytes, art: str = "application/octet-stream") -> None:
+        """Legt eine Datei in einen Ordner. Gibt es den Namen schon, benennt jur|nodes sie um.
+
+        Ordner und Umbenennen reisen in Kopfzeilen, die Datei als Formularteil
+        ``file`` - so verlangt es die Beschreibung des Herstellers.
+        """
+        try:
+            antwort = self._client.post("/file-system/add-file", files={"file": (name, inhalt, art)},
+                                        headers={"folderId": str(ordner), "autoRenameIfExist": "true"},
+                                        timeout=120.0)
+        except httpx.HTTPError as fehler:
+            raise JurNodesFehler("jur|nodes ist nicht erreichbar.") from fehler
+        if antwort.status_code == 401:
+            raise JurNodesFehler("jur|nodes hat die Anmeldung abgewiesen oder das Recht zum Ablegen fehlt.")
+        if antwort.status_code != 200:
+            raise JurNodesFehler(f"jur|nodes hat die Datei nicht angenommen (Status {antwort.status_code}).")
 
     def akteneigenschaft(self, akte_kennung: str, name: str) -> str:
         """Der Textwert einer Akteneigenschaft - leer, wenn sie nicht gesetzt ist."""

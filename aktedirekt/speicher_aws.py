@@ -25,6 +25,7 @@ verlassen wird sich darauf nicht - jede Abfrage prüft die Zeit selbst.
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -86,7 +87,7 @@ class AwsSpeicher:
             lead_kennung=e.get("lead_kennung", ""), akte_kennung=e.get("akte_kennung", ""),
             sachstand=e.get("sachstand", "aufgenommen"),
             sachstand_seit=date.fromisoformat(e["sachstand_seit"]) if e.get("sachstand_seit") else None,
-            vom_partner=dict(e.get("vom_partner", {})))
+            vom_partner=dict(e.get("vom_partner", {})), jurnodes=json.loads(e.get("jurnodes", "{}")))
 
     def _roh(self, kennung: str) -> dict[str, Any] | None:
         return self._tabelle.get_item(Key={"pk": f"A#{kennung}", "sk": "A"}, ConsistentRead=True).get("Item")
@@ -195,6 +196,9 @@ class AwsSpeicher:
 
     def lead_setzen(self, kennung: str, lead_kennung: str) -> None:
         self._aendern(kennung, "SET lead_kennung = :l", {":l": lead_kennung})
+
+    def jurnodes_setzen(self, kennung: str, stand: dict[str, Any]) -> None:
+        self._aendern(kennung, "SET jurnodes = :j", {":j": json.dumps(stand)})
 
     def sachstand_setzen(self, kennung: str, sachstand: str, seit: date, akte_kennung: str = "") -> None:
         ausdruck, werte = "SET sachstand = :s, sachstand_seit = :t", {":s": sachstand, ":t": seit.isoformat()}

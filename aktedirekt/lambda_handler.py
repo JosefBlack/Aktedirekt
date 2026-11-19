@@ -40,7 +40,7 @@ def abgleich(ereignis: Any, kontext: Any) -> dict[str, int]:
     jurnodes = jurnodes_aus_geheimnis(_geheimnis(os.environ["AKTEDIREKT_JURNODES_GEHEIMNIS"], region))
     if jurnodes is None:
         # Solange der Zugang nicht eingetragen ist, gibt es nichts abzugleichen.
-        return {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "fehler": 0}
+        return {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "abgelegt": 0, "fehler": 0}
     ergebnis = alles_abgleichen(
         AwsSpeicher(os.environ["AKTEDIREKT_TABELLE"], os.environ["AKTEDIREKT_BUCKET"], region), jurnodes,
         Partnerliste.aus_text(_geheimnis(os.environ["AKTEDIREKT_PARTNER_GEHEIMNIS"], region)),

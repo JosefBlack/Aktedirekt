@@ -19,6 +19,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 from aktedirekt.aufnahme import Aufnahme
 
@@ -96,6 +97,7 @@ _NEUE_SPALTEN = {
     "akte_kennung": "TEXT NOT NULL DEFAULT ''",
     "vom_partner": "TEXT NOT NULL DEFAULT '{}'",
     "art": "TEXT NOT NULL DEFAULT 'unfall'",
+    "jurnodes": "TEXT NOT NULL DEFAULT '{}'",
 }
 
 
@@ -181,7 +183,7 @@ class Speicher:
             einwilligung_widerrufen_am=_zeit(z["einwilligung_widerrufen_am"]),
             lead_kennung=z["lead_kennung"], akte_kennung=z["akte_kennung"], sachstand=z["sachstand"],
             sachstand_seit=date.fromisoformat(z["sachstand_seit"]) if z["sachstand_seit"] else None,
-            vom_partner=json.loads(z["vom_partner"]))
+            vom_partner=json.loads(z["vom_partner"]), jurnodes=json.loads(z["jurnodes"]))
 
     def laden(self, zugang: str) -> Aufnahme | None:
         if not zugang:
@@ -305,6 +307,11 @@ class Speicher:
     def lead_setzen(self, kennung: str, lead_kennung: str) -> None:
         with closing(self._db()) as db, db:
             db.execute("UPDATE aufnahme SET lead_kennung = ? WHERE kennung = ?", (lead_kennung, kennung))
+
+    def jurnodes_setzen(self, kennung: str, stand: dict[str, Any]) -> None:
+        """Hält fest, was von dieser Aufnahme schon in jur|nodes liegt."""
+        with closing(self._db()) as db, db:
+            db.execute("UPDATE aufnahme SET jurnodes = ? WHERE kennung = ?", (json.dumps(stand), kennung))
 
     def sachstand_setzen(self, kennung: str, sachstand: str, seit: date, akte_kennung: str = "") -> None:
         with closing(self._db()) as db, db:

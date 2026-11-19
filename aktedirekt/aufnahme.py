@@ -424,6 +424,8 @@ class Aufnahme:
     einwilligung_widerrufen_am: datetime | None = None
     lead_kennung: str = ""
     akte_kennung: str = ""
+    # Was schon in jur|nodes liegt: {"dateien": [...], "blatt": Prüfsumme, "unterschrift": bool}
+    jurnodes: dict[str, Any] = field(default_factory=dict)
     sachstand: str = "aufgenommen"
     sachstand_seit: date | None = None
     # Was der Partner am Tresen eingetragen hat (leer beim Weg über den Link).
@@ -491,12 +493,21 @@ class Aufnahme:
 _NICHT_ERLAUBT = re.compile(r"[^0-9A-Za-zÄÖÜäöüß /.,()\-]")
 
 
+# jur|nodes nimmt für Kurzrubrum und Vermittler höchstens 50 Zeichen an.
+JURNODES_KURZ = 50
+
+
 def kurzrubrum(aufnahme: Aufnahme) -> str:
+    """Zum Beispiel "Muster ./. M-AB 4567 (Unfall 17.11.26)" - nie länger als 50 Zeichen.
+
+    Reicht der Platz nicht, fällt zuerst der Anlass weg, dann wird gekürzt:
+    Ein zu langes Kurzrubrum weist jur|nodes ab, und der Eingang käme dort nie an.
+    """
     if aufnahme.art == "kuendigung":
         person = aufnahme.angaben.get("kperson", {})
         gegenseite = aufnahme.angaben.get("arbeitgeber", {}).get("arbeitgeber_name", "") or "unbekannt"
         tag = aufnahme.angaben.get("vorpruefung", {}).get("erhalten_am", "")
-        anlass = "Kündigung zugegangen"
+        anlass = "Kdg."
     else:
         person = aufnahme.angaben.get("person", {})
         gegner = aufnahme.angaben.get("gegner", {})
@@ -504,8 +515,10 @@ def kurzrubrum(aufnahme: Aufnahme) -> str:
         tag = aufnahme.angaben.get("unfall", {}).get("unfalldatum", "")
         anlass = "Unfall"
     try:
-        tag = date.fromisoformat(tag).strftime("%d.%m.%Y")
+        zusatz = f" ({anlass} {date.fromisoformat(tag).strftime('%d.%m.%y')})"
     except ValueError:
-        tag = ""
-    text = f"{person.get('nachname', '')} ./. {gegenseite} ({anlass} {tag})"
-    return " ".join(_NICHT_ERLAUBT.sub(" ", text).split())[:120]
+        zusatz = ""
+    parteien = " ".join(_NICHT_ERLAUBT.sub(" ", f"{person.get('nachname', '')} ./. {gegenseite}").split())
+    if len(parteien) + len(zusatz) <= JURNODES_KURZ:
+        return parteien + zusatz
+    return parteien[:JURNODES_KURZ].rstrip()
