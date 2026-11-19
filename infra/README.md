@@ -16,7 +16,7 @@ nichts außer dem Konto: eigener Schlüssel, eigene Tabelle, eigener Dateispeich
 |---|---|---|
 | API Gateway (HTTP API) | die Adresse des Portals | Zugriffsprotokoll ohne Inhalte und ohne Absenderadresse; Obergrenze 20 Aufrufe je Sekunde |
 | Lambda `aktedirekt-<Stufe>` | die Anwendung: Seiten und Schnittstelle | begrenzt durch die Obergrenze der Adresse |
-| Lambda `aktedirekt-<Stufe>-abgleich` | holt alle 15 Minuten den Sachstand aus jur|nodes | schreibt nur Zahlen ins Protokoll |
+| Lambda `aktedirekt-<Stufe>-abgleich` | holt alle 15 Minuten den Sachstand aus jur|nodes und löscht nie abgeschickte Entwürfe nach 30 Tagen | schreibt nur Zahlen ins Protokoll |
 | DynamoDB | Aufnahmen, Sitzungen, Übergabecodes, Auskunftsnachweis | KMS, Wiederherstellung auf jeden Zeitpunkt, Löschschutz |
 | S3 | Fotos, Unterlagen, Unterschriften | KMS, nicht öffentlich, nur verschlüsselte Verbindung; Abgeliefertes ohne Übernahme verfällt nach einem Tag |
 | Secrets Manager | jur|nodes-Zugang, Partnerliste (auch der Zugang der Kanzlei) | Werte nach dem Deploy setzen |
@@ -142,8 +142,8 @@ Aufnahmen bleiben vorgemerkt und werden beim ersten Abgleich nachgeholt.
   Anmeldungen je Mitarbeiter für Partner
 - Schranke je Absender (AWS WAF); bisher gibt es nur die Obergrenze insgesamt
 - Prüfung hochgeladener Dateien auf Schadsoftware (GuardDuty für S3)
-- Löschkonzept: Wann werden Aufnahmen und Dateien hier entfernt, nachdem sie
-  in jur|nodes liegen? Bisher wird nichts gelöscht.
+- Löschkonzept: Wann werden abgeschickte Aufnahmen hier entfernt, nachdem sie
+  in jur|nodes liegen? Bisher löscht sie nur die Kanzlei von Hand.
 - Datenschutz-Folgenabschätzung, Verarbeitungsverzeichnis, Hinweise an die
   Mandanten – wie bei jusperfect
 - ein Penetrationstest

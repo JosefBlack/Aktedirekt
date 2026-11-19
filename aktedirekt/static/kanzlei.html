@@ -34,6 +34,11 @@
   <p id="anzahl" class="klein"></p>
   <ul id="eingaenge" class="faelle"></ul>
   <p id="leer" class="klein" hidden>Noch nichts eingegangen.</p>
+  <details class="link nachweis" id="nachweis" hidden>
+    <summary>Löschnachweis</summary>
+    <p class="klein">Was gelöscht wurde, ist weg. Hier steht nur, wann, durch wen und wie viel – ohne Namen und Inhalt.</p>
+    <ul id="loeschungen" class="klein"></ul>
+  </details>
 </section>
 
 <section id="eingang" hidden>
@@ -41,6 +46,17 @@
     <button type="button" id="drucken" class="schlicht rand">Drucken oder als PDF speichern</button>
   </div>
   <article id="blatt"></article>
+  <div class="loeschen" id="loeschen">
+    <button type="button" id="loeschen-oeffnen" class="schlicht rand gefahr">Eingang löschen …</button>
+    <div id="loeschen-frage" hidden>
+      <p><strong>Dieser Eingang wird endgültig gelöscht:</strong> alle Angaben, die Anlagen, die Unterschrift und der Zugang des Mandanten. Das lässt sich nicht rückgängig machen. <span id="loeschen-jurnodes"></span></p>
+      <label class="haken"><input type="checkbox" id="loeschen-haken"><span>Was davon in die Akte gehört, ist dort abgelegt – oder wird nicht gebraucht.</span></label>
+      <div class="zeile">
+        <button type="button" id="loeschen-abbrechen" class="schlicht rand">Abbrechen</button>
+        <button type="button" id="loeschen-ausfuehren" class="schlicht rand gefahr" disabled>Endgültig löschen</button>
+      </div>
+    </div>
+  </div>
 </section>
 </main>
 <script src="kanzlei.js"></script>

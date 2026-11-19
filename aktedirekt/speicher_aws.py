@@ -14,6 +14,7 @@ Eine Tabelle, zwei Schlüsselfelder ``pk`` und ``sk``:
     U#<Prüfsumme des Übergabecodes> / U     Code vom Tresen
     S#<Prüfsumme der Sitzung> / S           Sitzung eines Partners
     F#<Partnerkennung> / F                  Fehlversuche bei der Anmeldung
+    L / <Zeit>#<Aufnahme>                   Nachweis einer Löschung (ohne Inhalt)
 
 Zugänge, Codes und Sitzungen stehen nur als Prüfsumme in der Tabelle. Was ein
 Verfallsdatum hat, trägt es im Feld ``ablauf`` und wird von DynamoDB entfernt;
@@ -33,7 +34,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from aktedirekt.aufnahme import Aufnahme
-from aktedirekt.speicher import Auskunft, Datei
+from aktedirekt.speicher import Auskunft, Datei, Loeschung
 
 ABLIEFERN_SEKUNDEN = 600
 _AUFHEBEN = timedelta(days=30)
@@ -353,6 +354,69 @@ class AwsSpeicher:
             if fehler.response["Error"]["Code"] in ("NoSuchKey", "404"):
                 return None
             raise
+
+    # ---- Löschen ---------------------------------------------------------
+
+    def loeschen(self, kennung: str, wer: str, jetzt: datetime) -> Loeschung | None:
+        """Wie in der örtlichen Ablage: alles zur Aufnahme entfernen, nur den Nachweis behalten.
+
+        Die Wiederherstellung der Tabelle auf einen früheren Zeitpunkt reicht
+        35 Tage zurück; so lange ließe sich Gelöschtes dort noch zurückholen.
+        Im Dateispeicher ist es sofort weg.
+        """
+        e = self._roh(kennung)
+        if not e:
+            return None
+        aufnahme = self._aus(e)
+        # Erst die Dateien: Scheitert das, steht die Aufnahme noch da und zeigt, dass etwas offen ist.
+        for vorsatz in (f"dateien/{kennung}/", f"eingang/{kennung}/"):
+            argumente: dict[str, Any] = {"Bucket": self._bucket, "Prefix": vorsatz}
+            while True:
+                seite = self._s3.list_objects_v2(**argumente)
+                for objekt in seite.get("Contents", []):
+                    self._s3.delete_object(Bucket=self._bucket, Key=objekt["Key"])
+                if not seite.get("IsTruncated"):
+                    break
+                argumente["ContinuationToken"] = seite["NextContinuationToken"]
+        teile: list[dict[str, Any]] = []
+        argumente = {"KeyConditionExpression": Key("pk").eq(f"A#{kennung}"), "ConsistentRead": True}
+        while True:
+            seite = self._tabelle.query(**argumente)
+            teile += seite["Items"]
+            if "LastEvaluatedKey" not in seite:
+                break
+            argumente["ExclusiveStartKey"] = seite["LastEvaluatedKey"]
+        dateien = sum(1 for teil in teile if teil["sk"].startswith("D#"))
+        nachweis = Loeschung(jetzt, kennung, wer, aufnahme.art, aufnahme.abgeschlossen_am is not None, dateien)
+        self._tabelle.put_item(Item={"pk": "L", "sk": f"{jetzt.isoformat()}#{kennung}", "fall": kennung, "wer": wer,
+                                     "art": nachweis.art, "abgeschickt": nachweis.abgeschickt, "dateien": dateien})
+        if e.get("zugang_sha"):
+            self._tabelle.delete_item(Key={"pk": f"Z#{e['zugang_sha']}", "sk": "Z"})
+        if e.get("uebergabe_sha"):
+            self._tabelle.delete_item(Key={"pk": f"U#{e['uebergabe_sha']}", "sk": "U"})
+        # Die Aufnahme selbst zuletzt.
+        for teil in sorted(teile, key=lambda teil: teil["sk"] == "A"):
+            self._tabelle.delete_item(Key={"pk": teil["pk"], "sk": teil["sk"]})
+        return nachweis
+
+    def loeschungen(self) -> list[Loeschung]:
+        eintraege = self._tabelle.query(KeyConditionExpression=Key("pk").eq("L"), ScanIndexForward=False,
+                                        ConsistentRead=True)["Items"]
+        return [Loeschung(datetime.fromisoformat(e["sk"].rsplit("#", 1)[0]), e["fall"], e["wer"], e["art"],
+                          bool(e["abgeschickt"]), int(e["dateien"])) for e in eintraege]
+
+    def entwuerfe_vor(self, grenze: datetime) -> list[str]:
+        bedingung = (Attr("sk").eq("A") & Attr("abgeschlossen_am").not_exists()
+                     & Attr("angelegt_am").lt(grenze.isoformat()))
+        kennungen: list[str] = []
+        argumente: dict[str, Any] = {"FilterExpression": bedingung, "ProjectionExpression": "pk"}
+        while True:
+            seite = self._tabelle.scan(**argumente)
+            kennungen += [e["pk"][2:] for e in seite["Items"]]
+            if "LastEvaluatedKey" not in seite:
+                break
+            argumente["ExclusiveStartKey"] = seite["LastEvaluatedKey"]
+        return kennungen
 
     # ---- Sitzungen der Partner ------------------------------------------
 

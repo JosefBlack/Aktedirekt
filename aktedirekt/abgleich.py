@@ -12,7 +12,9 @@ und liest zweitens zu jedem Fall den Sachstand.
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import date, datetime, timedelta
+
+from typing import Any
 
 from aktedirekt.aufnahme import Aufnahme, kurzrubrum
 from aktedirekt.domain import Einwilligung, Fall, Herkunft, Sachstand
@@ -20,6 +22,23 @@ from aktedirekt.jurnodes import JurNodes, JurNodesFehler
 from aktedirekt.partner import Partnerliste
 from aktedirekt.sachstand import Stufen, sachstand_ableiten
 from aktedirekt.speicher import Speicher
+
+
+# So lange darf eine begonnene, aber nie abgeschickte Aufnahme liegen bleiben.
+ENTWURF_FRIST = timedelta(days=30)
+
+
+def entwuerfe_aufraeumen(speicher: Any, jetzt: datetime) -> int:
+    """Löscht, was vor mehr als 30 Tagen begonnen und nie abgeschickt wurde.
+
+    Das sind abgebrochene Aufnahmen und Fälle vom Tresen, deren Code der Kunde
+    nie eingelöst hat. Abgeschicktes wird hier nie angefasst.
+    """
+    anzahl = 0
+    for kennung in speicher.entwuerfe_vor(jetzt - ENTWURF_FRIST):
+        if speicher.loeschen(kennung, "Aufräumen nach 30 Tagen", jetzt) is not None:
+            anzahl += 1
+    return anzahl
 
 
 def als_fall(aufnahme: Aufnahme, partner_art: str = "") -> Fall:
@@ -120,8 +139,10 @@ def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerlis
 
 if __name__ == "__main__":
     from aktedirekt import zeit
+    ablage = Speicher(os.environ.get("AKTEDIREKT_DATEN", ".aktedirekt-daten"))
+    print("alte Entwürfe gelöscht:", entwuerfe_aufraeumen(ablage, zeit.jetzt()))
     ergebnis = alles_abgleichen(
-        Speicher(os.environ.get("AKTEDIREKT_DATEN", ".aktedirekt-daten")),
+        ablage,
         JurNodes(os.environ["AKTEDIREKT_JURNODES_URL"], os.environ["AKTEDIREKT_JURNODES_BENUTZER"],
                  os.environ["AKTEDIREKT_JURNODES_SCHLUESSEL"]),
         Partnerliste.laden(os.environ.get("AKTEDIREKT_PARTNER")), Stufen.laden(), zeit.jetzt().date())

@@ -25,3 +25,11 @@
 #blatt .marke { display: inline-block; padding: 6px 12px; border-radius: 999px; font-weight: 600;
   font-size: 15px; background: var(--flaeche); border: 1.5px solid var(--akzent); }
 #blatt .marke.eilt { border-color: var(--fehler); color: var(--fehler); }
+.loeschen { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--rand); }
+.loeschen .zeile { margin-top: 12px; }
+.loeschen .zeile button { flex: 1; }
+.gefahr { color: var(--fehler); border-color: var(--fehler) !important; }
+.gefahr:disabled { opacity: .45; }
+.nachweis { margin-top: 28px; }
+.nachweis ul { padding-left: 20px; }
+@media print { .loeschen { display: none !important; } }

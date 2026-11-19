@@ -33,7 +33,7 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (189 Prüfungen, ohne Netz; was eine Ablage braucht,
+Vorhanden und geprüft (201 Prüfungen, ohne Netz; was eine Ablage braucht,
 läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
@@ -106,6 +106,23 @@ Sachverständige kommen dort nicht hinein.
 
 In AWS meldet außerdem eine E-Mail jeden Eingang: ohne Namen und ohne Inhalt,
 bei einer Kündigung mit der Klagefrist im Betreff.
+
+## Löschen
+
+Die Kanzlei kann einen Eingang endgültig löschen: Angaben, Anlagen,
+Unterschrift, den Zugang des Mandanten und den Vermerk, welcher Partner
+welchen Stand gesehen hat. Vorher ist zu bestätigen, dass in der Akte liegt,
+was dorthin gehört. In jur|nodes ändert das Löschen nichts.
+
+Von selbst gelöscht wird nur, was vor mehr als 30 Tagen begonnen und **nie
+abgeschickt** wurde – abgebrochene Aufnahmen und Fälle vom Tresen, deren Code
+niemand eingelöst hat. Abgeschicktes bleibt, bis die Kanzlei es löscht; eine
+Frist dafür gibt es noch nicht (Löschkonzept offen).
+
+Übrig bleibt je Löschung ein Nachweis ohne Inhalt: Zeitpunkt, wer, Fallart,
+Zahl der Anlagen. In AWS lässt sich die Tabelle 35 Tage lang auf einen
+früheren Stand zurücksetzen; so lange wäre Gelöschtes dort noch
+wiederherstellbar. Im Dateispeicher ist es sofort weg.
 
 ## Zwei Stufen
 

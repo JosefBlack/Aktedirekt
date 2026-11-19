@@ -87,6 +87,13 @@ async function liste_laden() {
     li.addEventListener("keydown", (ev) => { if (ev.key === "Enter") oeffnen(); });
     liste.append(li);
   }
+  const nachweise = (await aufruf("GET", "/api/kanzlei/loeschungen")).loeschungen;
+  $("#nachweis").hidden = !nachweise.length;
+  $("#loeschungen").textContent = "";
+  for (const n of nachweise) {
+    $("#loeschungen").append(teil("li", "", zeitpunkt(n.zeitpunkt) + " · " + n.art + (n.abgeschickt ? "" : " (nicht abgeschickt)")
+      + " · " + n.dateien + (n.dateien === 1 ? " Anlage" : " Anlagen") + " · " + n.wer));
+  }
   $("#leer").hidden = daten.eingaenge.length > 0;
   $("#anzahl").textContent = daten.eingaenge.length ? daten.eingaenge.length + (daten.eingaenge.length === 1 ? " Eingang" : " Eingänge") : "";
   ansicht("liste");
@@ -158,8 +165,34 @@ async function eingang_laden(fall) {
     rahmen.append(bild);
     blatt.append(rahmen);
   }
+  offen = fall;
+  $("#loeschen-frage").hidden = true;
+  $("#loeschen-oeffnen").hidden = false;
+  $("#loeschen-haken").checked = false;
+  $("#loeschen-ausfuehren").disabled = true;
+  $("#loeschen-jurnodes").textContent = e.in_jurnodes
+    ? "Der Vorgang in jur|nodes bleibt davon unberührt."
+    : "In jur|nodes ist dieser Eingang noch nicht angelegt – nach dem Löschen gibt es ihn nirgends mehr.";
   ansicht("eingang");
 }
+
+let offen = "";
+$("#loeschen-oeffnen").addEventListener("click", () => {
+  $("#loeschen-frage").hidden = false;
+  $("#loeschen-oeffnen").hidden = true;
+});
+$("#loeschen-abbrechen").addEventListener("click", () => {
+  $("#loeschen-frage").hidden = true;
+  $("#loeschen-oeffnen").hidden = false;
+});
+$("#loeschen-haken").addEventListener("change", (e) => { $("#loeschen-ausfuehren").disabled = !e.target.checked; });
+$("#loeschen-ausfuehren").addEventListener("click", async () => {
+  $("#loeschen-ausfuehren").disabled = true;
+  try {
+    await aufruf("DELETE", "/api/kanzlei/eingaenge/" + offen, { endgueltig: true });
+    await liste_laden();
+  } catch (fehler) { gescheitert(fehler); }
+});
 
 function abgemeldet(text) {
   sitzung = "";

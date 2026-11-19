@@ -466,12 +466,14 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
 
     # ---- Kanzlei -----------------------------------------------------------
 
-    def kanzlei_von(request: Request) -> None:
+    def kanzlei_von(request: Request) -> str:
+        """Die Kennung des angemeldeten Kanzleikontos - oder eine Abweisung."""
         konto = partnerliste.konto(speicher.sitzung_partner(sitzung_von(request), jetzt()))
         if konto is None:
             raise HTTPException(401, "Bitte anmelden.")
         if konto.art != "kanzlei":
             raise HTTPException(403, "Dieser Bereich ist der Kanzlei vorbehalten.")
+        return konto.kennung
 
     def kopfdaten(aufnahme: Aufnahme) -> dict[str, Any]:
         konto = partnerliste.konto(aufnahme.partner)
@@ -514,6 +516,28 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 "nachweis": {"zeitpunkt": nachweis.get("zeitpunkt", ""), "geraet": nachweis.get("geraet", "")},
                 "einwilligung_partner": aufnahme.einwilligung_partner
                                         and aufnahme.einwilligung_widerrufen_am is None}
+
+    @app.delete("/api/kanzlei/eingaenge/{fall}")
+    async def eingang_loeschen(fall: str, request: Request) -> dict[str, Any]:
+        """Löscht einen Eingang endgültig. In jur|nodes ändert das nichts."""
+        wer = kanzlei_von(request)
+        eingang_von(fall, request)
+        daten = await json_lesen(request)
+        if not (isinstance(daten, dict) and daten.get("endgueltig") is True):
+            raise HTTPException(400, "Bitte bestätigen Sie, dass der Eingang endgültig gelöscht werden soll.")
+        nachweis = speicher.loeschen(fall, wer, jetzt())
+        if nachweis is None:
+            raise HTTPException(404, "Diesen Eingang gibt es nicht.")
+        return {"geloescht": True, "dateien": nachweis.dateien}
+
+    @app.get("/api/kanzlei/loeschungen")
+    async def loeschnachweis(request: Request) -> dict[str, Any]:
+        kanzlei_von(request)
+        return {"loeschungen": [
+            {"zeitpunkt": n.zeitpunkt.isoformat(timespec="minutes"), "wer": n.wer,
+             "art": FALLARTEN[n.art].titel if n.art in FALLARTEN else n.art,
+             "abgeschickt": n.abgeschickt, "dateien": n.dateien}
+            for n in speicher.loeschungen()]}
 
     @app.get("/api/kanzlei/eingaenge/{fall}/dateien/{datei}")
     async def datei_abholen(fall: str, datei: str, request: Request) -> Response:

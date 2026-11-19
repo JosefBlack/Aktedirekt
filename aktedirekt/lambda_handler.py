@@ -30,20 +30,22 @@ def handler(ereignis: Any, kontext: Any) -> Any:
 
 
 def abgleich(ereignis: Any, kontext: Any) -> dict[str, int]:
-    from aktedirekt.abgleich import alles_abgleichen
+    from aktedirekt.abgleich import alles_abgleichen, entwuerfe_aufraeumen
     from aktedirekt.partner import Partnerliste
     from aktedirekt.sachstand import Stufen
     from aktedirekt.speicher_aws import AwsSpeicher
 
     region = os.environ.get("AWS_REGION", "eu-central-1")
+    speicher = AwsSpeicher(os.environ["AKTEDIREKT_TABELLE"], os.environ["AKTEDIREKT_BUCKET"], region)
+    ergebnis = {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "fehler": 0}
+    # Aufgeräumt wird immer, auch solange jur|nodes noch nicht angeschlossen ist.
+    ergebnis["entwuerfe_geloescht"] = entwuerfe_aufraeumen(speicher, zeit.jetzt())
     jurnodes = jurnodes_aus_geheimnis(_geheimnis(os.environ["AKTEDIREKT_JURNODES_GEHEIMNIS"], region))
-    if jurnodes is None:
-        # Solange der Zugang nicht eingetragen ist, gibt es nichts abzugleichen.
-        return {"leads_nachgeholt": 0, "leads_offen": 0, "geaendert": 0, "fehler": 0}
-    ergebnis = alles_abgleichen(
-        AwsSpeicher(os.environ["AKTEDIREKT_TABELLE"], os.environ["AKTEDIREKT_BUCKET"], region), jurnodes,
-        Partnerliste.aus_text(_geheimnis(os.environ["AKTEDIREKT_PARTNER_GEHEIMNIS"], region)),
-        Stufen.laden(), zeit.jetzt().date())
+    if jurnodes is not None:
+        ergebnis.update(alles_abgleichen(
+            speicher, jurnodes,
+            Partnerliste.aus_text(_geheimnis(os.environ["AKTEDIREKT_PARTNER_GEHEIMNIS"], region)),
+            Stufen.laden(), zeit.jetzt().date()))
     # Nur Zahlen gehen ins Protokoll.
     print(", ".join(f"{name}: {zahl}" for name, zahl in ergebnis.items()))
     return ergebnis

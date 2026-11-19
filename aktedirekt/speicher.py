@@ -65,6 +65,14 @@ CREATE TABLE IF NOT EXISTS uebergabe (
   laeuft_ab TEXT NOT NULL,
   eingeloest_am TEXT
 );
+CREATE TABLE IF NOT EXISTS loeschung (
+  zeitpunkt TEXT NOT NULL,
+  fall TEXT NOT NULL,
+  wer TEXT NOT NULL,
+  art TEXT NOT NULL,
+  abgeschickt INTEGER NOT NULL,
+  dateien INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS auskunft (
   partner TEXT NOT NULL,
   aufnahme TEXT NOT NULL,
@@ -91,6 +99,17 @@ class Datei:
     name: str
     art: str
     groesse: int
+
+
+@dataclass(frozen=True)
+class Loeschung:
+    """Der Nachweis einer Löschung: Zahlen und Zeitpunkt, nichts vom Inhalt."""
+    zeitpunkt: datetime
+    fall: str
+    wer: str
+    art: str
+    abgeschickt: bool
+    dateien: int
 
 
 @dataclass(frozen=True)
@@ -125,6 +144,9 @@ class Speicher:
         db = sqlite3.connect(self._ordner / "aktedirekt.sqlite3")
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys = ON")
+        # Gelöschtes wird in der Datei überschrieben. Ohne das bliebe es dort
+        # lesbar liegen, bis der Platz zufällig wieder gebraucht wird.
+        db.execute("PRAGMA secure_delete = ON")
         return db
 
     # ---- Aufnahmen -------------------------------------------------------
@@ -363,6 +385,48 @@ class Speicher:
             db.execute("DELETE FROM datei WHERE kennung = ?", (datei_kennung,))
         (self._ordner / "dateien" / f"{datei_kennung}.{z['art']}").unlink(missing_ok=True)
         return True
+
+    # ---- Löschen ---------------------------------------------------------
+
+    def loeschen(self, kennung: str, wer: str, jetzt: datetime) -> Loeschung | None:
+        """Entfernt eine Aufnahme mit allem, was zu ihr gehört, und hält nur den Nachweis fest.
+
+        Weg sind danach: Angaben, Anlagen, Unterschrift, der Zugang des
+        Mandanten, ein offener Code vom Tresen und der Vermerk, welcher
+        Partner welchen Stand gesehen hat.
+        """
+        aufnahme = self.nach_kennung(kennung)
+        if aufnahme is None:
+            return None
+        ordner = self._ordner / "dateien"
+        with closing(self._db()) as db, db:
+            dateien = db.execute("SELECT kennung, art FROM datei WHERE aufnahme = ?", (kennung,)).fetchall()
+            wartend = db.execute("SELECT kennung FROM upload WHERE aufnahme = ?", (kennung,)).fetchall()
+            for tabelle in ("datei", "upload", "uebergabe", "auskunft"):
+                db.execute(f"DELETE FROM {tabelle} WHERE aufnahme = ?", (kennung,))
+            db.execute("DELETE FROM aufnahme WHERE kennung = ?", (kennung,))
+            nachweis = Loeschung(jetzt, kennung, wer, aufnahme.art, aufnahme.abgeschlossen_am is not None, len(dateien))
+            db.execute("INSERT INTO loeschung VALUES (?,?,?,?,?,?)",
+                       (jetzt.isoformat(), kennung, wer, nachweis.art, int(nachweis.abgeschickt), nachweis.dateien))
+        for d in dateien:
+            (ordner / f"{d['kennung']}.{d['art']}").unlink(missing_ok=True)
+        for w in wartend:
+            (ordner / f"{w['kennung']}.eingang").unlink(missing_ok=True)
+        (ordner / f"{kennung}-unterschrift.png").unlink(missing_ok=True)
+        return nachweis
+
+    def loeschungen(self) -> list[Loeschung]:
+        with closing(self._db()) as db:
+            zeilen = db.execute("SELECT * FROM loeschung ORDER BY zeitpunkt DESC").fetchall()
+        return [Loeschung(datetime.fromisoformat(z["zeitpunkt"]), z["fall"], z["wer"], z["art"],
+                          bool(z["abgeschickt"]), z["dateien"]) for z in zeilen]
+
+    def entwuerfe_vor(self, grenze: datetime) -> list[str]:
+        """Aufnahmen, die vor ``grenze`` begonnen und nie abgeschickt wurden."""
+        with closing(self._db()) as db:
+            zeilen = db.execute("SELECT kennung FROM aufnahme WHERE abgeschlossen_am IS NULL AND angelegt_am < ?",
+                                (grenze.isoformat(),)).fetchall()
+        return [z["kennung"] for z in zeilen]
 
     # ---- Sitzungen der Partner ------------------------------------------
 
