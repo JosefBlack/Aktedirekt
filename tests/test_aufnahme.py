@@ -243,18 +243,36 @@ def test_angekuendigt_aber_nicht_abgeliefert(umgebung):
 
 
 def test_jurnodes_ausfall_verliert_die_aufnahme_nicht(tmp_path):
+    from aktedirekt.abgleich import alles_abgleichen
+    from aktedirekt.sachstand import Stufen
     speicher = Speicher(tmp_path)
-    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim",
-                        transport=httpx.MockTransport(lambda a: httpx.Response(500, json={})))
-    client = TestClient(app_bauen(speicher, jurnodes=jurnodes, jetzt=lambda: JETZT))
+    aus = JurNodes("https://jurnodes.example", "portal", "geheim",
+                   transport=httpx.MockTransport(lambda a: httpx.Response(500, json={})))
+    client = TestClient(app_bauen(speicher, jurnodes=aus, jetzt=lambda: JETZT))
     kopf, zugang = beginnen(client)
     ausfuellen(client, kopf)
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={
         "vollmacht": True, "datenschutz": True, "widerruf": True, "unterschrift": UNTERSCHRIFT})
     assert antwort.status_code == 200
+    # Abgeschickt ist abgeschickt. Ob der Lead entstand, ist bei einem Ausfall unklar.
     aufnahme = speicher.laden(zugang)
-    assert aufnahme.abgeschlossen_am == JETZT and aufnahme.lead_kennung == ""
-    assert [a.kennung for a in speicher.ohne_lead()] == [aufnahme.kennung]
+    assert aufnahme.abgeschlossen_am == JETZT and aufnahme.lead_kennung == "unbekannt"
+    heute = JETZT.date()
+    assert alles_abgleichen(speicher, aus, PARTNER, Stufen.laden(), heute)["ohne_kennung"] == 1
+
+    # jur|nodes ist wieder da und kennt den Lead nicht: Er wird nachgeholt - genau einmal.
+    angelegt = []
+
+    def wieder_da(anfrage: httpx.Request) -> httpx.Response:
+        if anfrage.url.path == "/lead/search":
+            return httpx.Response(200, json={"elements": [{"identifier": "L-neu", "shortRubrum": m["shortRubrum"]} for m in angelegt]})
+        if anfrage.method == "POST" and anfrage.url.path == "/lead":
+            angelegt.append(json.loads(anfrage.content)["model"])
+        return httpx.Response(200, json={"identifier": "L-neu", "status": "created"})
+    da = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(wieder_da))
+    for _ in range(3):
+        alles_abgleichen(speicher, da, PARTNER, Stufen.laden(), heute)
+    assert speicher.laden(zugang).lead_kennung == "L-neu" and len(angelegt) == 1
 
 
 def test_seite_und_kopfzeilen(umgebung):

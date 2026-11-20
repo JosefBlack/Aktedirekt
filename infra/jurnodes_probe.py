@@ -111,16 +111,35 @@ if "anlegen" not in sys.argv[1:]:
     print("  bash aktedirekt/verwalten.sh jurnodes-probe anlegen")
     sys.exit(0)
 
+def probe_lead_suchen():
+    """Der Probe-Lead, wenn es ihn gibt - gesucht mit Filter und, findet der nichts, ohne."""
+    for params in ({"shortRubrum": RUBRUM, "page": 1}, {"page": 1}):
+        status, art, daten, text = aufruf("GET", "/lead/search", params)
+        elemente = daten.get("elements") if isinstance(daten, dict) else None
+        for e in elemente or []:
+            if isinstance(e, dict) and e.get("shortRubrum") == RUBRUM and e.get("identifier"):
+                return e, ("mit Filter" if "shortRubrum" in params else "ohne Filter")
+    return None, ""
+
+
 print("\n== 2. Einen Probe-Lead anlegen")
-# Ohne Vermittler: Den müsste es in jur|nodes unter genau diesem Namen schon geben.
-modell = {"model": {"shortRubrum": RUBRUM, "leadDate": date.today().isoformat()}}
-status, art, daten, text = aufruf("POST", "/lead", koerper=json.dumps(modell).encode(), kopf={"Content-Type": "application/json"})
-zeile("POST /lead", status, art, daten, text)
-lead = kennung_aus(daten)
-if lead is None:
-    print("  -> Die Antwort nennt keine Kennung. Ohne sie geht es hier nicht weiter.")
-    print("     Ist der Lead trotzdem in jur|nodes zu sehen? Bitte dazusagen.")
-    sys.exit(0)
+lead, wie = probe_lead_suchen()
+if lead is not None:
+    print(f"  Den Probe-Lead gibt es schon (gefunden {wie}) - er wird wiederverwendet, kein neuer.")
+else:
+    # Ohne Vermittler: Den müsste es in jur|nodes unter genau diesem Namen schon geben.
+    modell = {"model": {"shortRubrum": RUBRUM, "leadDate": date.today().isoformat()}}
+    status, art, daten, text = aufruf("POST", "/lead", koerper=json.dumps(modell).encode(), kopf={"Content-Type": "application/json"})
+    zeile("POST /lead", status, art, daten, text)
+    lead = kennung_aus(daten)
+    if lead is None:
+        gefunden, wie = probe_lead_suchen()
+        if gefunden is None:
+            print("  -> Keine Kennung in der Antwort, und die Suche findet den Lead nicht: nicht angelegt.")
+            print("     Bitte trotzdem in jur|nodes nachsehen, ob er dort steht, und das dazusagen.")
+            sys.exit(0)
+        print(f"  -> Trotz dieser Antwort ist der Lead angelegt worden (gefunden {wie}).")
+        lead = gefunden
 kennung = str(lead.get("identifier") or lead.get("leadIdentifier"))
 ordner = lead.get("fileFolderId")
 print(f"  -> Kennung vorhanden ({len(kennung)} Zeichen), Dateiordner genannt: {'ja' if ordner else 'nein'}")

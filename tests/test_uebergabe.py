@@ -405,11 +405,12 @@ class ServerMitEigenerSuche(Server):
         return super().__call__(anfrage)
 
 
-@pytest.mark.parametrize("annehmen,erwartete_versuche", [
-    (lambda p: int(p.get("page", 0)) >= 1 and "shortRubrum" in p, 1),     # Seiten zählen ab 1 - wie am Server der Kanzlei
-    (lambda p: "shortRubrum" not in p and int(p.get("page", 0)) >= 1, 3), # kein Filter erlaubt: alles holen, hier vergleichen
+@pytest.mark.parametrize("annehmen", [
+    lambda p: int(p.get("page", 0)) >= 1 and "shortRubrum" in p,          # Seiten zählen ab 1 - wie am Server der Kanzlei
+    lambda p: "shortRubrum" not in p and int(p.get("page", 0)) >= 1,      # kein Filter erlaubt: alles holen, hier vergleichen
+    lambda p: "page" not in p,                                            # gar keine Seiten
 ])
-def test_lead_suche_findet_ihren_weg_und_merkt_ihn(ablage, annehmen, erwartete_versuche):
+def test_lead_suche_findet_ihren_weg(ablage, annehmen):
     client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jetzt=lambda: JETZT))
     _, zugang = aufnehmen(client, ablage)              # abgeschickt, bevor jur|nodes angeschlossen war
     server = ServerMitEigenerSuche(annehmen)
@@ -418,12 +419,86 @@ def test_lead_suche_findet_ihren_weg_und_merkt_ihn(ablage, annehmen, erwartete_v
     assert ablage.speicher.laden(zugang).lead_kennung == "L-elf" and server.leads == []     # gefunden, nicht neu angelegt
     assert zahlen["leads_nachgeholt"] == 1 and zahlen["abgelegt"] == 3
     assert jurnodes.pannen == []                       # die abgewiesenen Formen waren Versuche, keine Pannen
-    abgewiesen = [s for s in server.suchen if not annehmen(s)]
-    assert len(abgewiesen) == erwartete_versuche - 1
-    # Der gefundene Weg ist gemerkt: Eine zweite Suche probiert nichts mehr durch.
-    server.suchen.clear()
-    jurnodes.lead_suchen("Gibt es nicht")
-    assert all(annehmen(s) for s in server.suchen)
+
+
+def test_filter_der_nichts_findet_fuehrt_nicht_zum_doppel(ablage):
+    """Der Server nimmt die Suche mit Kurzrubrum an, findet aber nichts - obwohl es den Lead gibt."""
+    client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jetzt=lambda: JETZT))
+    _, zugang = aufnehmen(client, ablage)
+    server = ServerMitEigenerSuche(lambda p: True)
+    echt = ServerMitEigenerSuche.__call__
+
+    def blinder_filter(anfrage):
+        if anfrage.url.path == "/lead/search" and "shortRubrum" in dict(anfrage.url.params):
+            return httpx.Response(200, json={"elements": []})
+        return echt(server, anfrage)
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(blinder_filter))
+    lauf(ablage.speicher, jurnodes)
+    assert ablage.speicher.laden(zugang).lead_kennung == "L-elf" and server.leads == []
+
+
+class ServerMitFehler500(ServerMitEigenerSuche):
+    """Wie der Server der Kanzlei am 20.11.2026: legt den Lead an und antwortet mit Status 500."""
+    def __init__(self, legt_trotzdem_an=True):
+        super().__init__(lambda p: int(p.get("page", 1)) >= 1)
+        self.legt_trotzdem_an, self.angelegt = legt_trotzdem_an, []
+
+    def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        if anfrage.method == "POST" and anfrage.url.path == "/lead":
+            modell = json.loads(anfrage.content)["model"]
+            self.leads.append(modell)
+            if self.legt_trotzdem_an:
+                self.angelegt.append(modell["shortRubrum"])
+            return httpx.Response(500, json={})
+        if anfrage.url.path == "/lead/search":
+            params = dict(anfrage.url.params)
+            if not self.annehmen(params):
+                return httpx.Response(405, json={"error": "Bitte geben Sie eine Seitenzahl > 0 an"})
+            alle = [{"identifier": f"L-{n}", "shortRubrum": r, "status": "created", "fileFolderId": 77}
+                    for n, r in enumerate(self.angelegt)]
+            if "shortRubrum" in params:
+                alle = [e for e in alle if e["shortRubrum"] == params["shortRubrum"]]
+            return httpx.Response(200, json={"elements": alle if int(params.get("page", 1)) == 1 else []})
+        if anfrage.url.path == "/lead" and anfrage.method == "GET":
+            return httpx.Response(200, json={"identifier": anfrage.url.params["identifier"], "status": "created", "fileFolderId": 77})
+        return Server.__call__(self, anfrage)
+
+
+def test_serverfehler_beim_anlegen_aber_der_lead_ist_da(ablage):
+    server = ServerMitFehler500()
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
+    client = TestClient(app_bauen(ablage.speicher, jurnodes=jurnodes, jetzt=lambda: JETZT))
+    _, zugang = aufnehmen(client, ablage, einladung="")
+    # Schon beim Abschicken geklärt: angelegt trotz Status 500, Kennung über die Suche.
+    assert ablage.speicher.laden(zugang).lead_kennung == "L-0" and len(server.leads) == 1
+    assert jurnodes.pannen == ["POST /lead: Status 500"]
+    for _ in range(3):
+        zahlen = lauf(ablage.speicher, jurnodes)
+    assert len(server.leads) == 1                      # nie ein zweiter
+    assert [a["name"] for a in server.abgelegt][1:] == ["Unterschrift Aktedirekt.png", "Schaden _vorne.jpg"]
+
+
+def test_serverfehler_beim_anlegen_und_der_lead_ist_nicht_da(ablage):
+    server = ServerMitFehler500(legt_trotzdem_an=False)
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
+    client = TestClient(app_bauen(ablage.speicher, jurnodes=jurnodes, jetzt=lambda: JETZT))
+    _, zugang = aufnehmen(client, ablage, einladung="")
+    assert ablage.speicher.laden(zugang).lead_kennung == ""          # die Suche hat gezeigt: nichts da - bleibt vorgemerkt
+    server.legt_trotzdem_an = True
+    assert lauf(ablage.speicher, jurnodes)["leads_nachgeholt"] == 1  # nächster Lauf: erst suchen, dann anlegen
+    assert ablage.speicher.laden(zugang).lead_kennung == "L-0" and len(server.angelegt) == 1
+
+
+def test_serverfehler_und_suche_scheitert_gilt_als_angelegt(ablage):
+    server = ServerMitFehler500()
+    server.annehmen = lambda p: False                  # auch die Suche geht nicht
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
+    client = TestClient(app_bauen(ablage.speicher, jurnodes=jurnodes, jetzt=lambda: JETZT))
+    _, zugang = aufnehmen(client, ablage, einladung="")
+    assert ablage.speicher.laden(zugang).lead_kennung == "unbekannt"
+    for _ in range(3):
+        lauf(ablage.speicher, jurnodes)
+    assert len(server.leads) == 1
 
 
 def test_suche_die_in_jeder_form_scheitert_ist_ein_fehler_und_kein_nein(ablage):
@@ -431,7 +506,7 @@ def test_suche_die_in_jeder_form_scheitert_ist_ein_fehler_und_kein_nein(ablage):
     jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
     with pytest.raises(Exception):
         jurnodes.lead_suchen("Muster ./. X")
-    assert jurnodes.pannen == ["GET /lead/search: Status 405"] and len(server.suchen) == 6
+    assert jurnodes.pannen == ["GET /lead/search: Status 405"] and len(server.suchen) == 6     # dreimal mit, dreimal ohne Filter
 
 
 def test_unbekannter_vermittler_kostet_nicht_den_lead(ablage):

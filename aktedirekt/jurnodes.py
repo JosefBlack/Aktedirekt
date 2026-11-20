@@ -39,6 +39,14 @@ class OhneKennung(JurNodesFehler):
     """
 
 
+class Ungewiss(JurNodesFehler):
+    """Nach dem Anlegen ist offen, ob es den Lead gibt (Serverfehler, abgerissene Verbindung).
+
+    Noch einmal anlegen darf man erst, wenn eine Suche gezeigt hat, dass es
+    ihn nicht gibt.
+    """
+
+
 @dataclass(frozen=True)
 class Lead:
     kennung: str
@@ -64,7 +72,7 @@ class JurNodes:
         self.pannen: list[str] = []
         self.letzter_status = 0
         # Welche Form der Lead-Suche dieser Server annimmt (wird beim ersten Erfolg gemerkt).
-        self._suchweg: int | None = None
+        self._zaehlweise: int | None = None
 
     def close(self) -> None:
         self._client.close()
@@ -84,6 +92,7 @@ class JurNodes:
         ``still``: Ein Scheitern wird nicht als Panne festgehalten - für
         Versuche, bei denen der Aufrufer noch einen anderen Weg kennt.
         """
+        self.letzter_status = 0
         try:
             antwort = self._client.request(verfahren, pfad, **kw)
         except httpx.HTTPError as fehler:
@@ -131,6 +140,26 @@ class JurNodes:
         return Lead(kennung=str(d.get("identifier") or d.get("leadIdentifier")), status=str(d.get("status") or ""),
                     akte_kennung=str(d.get("acceptedRecord") or ""), ordner=ordner)
 
+    def _lead_senden(self, modell: dict[str, Any], still: bool) -> Lead:
+        """Ein Versuch, den Lead anzulegen.
+
+        Drei Ausgänge sind zu unterscheiden: angelegt (mit oder ohne genannte
+        Kennung), abgewiesen (nichts angelegt) - und ungewiss. Ungewiss ist
+        alles, wonach man nicht weiß, ob jur|nodes den Lead angelegt hat: ein
+        Serverfehler oder eine abgerissene Verbindung. Der Server der Kanzlei
+        antwortete am 20.11.2026 auf einen Lead ohne Vermittler mit Status 500.
+        """
+        try:
+            return self._lead(self._aufruf("POST", "/lead", still=still, json={"model": modell}), "POST")
+        except OhneKennung:
+            raise
+        except JurNodesFehler as fehler:
+            if self.letzter_status == 0 or self.letzter_status >= 500:
+                if still:
+                    self._panne("POST", "/lead", f"Status {self.letzter_status}" if self.letzter_status else "nicht erreichbar")
+                raise Ungewiss("Unklar, ob jur|nodes den Lead angelegt hat.") from fehler
+            raise
+
     def lead_anlegen(self, kurzrubrum: str, vermittler: str = "",
                      datum: date | None = None) -> Lead:
         """Legt den Eingang an. Angenommen oder abgelehnt wird er in jur|nodes."""
@@ -145,65 +174,74 @@ class JurNodes:
             # Abweisung heißt: nichts angelegt; der zweite Versuch ist deshalb
             # kein doppelter Eingang.
             try:
-                return self._lead(self._aufruf("POST", "/lead", still=True,
-                                               json={"model": {**modell, "broker": vermittler[:50]}}), "POST")
-            except OhneKennung:
+                return self._lead_senden({**modell, "broker": vermittler[:50]}, still=True)
+            except (OhneKennung, Ungewiss):
                 raise
             except JurNodesFehler:
                 if self.letzter_status != 405:
                     self._panne("POST", "/lead", f"Status {self.letzter_status}")
                     raise
                 self._panne("POST", "/lead", "mit Vermittler abgewiesen - ohne Vermittler angelegt")
-        return self._lead(self._aufruf("POST", "/lead", json={"model": modell}), "POST")
+        return self._lead_senden(modell, still=False)
 
     # Die Beschreibung des Herstellers nennt für die Lead-Suche Seite 0 als erste.
     # Der Server der Kanzlei sagt dazu (20.11.2026): "Bitte geben Sie eine
-    # Seitenzahl > 0 an" - gezählt wird ab 1. Die erste Form ist die, die dort
-    # geht; die übrigen bleiben für den Fall, dass sich das wieder ändert.
-    _SUCHWEGE: tuple[tuple[bool, int | None], ...] = ((True, 1), (True, None), (False, 1), (False, None), (True, 0), (False, 0))
+    # Seitenzahl > 0 an" - gezählt wird ab 1. Die erste Zählweise ist die, die
+    # dort geht; die übrigen bleiben für den Fall, dass sich das wieder ändert.
+    _ERSTE_SEITE: tuple[int | None, ...] = (1, None, 0)
 
-    def _lead_suchseite(self, weg: int, kurzrubrum: str, weiter: int, still: bool) -> Any:
-        mit_filter, erste = self._SUCHWEGE[weg]
-        params: dict[str, Any] = {}
-        if mit_filter:
-            params["shortRubrum"] = kurzrubrum
-        if erste is not None:
-            params["page"] = erste + weiter
-        return self._aufruf("GET", "/lead/search", still=still, params=params)
+    def _lead_liste(self, kurzrubrum: str, mit_filter: bool) -> list[dict[str, Any]]:
+        """Alle Leads mit genau diesem Kurzrubrum - gesucht mit oder ohne Filter des Servers.
+
+        Wirft einen Fehler, wenn der Server die Suche in keiner Zählweise annimmt.
+        """
+        zaehlweisen = [self._zaehlweise] if self._zaehlweise is not None else list(self._ERSTE_SEITE)
+        treffer: list[dict[str, Any]] = []
+        for nr, erste in enumerate(zaehlweisen):
+            letzte = nr == len(zaehlweisen) - 1
+            seite = 0
+            while seite < 20:                          # nie endlos blättern
+                params: dict[str, Any] = {"shortRubrum": kurzrubrum} if mit_filter else {}
+                if erste is not None:
+                    params["page"] = erste + seite
+                try:
+                    daten = self._aufruf("GET", "/lead/search", still=not letzte or seite > 0, params=params)
+                except JurNodesFehler:
+                    if seite == 0 and letzte:
+                        self._zaehlweise = None
+                        raise
+                    if seite == 0:
+                        break                          # diese Zählweise nimmt der Server nicht: die nächste
+                    return treffer
+                self._zaehlweise = erste
+                elemente = daten.get("elements") if isinstance(daten, dict) else None
+                treffer += [e for e in elemente or [] if isinstance(e, dict) and e.get("shortRubrum") == kurzrubrum
+                            and self._lead_daten(e) is not None]
+                seite += 1
+                if not elemente or erste is None:
+                    return treffer
+            else:
+                return treffer
+        return treffer
 
     def lead_suchen(self, kurzrubrum: str) -> Lead | None:
         """Der jüngste Lead mit genau diesem Kurzrubrum - ``None``, wenn es keinen gibt.
 
-        Damit wird vor dem Nachholen nachgesehen, ob es den Lead schon gibt:
-        Ein zweites Anlegen wäre ein doppelter Eingang in der Kanzlei. Scheitert
-        die Suche in jeder Form, ist das ein Fehler - und kein "gibt es nicht".
+        Damit wird vor dem Anlegen nachgesehen, ob es den Lead schon gibt: Ein
+        zweites Anlegen wäre ein doppelter Eingang in der Kanzlei. Deshalb
+        zweimal: erst mit dem Filter des Servers, und findet der nichts, noch
+        einmal über alle offenen Leads mit Vergleich hier - ein Filter, der ein
+        Zeichen anders liest, soll nicht zu einem Doppel führen. Scheitert die
+        Suche, ist das ein Fehler und kein "gibt es nicht".
         """
         kurzrubrum = kurzrubrum[:50]
-        wege = [self._suchweg] if self._suchweg is not None else list(range(len(self._SUCHWEGE)))
-        daten, weg = None, -1
-        for weg in wege:
-            try:
-                daten = self._lead_suchseite(weg, kurzrubrum, 0, still=weg != wege[-1])
-                break
-            except JurNodesFehler:
-                if weg == wege[-1]:
-                    self._suchweg = None
-                    raise
-        self._suchweg = weg
-        treffer: list[dict[str, Any]] = []
-        seite = 0
-        while True:
-            elemente = daten.get("elements") if isinstance(daten, dict) else None
-            treffer += [e for e in elemente or [] if isinstance(e, dict) and e.get("shortRubrum") == kurzrubrum
-                        and self._lead_daten(e) is not None]
-            # Weiterblättern nur, wo es Seiten gibt, und nie endlos.
-            seite += 1
-            if not elemente or self._SUCHWEGE[weg][1] is None or seite >= 20:
-                break
-            try:
-                daten = self._lead_suchseite(weg, kurzrubrum, seite, still=True)
-            except JurNodesFehler:
-                break
+        try:
+            treffer = self._lead_liste(kurzrubrum, mit_filter=True)
+        except JurNodesFehler:
+            treffer = []
+            del self.pannen[-1:]                       # der Weg ohne Filter entscheidet
+        if not treffer:
+            treffer = self._lead_liste(kurzrubrum, mit_filter=False)
         return self._lead(treffer[-1], "GET") if treffer else None
 
     def lead(self, kennung: str) -> Lead:

@@ -624,7 +624,8 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 "vermittler": konto.name if konto else "",
                 "kurzrubrum": kurzrubrum(aufnahme),
                 "sachstand": stufen.bezeichnung(aufnahme.sachstand),
-                "in_jurnodes": bool(aufnahme.lead_kennung)}
+                # "unbekannt" heißt: gemeldet, aber noch nicht bestätigt gefunden.
+                "in_jurnodes": aufnahme.lead_kennung not in ("", "unbekannt")}
 
     @app.get("/api/kanzlei/eingaenge")
     async def eingaenge(request: Request) -> dict[str, Any]:

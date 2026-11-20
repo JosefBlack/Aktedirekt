@@ -20,7 +20,7 @@ from typing import Any
 from aktedirekt import akte_pdf, erklaerungen
 from aktedirekt.aufnahme import Aufnahme, kurzrubrum
 from aktedirekt.domain import Einwilligung, Fall, Herkunft, Sachstand
-from aktedirekt.jurnodes import JurNodes, JurNodesFehler, OhneKennung
+from aktedirekt.jurnodes import JurNodes, JurNodesFehler, OhneKennung, Ungewiss
 from aktedirekt.partner import Partnerliste
 from aktedirekt.sachstand import Stufen, sachstand_ableiten
 from aktedirekt.speicher import Speicher
@@ -140,6 +140,19 @@ def lead_anlegen(aufnahme: Aufnahme, speicher: Speicher, jurnodes: JurNodes,
     except OhneKennung:
         speicher.lead_setzen(aufnahme.kennung, UNBEKANNT)
         return True
+    except Ungewiss:
+        # Serverfehler beim Anlegen: Nachsehen, ob es den Lead trotzdem gibt.
+        try:
+            entstanden = jurnodes.lead_suchen(rubrum)
+        except JurNodesFehler:
+            # Nicht zu klären. Dann gilt er als angelegt - lieber einmal
+            # nachfragen als ein doppelter Eingang.
+            speicher.lead_setzen(aufnahme.kennung, UNBEKANNT)
+            return True
+        if entstanden is None:
+            return False                               # wirklich nicht angelegt: bleibt vorgemerkt
+        speicher.lead_setzen(aufnahme.kennung, entstanden.kennung)
+        return True
     except JurNodesFehler:
         return False
     speicher.lead_setzen(aufnahme.kennung, lead.kennung)
@@ -150,6 +163,11 @@ def kennung_nachtragen(aufnahme: Aufnahme, speicher: Speicher, jurnodes: JurNode
     """Sucht zu einem Lead ohne bekannte Kennung die Kennung über das Kurzrubrum."""
     gefunden = jurnodes.lead_suchen(kurzrubrum(aufnahme))
     if gefunden is None:
+        # Die Suche ging und fand nichts: Dann ist der Lead damals doch nicht
+        # entstanden (etwa bei einem Ausfall von jur|nodes). Zurück auf
+        # "vorgemerkt" - der nächste Lauf sucht noch einmal und legt dann an.
+        # Ein Eingang darf nicht verloren gehen, nur weil unklar war, ob er ankam.
+        speicher.lead_setzen(aufnahme.kennung, "")
         return False
     speicher.lead_setzen(aufnahme.kennung, gefunden.kennung)
     return True
