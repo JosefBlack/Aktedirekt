@@ -90,21 +90,17 @@ Dateien nur noch von dieser Seite an.
 
 ## Partner eintragen
 
-Je Werkstatt oder Sachverständigem ein Kennwort erzeugen (mindestens zwölf
-Zeichen; es wird nicht angezeigt):
+In CloudShell, ohne Datei und ohne neuen Deploy:
 
 ```bash
-python -m aktedirekt.partner
+bash aktedirekt/verwalten.sh partner-neu
 ```
 
-Die Liste hat denselben Aufbau wie `testdaten/partner.json`, ohne das Feld
-`_kennwort_nur_fuer_die_probe`. Die Einladung ist der Teil hinter `?p=` im
-Link der Werkstatt – ein langer Zufallswert, kein sprechender Name. Als Datei
-`partner.json` speichern, eintragen und die Datei danach löschen:
-
-```bash
-aws secretsmanager put-secret-value --secret-id aktedirekt/probe/partner --secret-string file://partner.json --region eu-central-1
-```
+Fragt nach Art (Werkstatt oder Sachverständigenbüro), Name und dem Namen des
+Vermittlers in jur|nodes und zeigt Kennung, Kennwort und Kundenlink einmalig
+an. `verwalten.sh partner-aus <Kennung>` nimmt einen Partner heraus (seine
+Fälle bleiben), `verwalten.sh vermittler <Kennung>` ändert den Vermittler,
+`verwalten.sh liste` zeigt alle Kennungen.
 
 Die Änderung wirkt nach spätestens fünf Minuten, ohne neuen Deploy.
 

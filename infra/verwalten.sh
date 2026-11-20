@@ -5,6 +5,10 @@
 #   bash verwalten.sh faktor <Kennung>     setzt den zweiten Faktor zurück (Handy verloren, neue App);
 #                                          bei der nächsten Anmeldung wird er neu eingerichtet
 #   bash verwalten.sh liste                zeigt die Kennungen (ohne Kennwörter)
+#   bash verwalten.sh partner-neu          legt eine Werkstatt oder ein Sachverständigenbüro an (fragt nach Art,
+#                                          Name und Vermittler in jur|nodes; zeigt Kennwort und Kundenlink einmalig)
+#   bash verwalten.sh partner-aus <Kennung>      nimmt einen Partner heraus (seine Fälle bleiben)
+#   bash verwalten.sh vermittler <Kennung>       ändert, unter welchem Vermittler seine Leads in jur|nodes stehen
 #   bash verwalten.sh jurnodes             trägt den Zugang zu jur|nodes ein (fragt Adresse, Benutzer und
 #                                          Schlüssel ab; der Schlüssel erscheint nicht auf dem Bildschirm)
 #   bash verwalten.sh jurnodes-aus         nimmt den Zugang wieder heraus; das Portal meldet dann nichts mehr
@@ -47,6 +51,15 @@ print("  " + kennwort)
 PY
     aws secretsmanager put-secret-value --secret-id "$GEHEIMNIS" --secret-string "file://$NEU" >/dev/null
     echo "Das alte Kennwort gilt noch bis zu fünf Minuten, danach nur noch das neue."
+    ;;
+  partner-neu|partner-aus|vermittler)
+    ART="${BEFEHL#partner-}"
+    if PORTAL=$(ausgabe PortalUrl) python3 "$(dirname "$0")/partner_verwalten.py" "$ART" "$ALT" "$NEU" ${KENNUNG:+"$KENNUNG"}; then
+      aws secretsmanager put-secret-value --secret-id "$GEHEIMNIS" --secret-string "file://$NEU" >/dev/null
+      echo "Gespeichert. Die Änderung gilt nach spätestens fünf Minuten."
+    else
+      echo "Nichts geändert."
+    fi
     ;;
   faktor)
     [ -n "$KENNUNG" ] || { echo "Bitte die Kennung angeben."; exit 1; }
@@ -98,6 +111,6 @@ PY
     echo "Der Zugang ist herausgenommen. Neue Eingänge bleiben im Portal vorgemerkt."
     ;;
   *)
-    echo "Aufruf: bash verwalten.sh kennwort <Kennung> | faktor <Kennung> | liste | jurnodes | jurnodes-aus | jurnodes-probe [anlegen]"; exit 1
+    echo "Aufruf: bash verwalten.sh kennwort <Kennung> | faktor <Kennung> | liste | partner-neu | partner-aus <Kennung> | vermittler <Kennung> | jurnodes | jurnodes-aus | jurnodes-probe [anlegen]"; exit 1
     ;;
 esac
