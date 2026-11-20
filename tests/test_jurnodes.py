@@ -42,7 +42,7 @@ def test_get_traegt_den_schluessel_ebenfalls():
                                          "acceptedRecord": "A-9"})}, gesehen)
     assert j.lead("L-1").akte_kennung == "A-9"
     assert gesehen[0].headers["X-Auth-Key"] == "geheim"
-    assert gesehen[0].url.params["identifier"] == "L-1"
+    assert gesehen[0].url.params["leadIdentifier"] == "L-1"
 
 
 @pytest.mark.parametrize("status", [400, 401, 405, 500])

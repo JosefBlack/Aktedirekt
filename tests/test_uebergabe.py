@@ -480,7 +480,7 @@ class ServerMitFehler500(ServerMitEigenerSuche):
                 alle = [e for e in alle if e["shortRubrum"] == params["shortRubrum"]]
             return httpx.Response(200, json={"elements": alle if int(params.get("page", 1)) == 1 else []})
         if anfrage.url.path == "/lead" and anfrage.method == "GET":
-            return httpx.Response(200, json={"identifier": anfrage.url.params["identifier"], "status": "created", "fileFolderId": 77})
+            return httpx.Response(200, json={"identifier": anfrage.url.params["leadIdentifier"], "status": "created", "fileFolderId": 77})
         return Server.__call__(self, anfrage)
 
 
@@ -570,7 +570,7 @@ class ServerDerKanzlei(Server):
     GET /lead: 405 "Bitte Daten angeben". Suche: Seiten ab 1, ohne Angabe nur offene Leads."""
     def __init__(self):
         super().__init__()
-        self.liste, self.lesen = [], 0
+        self.liste, self.lesen, self.lead_lesbar = [], 0, True
 
     def __call__(self, anfrage: httpx.Request) -> httpx.Response:
         if (fertig := self.eigenschaften_weg(anfrage)) is not None:
@@ -587,6 +587,9 @@ class ServerDerKanzlei(Server):
             return httpx.Response(500, json={})
         if weg == "/lead":
             self.lesen += 1
+            treffer = [e for e in self.liste if e["identifier"] == params.get("leadIdentifier")]
+            if self.lead_lesbar and treffer:
+                return httpx.Response(200, json={**treffer[0], "broker": None, "datapool": None})
             return httpx.Response(405, json={"error": "Bitte Daten angeben"})
         if weg == "/lead/search":
             if params.get("page") == "0":
@@ -621,6 +624,7 @@ def kanzlei_server(ablage):
 
 def test_ganzer_weg_am_server_der_kanzlei(kanzlei_server):
     client, speicher, server, ablage, jurnodes = kanzlei_server
+    server.lead_lesbar = False                         # der Weg über die Suche, falls das Lesen abgewiesen wird
     kopf, zugang = aufnehmen(client, ablage)           # über die Werkstatt: der Vermittler ist jur|nodes unbekannt
     aufnahme = speicher.laden(zugang)
     assert aufnahme.lead_kennung == "lead-000000001" and len(server.leads) == 1
