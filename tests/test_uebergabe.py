@@ -66,6 +66,9 @@ class Server:
                 return httpx.Response(405, json={"error": "nein"})
             self.kontakte.append(json.loads(anfrage.content)["model"])
             return httpx.Response(self.kontakt_status, json={"identifier": f"K-{len(self.kontakte)}"} if self.kontakt_status == 200 else {})
+        if weg == "/record/note":
+            self.vermerke = getattr(self, "vermerke", []) + [json.loads(anfrage.content)["model"]]
+            return httpx.Response(getattr(self, "vermerk_status", 200), json={})
         if weg == "/lead-contact":
             self.am_lead.append(json.loads(anfrage.content))
             return httpx.Response(200, json={})
@@ -135,7 +138,7 @@ def test_aufnahme_unterschrift_und_anlage_landen_im_ordner_des_leads(umgebung):
     aufnehmen(client, ablage)
     assert server.abgelegt == []                       # beim Abschicken nur der Lead - Dateien folgen im Lauf
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "eigenschaften": 0, "kontakte": 0, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "eigenschaften": 0, "kontakte": 0, "vermerke": 0, "fehler": 0}
     namen = [a["name"] for a in server.abgelegt]
     assert namen[0].startswith("Aufnahme Aktedirekt ") and namen[0].endswith(".pdf")
     assert namen[1:] == ["Unterschrift Aktedirekt.png", "Schaden _vorne.jpg"]
@@ -239,7 +242,7 @@ def test_akte_wird_ueber_das_aktenzeichen_gefunden(mit_aktenzeichen):
     _, zugang = aufnehmen(client, ablage)
     server.status = "accepted"                         # die Kanzlei nimmt an, bevor der erste Lauf kommt
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 1, "abgelegt": 3, "eigenschaften": 0, "kontakte": 0, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 1, "abgelegt": 3, "eigenschaften": 0, "kontakte": 0, "vermerke": 0, "fehler": 0}
     aufnahme = speicher.laden(zugang)
     assert aufnahme.sachstand == "angemeldet" and aufnahme.akte_kennung == "rec-uuid-1"
     assert {a["ordner"] for a in server.abgelegt} == {"99"}
@@ -641,7 +644,7 @@ def test_ganzer_weg_am_server_der_kanzlei(kanzlei_server):
 
     # Erster Lauf: die drei Dateien in den Ordner des Leads - gelesen über die Suche.
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "eigenschaften": 0, "kontakte": 0, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "eigenschaften": 0, "kontakte": 0, "vermerke": 0, "fehler": 0}
     assert {a["ordner"] for a in server.abgelegt} == {"70"}
 
     # Die Kanzlei nimmt an und setzt den Sachstand.
@@ -765,3 +768,22 @@ def test_jede_eigenschaft_die_wie_eine_frage_heisst_wird_gefuellt(kanzlei_server
     gesetzt = {e["recordSubject"]: e.get("valueText") or e.get("valueDate") for e in server.eigenschaften}
     assert gesetzt["KZ"] == "B-XY 123" and gesetzt["Unfall_vom"] == "2026-11-17"
     assert "Sachstand" not in gesetzt and "zahl" not in gesetzt and "ort" in gesetzt
+
+
+def test_vermerk_mit_allen_angaben_einmal_an_der_akte(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    aufnehmen(client, ablage)
+    assert lauf(speicher, jurnodes)["vermerke"] == 0            # noch keine Akte
+    server.liste[0].update(status="accepted", acceptedRecord="rec-uuid-1")
+    assert lauf(speicher, jurnodes)["vermerke"] == 1
+    v = server.vermerke[0]
+    assert v["record"] == "rec-uuid-1" and v["type"] == "note" and "Kennzeichen: B-XY 123" in v["content"]
+    assert lauf(speicher, jurnodes)["vermerke"] == 0 and len(server.vermerke) == 1
+
+
+def test_vermerk_nach_serverfehler_nie_ein_zweiter(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    server.vermerk_status = 500
+    aufnehmen(client, ablage)
+    server.liste[0].update(status="accepted", acceptedRecord="rec-uuid-1")
+    assert [lauf(speicher, jurnodes)["vermerke"] for _ in range(3)] == [0, 0, 0] and len(server.vermerke) == 1

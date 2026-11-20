@@ -13,7 +13,8 @@ Gebraucht werden diese Rechte des Schnittstellenbenutzers:
 ``search:leads``, ``search:records_subject`` und, für die Übergabe von Aufnahme und Anlagen,
 ``write:file``; für das Eintragen von Unfalltag und Schadennummer als
 Akteneigenschaften ``write:records_subject`` und ``read:config``; für das
-Anlegen des Mandanten als Kontakt am Lead ``write:contact`` und ``write:lead_contact``; dazu ``search:records``, falls jur|nodes am angenommenen
+Anlegen des Mandanten als Kontakt am Lead ``write:contact`` und ``write:lead_contact``;
+für den Vermerk mit allen Angaben an der Akte ``write:records``; dazu ``search:records``, falls jur|nodes am angenommenen
 Lead das Aktenzeichen und nicht die Kennung der Akte nennt. jur|nodes meldet keine Änderungen von sich aus;
 der Sachstand wird deshalb in Abständen abgefragt.
 
@@ -413,3 +414,14 @@ class JurNodes:
     def lead_kontakt(self, lead: str, kontakt: str) -> None:
         """Hängt einen bestehenden Kontakt an einen Lead."""
         self._aufruf("POST", "/lead-contact", json={"leadIdentifier": lead, "contactIdentifier": kontakt})
+
+    def vermerk(self, akte_kennung: str, betreff: str, text: str, wann: str) -> None:
+        """Schreibt einen Vermerk an die Akte. ``Ungewiss``, wenn offen bleibt, ob er angelegt ist."""
+        modell = {"id": None, "record": akte_kennung, "type": "note", "subject": betreff,
+                  "effectiveDate": wann, "contentType": "text", "content": text}
+        try:
+            self._aufruf("POST", "/record/note", json={"model": modell})
+        except JurNodesFehler:
+            if self.letzter_status in (400, 401, 405):
+                raise
+            raise Ungewiss("Offen, ob jur|nodes den Vermerk angelegt hat.")

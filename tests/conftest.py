@@ -74,3 +74,4 @@ def ohne_kontakte(monkeypatch, request):
     """Kontakte in jur|nodes legen nur die Tests an, die es ausdrücklich prüfen."""
     from aktedirekt import abgleich
     monkeypatch.setattr(abgleich, "KONTAKTE_ANLEGEN", "kontakt" in request.node.name)
+    monkeypatch.setattr(abgleich, "VERMERKE_ANLEGEN", "vermerk" in request.node.name)

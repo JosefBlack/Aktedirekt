@@ -387,10 +387,41 @@ def kontakt_anlegen(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, lead:
     return 1
 
 
+VERMERKE_ANLEGEN = True
+
+
+def vermerk_anlegen(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, jetzt: datetime) -> int:
+    """Schreibt einmal alle Angaben der Aufnahme als Vermerk an die Akte - sobald es sie gibt.
+
+    Nie doppelt: wie beim Kontakt wird vor dem Schreiben vermerkt, dass es
+    versucht wird; nur eine klare Abweisung wird wiederholt, höchstens dreimal.
+    Was der Mandant später ergänzt, steht im neuen Blatt (PDF), nicht im Vermerk.
+    """
+    stand = dict(aufnahme.jurnodes)
+    if (not VERMERKE_ANLEGEN or not aufnahme.akte_kennung or aufnahme.abgeschlossen_am is None
+            or stand.get("vermerk") or stand.get("vermerk_versuche", 0) >= EIGENSCHAFT_VERSUCHE):
+        return 0
+    zeilen = []
+    for teil in aufnahme.fuer_die_akte():
+        if teil["zeilen"]:
+            zeilen += ["", teil["titel"].upper()] + [f"{b}: {w}" for b, w in teil["zeilen"]]
+    text = "Angaben des Mandanten aus Aktedirekt\n" + "\n".join(zeilen)
+    speicher.jurnodes_setzen(aufnahme.kennung, {**stand, "vermerk": KONTAKT_UNGEWISS})
+    try:
+        jurnodes.vermerk(aufnahme.akte_kennung, "Aufnahme Aktedirekt", text, jetzt.strftime("%Y-%m-%dT%H:%M:%S.000Z"))
+    except Ungewiss:
+        raise JurNodesFehler("Offen, ob der Vermerk angelegt ist.")
+    except JurNodesFehler:
+        speicher.jurnodes_setzen(aufnahme.kennung, {**stand, "vermerk_versuche": stand.get("vermerk_versuche", 0) + 1})
+        raise
+    speicher.jurnodes_setzen(aufnahme.kennung, {**stand, "vermerk": True})
+    return 1
+
+
 def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerliste,
                      stufen: Stufen, heute: date) -> dict[str, int]:
     """Ein Durchlauf. Ein Fehler bei einem Fall hält die übrigen nicht auf."""
-    zahlen = {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "eigenschaften": 0, "kontakte": 0, "fehler": 0}
+    zahlen = {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "eigenschaften": 0, "kontakte": 0, "vermerke": 0, "fehler": 0}
     for aufnahme in speicher.ohne_lead():
         if lead_anlegen(aufnahme, speicher, jurnodes, partner, heute, nachholen=True):
             zahlen["leads_nachgeholt"] += 1
@@ -452,6 +483,15 @@ def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerlis
             zahlen["fehler"] += 1
         except Exception as fehler:
             jurnodes.pannen.append(f"Kontakt: {type(fehler).__name__}")
+            zahlen["fehler"] += 1
+        try:
+            frisch = speicher.nach_kennung(aufnahme.kennung)
+            if frisch is not None:
+                zahlen["vermerke"] += vermerk_anlegen(frisch, speicher, jurnodes, datetime.now())
+        except JurNodesFehler:
+            zahlen["fehler"] += 1
+        except Exception as fehler:
+            jurnodes.pannen.append(f"Vermerk: {type(fehler).__name__}")
             zahlen["fehler"] += 1
     return zahlen
 
