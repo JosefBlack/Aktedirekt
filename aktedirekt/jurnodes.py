@@ -138,14 +138,29 @@ class JurNodes:
         modell: dict[str, Any] = {"shortRubrum": kurzrubrum[:50],
                                   "leadDate": (datum or date.today()).isoformat()}
         if vermittler:
-            modell["broker"] = vermittler[:50]
+            # Den Vermittler muss es in jur|nodes unter genau diesem Namen geben,
+            # sonst weist es den ganzen Lead ab ("Der Vermittler konnte nicht
+            # gefunden werden", 20.11.2026). Dann lieber ein Lead ohne Vermittler
+            # als gar keiner - er steht ohnehin im PDF der Aufnahme. Eine
+            # Abweisung heißt: nichts angelegt; der zweite Versuch ist deshalb
+            # kein doppelter Eingang.
+            try:
+                return self._lead(self._aufruf("POST", "/lead", still=True,
+                                               json={"model": {**modell, "broker": vermittler[:50]}}), "POST")
+            except OhneKennung:
+                raise
+            except JurNodesFehler:
+                if self.letzter_status != 405:
+                    self._panne("POST", "/lead", f"Status {self.letzter_status}")
+                    raise
+                self._panne("POST", "/lead", "mit Vermittler abgewiesen - ohne Vermittler angelegt")
         return self._lead(self._aufruf("POST", "/lead", json={"model": modell}), "POST")
 
-    # Die Beschreibung des Herstellers nennt für die Lead-Suche Seite 0 als erste
-    # und das Kurzrubrum als Filter. Der Server der Kanzlei wies genau das am
-    # 20.11.2026 als ungültige Eingabe ab. Deshalb mehrere Formen, die schmalste
-    # zuerst; die letzten beiden holen alle Leads und vergleichen hier.
-    _SUCHWEGE: tuple[tuple[bool, int | None], ...] = ((True, 0), (True, 1), (True, None), (False, 1), (False, 0), (False, None))
+    # Die Beschreibung des Herstellers nennt für die Lead-Suche Seite 0 als erste.
+    # Der Server der Kanzlei sagt dazu (20.11.2026): "Bitte geben Sie eine
+    # Seitenzahl > 0 an" - gezählt wird ab 1. Die erste Form ist die, die dort
+    # geht; die übrigen bleiben für den Fall, dass sich das wieder ändert.
+    _SUCHWEGE: tuple[tuple[bool, int | None], ...] = ((True, 1), (True, None), (False, 1), (False, None), (True, 0), (False, 0))
 
     def _lead_suchseite(self, weg: int, kurzrubrum: str, weiter: int, still: bool) -> Any:
         mit_filter, erste = self._SUCHWEGE[weg]

@@ -307,7 +307,7 @@ def test_kennung_wird_ueber_das_kurzrubrum_nachgetragen_und_dann_geht_alles_weit
     zahlen = lauf(speicher, jurnodes)
     assert speicher.laden(zugang).lead_kennung == "L-7"
     assert zahlen["ohne_kennung"] == 0 and zahlen["abgelegt"] == 3
-    assert server.suche[0] == {"shortRubrum": "Muster ./. M-AB 4567 (Unfall 17.11.26)", "page": "0"}
+    assert server.suche[0] == {"shortRubrum": "Muster ./. M-AB 4567 (Unfall 17.11.26)", "page": "1"}
 
 
 def test_ohne_suchrecht_bleibt_der_lead_ohne_kennung_aber_einmalig(ohne_kennung):
@@ -406,8 +406,8 @@ class ServerMitEigenerSuche(Server):
 
 
 @pytest.mark.parametrize("annehmen,erwartete_versuche", [
-    (lambda p: int(p.get("page", 0)) >= 1 and "shortRubrum" in p, 2),     # Seiten zählen ab 1
-    (lambda p: "shortRubrum" not in p and int(p.get("page", 0)) >= 1, 4), # kein Filter erlaubt: alles holen, hier vergleichen
+    (lambda p: int(p.get("page", 0)) >= 1 and "shortRubrum" in p, 1),     # Seiten zählen ab 1 - wie am Server der Kanzlei
+    (lambda p: "shortRubrum" not in p and int(p.get("page", 0)) >= 1, 3), # kein Filter erlaubt: alles holen, hier vergleichen
 ])
 def test_lead_suche_findet_ihren_weg_und_merkt_ihn(ablage, annehmen, erwartete_versuche):
     client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jetzt=lambda: JETZT))
@@ -432,3 +432,37 @@ def test_suche_die_in_jeder_form_scheitert_ist_ein_fehler_und_kein_nein(ablage):
     with pytest.raises(Exception):
         jurnodes.lead_suchen("Muster ./. X")
     assert jurnodes.pannen == ["GET /lead/search: Status 405"] and len(server.suchen) == 6
+
+
+def test_unbekannter_vermittler_kostet_nicht_den_lead(ablage):
+    gesendet = []
+
+    def antwort(anfrage: httpx.Request) -> httpx.Response:
+        if anfrage.method == "POST" and anfrage.url.path == "/lead":
+            modell = json.loads(anfrage.content)["model"]
+            gesendet.append(modell)
+            if "broker" in modell:
+                return httpx.Response(405, json={"error": "Der Vermittler konnte nicht gefunden werden"})
+            return httpx.Response(200, json={"identifier": "L-5", "status": "created", "fileFolderId": 8})
+        return httpx.Response(200, json={"identifier": "L-5", "status": "created", "fileFolderId": 8})
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(antwort))
+    client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jurnodes=jurnodes, jetzt=lambda: JETZT))
+    _, zugang = aufnehmen(client, ablage)
+    assert [("broker" in m) for m in gesendet] == [True, False]        # erst mit, dann ohne - und nur ein Lead entsteht
+    assert ablage.speicher.laden(zugang).lead_kennung == "L-5"
+    assert jurnodes.pannen == ["POST /lead: mit Vermittler abgewiesen - ohne Vermittler angelegt"]
+
+
+def test_vermittler_unter_dem_namen_den_jurnodes_kennt(ablage):
+    gesendet = []
+
+    def antwort(anfrage: httpx.Request) -> httpx.Response:
+        if anfrage.method == "POST":
+            gesendet.append(json.loads(anfrage.content)["model"])
+        return httpx.Response(200, json={"identifier": "L-6", "status": "created"})
+    partner = Partnerliste.aus_text(json.dumps([{"kennung": "w", "art": "werkstatt", "name": "Autohaus Beispiel GmbH",
+                                                 "einladung": "ein-a", "jurnodes_vermittler": "Autohaus Beispiel"}]))
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(antwort))
+    client = TestClient(app_bauen(ablage.speicher, partner=partner, jurnodes=jurnodes, jetzt=lambda: JETZT))
+    aufnehmen(client, ablage)
+    assert gesendet[0]["broker"] == "Autohaus Beispiel"

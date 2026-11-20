@@ -135,7 +135,8 @@ def lead_anlegen(aufnahme: Aufnahme, speicher: Speicher, jurnodes: JurNodes,
             if vorhanden is not None:
                 speicher.lead_setzen(aufnahme.kennung, vorhanden.kennung)
                 return True
-        lead = jurnodes.lead_anlegen(rubrum, vermittler=konto.name if konto else "", datum=heute)
+        lead = jurnodes.lead_anlegen(rubrum, datum=heute,
+                                     vermittler=(konto.jurnodes_vermittler or konto.name) if konto else "")
     except OhneKennung:
         speicher.lead_setzen(aufnahme.kennung, UNBEKANNT)
         return True

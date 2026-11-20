@@ -37,6 +37,8 @@ class PartnerKonto:
     kennwort_scrypt: str = ""
     # Verlangt die Anmeldung zusätzlich einen Code aus einer Authenticator-App?
     zweiter_faktor: bool = False
+    # Unter welchem Namen jur|nodes diesen Partner als Vermittler führt (leer: wie ``name``).
+    jurnodes_vermittler: str = ""
 
 
 def kennwort_verschluesseln(kennwort: str) -> str:
@@ -95,7 +97,8 @@ class Partnerliste:
         # für eine Werkstatt lässt er sich in der Liste einschalten.
         return cls([PartnerKonto(e["kennung"], e["art"], e["name"], e.get("einladung", ""),
                                  e.get("kennwort_scrypt", ""),
-                                 bool(e.get("zweiter_faktor", e["art"] == "kanzlei"))) for e in eintraege])
+                                 bool(e.get("zweiter_faktor", e["art"] == "kanzlei")),
+                                 e.get("jurnodes_vermittler", "")) for e in eintraege])
 
     @classmethod
     def laden(cls, pfad: Path | str | None) -> "Partnerliste":

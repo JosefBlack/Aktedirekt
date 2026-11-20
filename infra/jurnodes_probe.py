@@ -112,7 +112,8 @@ if "anlegen" not in sys.argv[1:]:
     sys.exit(0)
 
 print("\n== 2. Einen Probe-Lead anlegen")
-modell = {"model": {"shortRubrum": RUBRUM, "leadDate": date.today().isoformat(), "broker": "Aktedirekt Probe"}}
+# Ohne Vermittler: Den müsste es in jur|nodes unter genau diesem Namen schon geben.
+modell = {"model": {"shortRubrum": RUBRUM, "leadDate": date.today().isoformat()}}
 status, art, daten, text = aufruf("POST", "/lead", koerper=json.dumps(modell).encode(), kopf={"Content-Type": "application/json"})
 zeile("POST /lead", status, art, daten, text)
 lead = kennung_aus(daten)
