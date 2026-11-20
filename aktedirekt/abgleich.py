@@ -260,46 +260,58 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
     return anzahl
 
 
-# Was aus der Aufnahme als Akteneigenschaft nach jur|nodes geht: Name der
-# Eigenschaft dort (wie in der Verwaltung von jur|nodes angezeigt) -> Feld der Aufnahme.
-EIGENSCHAFTEN = {"unfall": {"Unfall vom": "unfalldatum", "Schadennummer": "gegner_schadennummer",
-                            "Kennzeichen": "kennzeichen", "Kennzeichen Gegner": "gegner_kennzeichen"}}
+# Akteneigenschaften: Das Portal füllt jede Eigenschaft, die in jur|nodes so
+# heißt wie eine Frage der Aufnahme (die Bezeichnung im Blatt für die Akte).
+# Dazu diese Namen, unter denen die Kanzlei einzelne Angaben schon führt:
+# Name der Eigenschaft in jur|nodes -> Bezeichnung in der Aufnahme.
+EIGENSCHAFT_AUCH = {"Unfall vom": "Unfalltag", "Kennzeichen Gegner": "Kennzeichen der Gegenseite"}
 EIGENSCHAFT_VERSUCHE = 3
 
 
+def _angaben_nach_bezeichnung(aufnahme: Aufnahme) -> dict[str, str]:
+    werte: dict[str, str] = {}
+    for teil in aufnahme.fuer_die_akte():
+        for bezeichnung, wert in teil["zeilen"]:
+            werte.setdefault(str(bezeichnung).strip(), str(wert).strip())
+    for name, bezeichnung in EIGENSCHAFT_AUCH.items():
+        if bezeichnung in werte:
+            werte.setdefault(name, werte[bezeichnung])
+    return werte
+
+
 def eigenschaften_setzen(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, lead: Any) -> int:
-    """Trägt Unfalltag und Schadennummer als Akteneigenschaften ein - jede einmal.
+    """Trägt Angaben der Aufnahme als Akteneigenschaften ein - jede einmal.
 
     Am Lead, solange er offen ist; an der Akte, sobald er angenommen wurde.
     Was die Kanzlei danach in jur|nodes ändert, bleibt unberührt: Eingetragen
     wird nur, was noch nie eingetragen wurde. Weist jur|nodes es ab, wird es
     nach drei Läufen nicht weiter versucht.
     """
-    plan = EIGENSCHAFTEN.get(aufnahme.art, {})
     stand = dict(aufnahme.jurnodes)
     gesetzt = dict(stand.get("eigenschaften", {}))
-    if not plan or lead is None or aufnahme.abgeschlossen_am is None or stand.get("eigenschaften_versuche", 0) >= EIGENSCHAFT_VERSUCHE:
+    if lead is None or aufnahme.abgeschlossen_am is None or stand.get("eigenschaften_versuche", 0) >= EIGENSCHAFT_VERSUCHE:
         return 0
-    werte = {}
-    for abschnitt in aufnahme.angaben.values():
-        if isinstance(abschnitt, dict):
-            werte.update({k: v for k, v in abschnitt.items() if v not in ("", None)})
-    offen = {name: str(werte[feld]).strip() for name, feld in plan.items() if name not in gesetzt and feld in werte}
-    offen = {name: wert for name, wert in offen.items() if len(wert) >= 3}     # jur|nodes verlangt mindestens drei Zeichen
-    if not offen:
+    werte = {name: wert for name, wert in _angaben_nach_bezeichnung(aufnahme).items() if name not in gesetzt}
+    if not werte:
         return 0
-    ziel = ({"aktenzeichen": lead.akte_kennung} if lead.status == "accepted" and lead.akte_kennung
-            else {"lead": aufnahme.lead_kennung})
     anzahl = 0
     try:
-        namen = jurnodes.eigenschaft_namen()
-        for name, wert in offen.items():
-            if name not in namen:
-                continue                            # diese Eigenschaft gibt es in jur|nodes nicht
-            if plan[name].endswith("datum"):
-                jurnodes.eigenschaft_setzen(namen[name], datum=date.fromisoformat(wert[:10]), **ziel)
-            else:
-                jurnodes.eigenschaft_setzen(namen[name], text=wert[:70], **ziel)
+        offen = []
+        for name, (word_name, art) in jurnodes.eigenschaft_namen().items():
+            wert = werte.get(name, "")
+            if art == "date":
+                try:
+                    offen.append((name, word_name, {"datum": datetime.strptime(wert, "%d.%m.%Y").date()}))
+                except ValueError:
+                    continue
+            elif art in ("string", "select") and len(wert) >= 3:       # jur|nodes verlangt mindestens drei Zeichen
+                offen.append((name, word_name, {"text": wert[:70]}))
+        if not offen:
+            return 0
+        ziel = ({"aktenzeichen": jurnodes.akte_zeichen(lead.akte_kennung)} if lead.status == "accepted" and lead.akte_kennung
+                else {"lead": aufnahme.lead_kennung})
+        for name, word_name, wert in offen:
+            jurnodes.eigenschaft_setzen(word_name, **wert, **ziel)
             gesetzt[name] = True
             anzahl += 1
             speicher.jurnodes_setzen(aufnahme.kennung, {**stand, "eigenschaften": gesetzt})

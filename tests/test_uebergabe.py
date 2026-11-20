@@ -612,7 +612,7 @@ class ServerDerKanzlei(Server):
         if weg == "/record":
             if params.get("identifier") != "rec-uuid-1":
                 return httpx.Response(405, json={"error": "Bitte Daten angeben"})
-            return httpx.Response(200, json={"identifier": "rec-uuid-1", "recordStatus": "active", "fileFolderId": 99})
+            return httpx.Response(200, json={"identifier": "rec-uuid-1", "recordStatus": "active", "recordSign": "40566/26", "fileFolderId": 99})
         if weg == "/record/search":
             return httpx.Response(200, json={"elements": [{"identifier": "rec-uuid-1", "sign": "40566/26"}]})
         if weg == "/record-subject/search":
@@ -678,8 +678,9 @@ def test_verschwundener_lead_ist_ein_fehler_und_kein_anlass_neu_anzulegen(kanzle
 
 
 TYPEN = [{"identifier": "Unfall_vom", "name": "Unfall vom", "type": "date"},
-         {"identifier": "Schadennummer", "name": "Schadennummer", "type": "text"},
-         {"identifier": "Alt", "name": "Hauptbetreff", "type": "text", "deleted": True}]
+         {"identifier": "SNR", "name": "Schadennummer", "type": "string"},
+         {"identifier": "Sachstand", "name": "Sachstand", "type": "select"},
+         {"identifier": "Alt", "name": "Hauptbetreff", "type": "string", "deleted": True}]
 
 
 def test_unfalltag_als_akteneigenschaft_am_lead_nur_einmal(kanzlei_server):
@@ -743,3 +744,24 @@ def test_kein_kontakt_mehr_wenn_der_lead_schon_angenommen_ist(kanzlei_server):
     aufnehmen(client, ablage)
     server.liste[0].update(status="accepted", acceptedRecord="40566/26")
     assert lauf(speicher, jurnodes)["kontakte"] == 0 and server.kontakte == []
+
+
+def test_akteneigenschaft_mit_aktenzeichen_wenn_der_lead_die_kennung_der_akte_nennt(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    aufnehmen(client, ablage)
+    server.typen = TYPEN
+    server.liste[0].update(status="accepted", acceptedRecord="rec-uuid-1")     # so der Server der Kanzlei
+    assert lauf(speicher, jurnodes)["eigenschaften"] == 1
+    assert server.eigenschaften[0]["recordSign"] == "40566/26"
+
+
+def test_jede_eigenschaft_die_wie_eine_frage_heisst_wird_gefuellt(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    server.typen = TYPEN + [{"identifier": "KZ", "name": "Kennzeichen", "type": "string"},
+                            {"identifier": "ort", "name": "Unfallort", "type": "string"},
+                            {"identifier": "zahl", "name": "Hergang", "type": "number"}]
+    aufnehmen(client, ablage)
+    lauf(speicher, jurnodes)
+    gesetzt = {e["recordSubject"]: e.get("valueText") or e.get("valueDate") for e in server.eigenschaften}
+    assert gesetzt["KZ"] == "B-XY 123" and gesetzt["Unfall_vom"] == "2026-11-17"
+    assert "Sachstand" not in gesetzt and "zahl" not in gesetzt and "ort" in gesetzt

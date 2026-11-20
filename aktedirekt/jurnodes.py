@@ -72,7 +72,7 @@ class JurNodes:
             transport=transport,
         )
         self.pannen: list[str] = []
-        self._eigenschaften: dict[str, str] | None = None
+        self._eigenschaften: dict[str, tuple[str, str]] | None = None
         self.letzter_status = 0
         # Welche Form der Lead-Suche dieser Server annimmt (wird beim ersten Erfolg gemerkt).
         self._zaehlweise: int | None = None
@@ -315,6 +315,21 @@ class JurNodes:
         daten = self._aufruf("GET", "/record", params={"identifier": akte_kennung})
         return str(daten.get("recordStatus") or "") if isinstance(daten, dict) else ""
 
+    def akte_zeichen(self, angabe: str) -> str:
+        """Das Aktenzeichen zu dem, was jur|nodes am angenommenen Lead nennt.
+
+        Am Server der Kanzlei steht dort die Kennung der Akte (20.11.2026),
+        nach der Beschreibung des Herstellers das Aktenzeichen selbst. Lässt
+        sich die Akte unter der Angabe nicht lesen, gilt sie als Aktenzeichen.
+        """
+        try:
+            daten = self._aufruf("GET", "/record", still=True, params={"identifier": angabe})
+        except JurNodesFehler:
+            if self.letzter_status in (400, 405):
+                return angabe
+            raise
+        return str(daten.get("recordSign") or angabe) if isinstance(daten, dict) else angabe
+
     def akte_ordner(self, akte_kennung: str) -> int:
         """Der Dateiordner der Akte - 0, wenn jur|nodes keinen nennt."""
         daten = self._aufruf("GET", "/record", params={"identifier": akte_kennung})
@@ -353,13 +368,13 @@ class JurNodes:
                 return str(eintrag.get("valueText") or "")
         return ""
 
-    def eigenschaft_namen(self) -> dict[str, str]:
-        """Anzeigename -> Word-Name aller Akteneigenschaften, die jur|nodes kennt (einmal je Lauf gelesen)."""
+    def eigenschaft_namen(self) -> dict[str, tuple[str, str]]:
+        """Anzeigename -> (Word-Name, Art) aller Akteneigenschaften, die jur|nodes kennt (einmal je Lauf gelesen)."""
         if self._eigenschaften is None:
             daten = self._aufruf("GET", "/record-subject/types")
             if isinstance(daten, dict):
                 daten = next((daten[k] for k in ("elements", "data", "result", "types") if isinstance(daten.get(k), list)), [])
-            self._eigenschaften = {str(e["name"]): str(e["identifier"]) for e in daten or []
+            self._eigenschaften = {str(e["name"]): (str(e["identifier"]), str(e.get("type") or "")) for e in daten or []
                                    if isinstance(e, dict) and e.get("name") and e.get("identifier") and not e.get("deleted")}
         return self._eigenschaften
 
