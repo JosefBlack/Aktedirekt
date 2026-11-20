@@ -62,6 +62,9 @@ class JurNodes:
             transport=transport,
         )
         self.pannen: list[str] = []
+        self.letzter_status = 0
+        # Welche Form der Lead-Suche dieser Server annimmt (wird beim ersten Erfolg gemerkt).
+        self._suchweg: int | None = None
 
     def close(self) -> None:
         self._client.close()
@@ -75,25 +78,32 @@ class JurNodes:
         if len(self.pannen) < 50:
             self.pannen.append(f"{verfahren} {pfad}: {was}")
 
-    def _aufruf(self, verfahren: str, pfad: str, **kw: Any) -> Any:
+    def _aufruf(self, verfahren: str, pfad: str, *, still: bool = False, **kw: Any) -> Any:
+        """Ein Aufruf. Jede Antwort im Zweihunderterbereich gilt als angenommen.
+
+        ``still``: Ein Scheitern wird nicht als Panne festgehalten - für
+        Versuche, bei denen der Aufrufer noch einen anderen Weg kennt.
+        """
         try:
             antwort = self._client.request(verfahren, pfad, **kw)
         except httpx.HTTPError as fehler:
-            self._panne(verfahren, pfad, "nicht erreichbar")
+            if not still:
+                self._panne(verfahren, pfad, "nicht erreichbar")
             raise JurNodesFehler("jur|nodes ist nicht erreichbar.") from fehler
-        if antwort.status_code != 200:
-            self._panne(verfahren, pfad, f"Status {antwort.status_code}")
-        if antwort.status_code == 401:
-            raise JurNodesFehler("jur|nodes hat die Anmeldung abgewiesen.")
-        if antwort.status_code in (400, 405):
-            raise JurNodesFehler("jur|nodes hat die Angaben nicht angenommen.")
-        if antwort.status_code != 200:
+        self.letzter_status = antwort.status_code
+        if not 200 <= antwort.status_code < 300:
+            if not still:
+                self._panne(verfahren, pfad, f"Status {antwort.status_code}")
+            if antwort.status_code == 401:
+                raise JurNodesFehler("jur|nodes hat die Anmeldung abgewiesen.")
+            if antwort.status_code in (400, 405):
+                raise JurNodesFehler("jur|nodes hat die Angaben nicht angenommen.")
             raise JurNodesFehler(f"jur|nodes antwortet mit Status {antwort.status_code}.")
         try:
             return antwort.json()
-        except ValueError as fehler:
-            self._panne(verfahren, pfad, "Antwort nicht lesbar")
-            raise JurNodesFehler("jur|nodes hat keine lesbare Antwort geliefert.") from fehler
+        except ValueError:
+            # Angenommen, aber ohne lesbaren Inhalt: Das entscheidet der Aufrufer.
+            return None
 
     @staticmethod
     def _lead_daten(daten: Any) -> dict[str, Any] | None:
@@ -110,8 +120,9 @@ class JurNodes:
         d = self._lead_daten(daten)
         if d is None:
             # Nur die Namen der Felder gehen ins Protokoll, nie ihr Inhalt.
-            gestalt = "Felder " + ", ".join(sorted(str(k) for k in daten)[:12]) if isinstance(daten, dict) else type(daten).__name__
-            self._panne(verfahren, "/lead", f"Antwort ohne Kennung ({gestalt})")
+            gestalt = ("Felder " + ", ".join(sorted(str(k) for k in daten)[:12]) if isinstance(daten, dict)
+                       else "kein lesbarer Inhalt" if daten is None else type(daten).__name__)
+            self._panne(verfahren, "/lead", f"Status {self.letzter_status}, Antwort ohne Kennung ({gestalt})")
             raise OhneKennung("jur|nodes hat geantwortet, aber keine Kennung des Leads genannt.")
         try:
             ordner = int(d.get("fileFolderId") or 0)
@@ -130,16 +141,54 @@ class JurNodes:
             modell["broker"] = vermittler[:50]
         return self._lead(self._aufruf("POST", "/lead", json={"model": modell}), "POST")
 
+    # Die Beschreibung des Herstellers nennt für die Lead-Suche Seite 0 als erste
+    # und das Kurzrubrum als Filter. Der Server der Kanzlei wies genau das am
+    # 20.11.2026 als ungültige Eingabe ab. Deshalb mehrere Formen, die schmalste
+    # zuerst; die letzten beiden holen alle Leads und vergleichen hier.
+    _SUCHWEGE: tuple[tuple[bool, int | None], ...] = ((True, 0), (True, 1), (True, None), (False, 1), (False, 0), (False, None))
+
+    def _lead_suchseite(self, weg: int, kurzrubrum: str, weiter: int, still: bool) -> Any:
+        mit_filter, erste = self._SUCHWEGE[weg]
+        params: dict[str, Any] = {}
+        if mit_filter:
+            params["shortRubrum"] = kurzrubrum
+        if erste is not None:
+            params["page"] = erste + weiter
+        return self._aufruf("GET", "/lead/search", still=still, params=params)
+
     def lead_suchen(self, kurzrubrum: str) -> Lead | None:
         """Der jüngste Lead mit genau diesem Kurzrubrum - ``None``, wenn es keinen gibt.
 
         Damit wird vor dem Nachholen nachgesehen, ob es den Lead schon gibt:
-        Ein zweites Anlegen wäre ein doppelter Eingang in der Kanzlei.
+        Ein zweites Anlegen wäre ein doppelter Eingang in der Kanzlei. Scheitert
+        die Suche in jeder Form, ist das ein Fehler - und kein "gibt es nicht".
         """
-        daten = self._aufruf("GET", "/lead/search", params={"shortRubrum": kurzrubrum[:50], "page": 0})
-        elemente = daten.get("elements") if isinstance(daten, dict) else None
-        treffer = [e for e in elemente or [] if isinstance(e, dict) and e.get("shortRubrum") == kurzrubrum[:50]
-                   and self._lead_daten(e) is not None]
+        kurzrubrum = kurzrubrum[:50]
+        wege = [self._suchweg] if self._suchweg is not None else list(range(len(self._SUCHWEGE)))
+        daten, weg = None, -1
+        for weg in wege:
+            try:
+                daten = self._lead_suchseite(weg, kurzrubrum, 0, still=weg != wege[-1])
+                break
+            except JurNodesFehler:
+                if weg == wege[-1]:
+                    self._suchweg = None
+                    raise
+        self._suchweg = weg
+        treffer: list[dict[str, Any]] = []
+        seite = 0
+        while True:
+            elemente = daten.get("elements") if isinstance(daten, dict) else None
+            treffer += [e for e in elemente or [] if isinstance(e, dict) and e.get("shortRubrum") == kurzrubrum
+                        and self._lead_daten(e) is not None]
+            # Weiterblättern nur, wo es Seiten gibt, und nie endlos.
+            seite += 1
+            if not elemente or self._SUCHWEGE[weg][1] is None or seite >= 20:
+                break
+            try:
+                daten = self._lead_suchseite(weg, kurzrubrum, seite, still=True)
+            except JurNodesFehler:
+                break
         return self._lead(treffer[-1], "GET") if treffer else None
 
     def lead(self, kennung: str) -> Lead:
@@ -194,12 +243,12 @@ class JurNodes:
         except httpx.HTTPError as fehler:
             self._panne("POST", "/file-system/add-file", "nicht erreichbar")
             raise JurNodesFehler("jur|nodes ist nicht erreichbar.") from fehler
-        if antwort.status_code != 200:
-            self._panne("POST", "/file-system/add-file", f"Status {antwort.status_code}")
+        if 200 <= antwort.status_code < 300:
+            return
+        self._panne("POST", "/file-system/add-file", f"Status {antwort.status_code}")
         if antwort.status_code == 401:
             raise JurNodesFehler("jur|nodes hat die Anmeldung abgewiesen oder das Recht zum Ablegen fehlt.")
-        if antwort.status_code != 200:
-            raise JurNodesFehler(f"jur|nodes hat die Datei nicht angenommen (Status {antwort.status_code}).")
+        raise JurNodesFehler(f"jur|nodes hat die Datei nicht angenommen (Status {antwort.status_code}).")
 
     def akteneigenschaft(self, akte_kennung: str, name: str) -> str:
         """Der Textwert einer Akteneigenschaft - leer, wenn sie nicht gesetzt ist."""

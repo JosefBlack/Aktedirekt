@@ -8,6 +8,9 @@
 #   bash verwalten.sh jurnodes             trägt den Zugang zu jur|nodes ein (fragt Adresse, Benutzer und
 #                                          Schlüssel ab; der Schlüssel erscheint nicht auf dem Bildschirm)
 #   bash verwalten.sh jurnodes-aus         nimmt den Zugang wieder heraus; das Portal meldet dann nichts mehr
+#   bash verwalten.sh jurnodes-probe       fragt jur|nodes probeweise ab und zeigt, wie der Server antwortet -
+#                                          Status und Namen der Felder, keine Inhalte. Mit dem Zusatz "anlegen"
+#                                          entsteht dabei genau ein Probe-Lead samt einer kleinen Datei.
 set -euo pipefail
 REGION=eu-central-1
 STACK=aktedirekt-probe
@@ -75,12 +78,26 @@ json.dump({"url": os.environ["J_URL"], "benutzer": os.environ["J_BENUTZER"], "sc
     echo "Eingetragen. Nach spätestens fünf Minuten meldet das Portal neue Eingänge an jur|nodes;"
     echo "der Abgleich alle 15 Minuten holt Liegengebliebenes nach."
     ;;
+  jurnodes-probe)
+    aws secretsmanager get-secret-value --secret-id "$(ausgabe JurNodesGeheimnis)" --query SecretString --output text > "$ALT"
+    # Der Zugang geht über die Umgebung an das Prüfprogramm, nicht über die Befehlszeile.
+    eval "$(python3 - "$ALT" <<'PY'
+import json, shlex, sys
+d = json.load(open(sys.argv[1]))
+if d.get("url") and d.get("benutzer") and d.get("schluessel"):
+    print("export J_URL=%s J_BENUTZER=%s J_SCHLUESSEL=%s" % tuple(shlex.quote(d[k]) for k in ("url", "benutzer", "schluessel")))
+else:
+    print("echo 'Es ist kein Zugang zu jur|nodes eingetragen. Zuerst: bash aktedirekt/verwalten.sh jurnodes'; exit 1")
+PY
+)"
+    python3 "$(dirname "$0")/jurnodes_probe.py" ${KENNUNG:+"$KENNUNG"}
+    ;;
   jurnodes-aus)
     aws secretsmanager put-secret-value --secret-id "$(ausgabe JurNodesGeheimnis)" \
       --secret-string '{"url": "", "benutzer": "", "schluessel": ""}' >/dev/null
     echo "Der Zugang ist herausgenommen. Neue Eingänge bleiben im Portal vorgemerkt."
     ;;
   *)
-    echo "Aufruf: bash verwalten.sh kennwort <Kennung> | faktor <Kennung> | liste | jurnodes | jurnodes-aus"; exit 1
+    echo "Aufruf: bash verwalten.sh kennwort <Kennung> | faktor <Kennung> | liste | jurnodes | jurnodes-aus | jurnodes-probe [anlegen]"; exit 1
     ;;
 esac

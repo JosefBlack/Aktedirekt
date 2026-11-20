@@ -295,7 +295,7 @@ def test_antwort_ohne_kennung_fuehrt_nie_zu_einem_zweiten_lead(ohne_kennung):
     _, zugang = aufnehmen(client, ablage)
     assert len(server.leads) == 1 and speicher.laden(zugang).lead_kennung == "unbekannt"
     # Im Protokoll stehen die Namen der Felder, die jur|nodes geschickt hat - nicht ihr Inhalt.
-    assert jurnodes.pannen == ["POST /lead: Antwort ohne Kennung (Felder nummer, success)"]
+    assert jurnodes.pannen == ["POST /lead: Status 200, Antwort ohne Kennung (Felder nummer, success)"]
     for _ in range(3):
         lauf(speicher, jurnodes)
     assert len(server.leads) == 1                      # drei Läufe, kein weiterer Lead
@@ -351,3 +351,84 @@ def test_kennung_auch_in_verpackter_antwort(ablage):
         return httpx.Response(200, json={"identifier": "L-9", "status": "created"})
     jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(antwort))
     assert jurnodes.lead_anlegen("Muster ./. X").kennung == "L-9"
+
+
+# ---- Der Server der Kanzlei, wie er sich am 20.11.2026 zeigte --------------
+
+def test_jeder_zweihunderter_gilt_als_angenommen():
+    def antwort(anfrage: httpx.Request) -> httpx.Response:
+        return httpx.Response(201, json={"identifier": "L-3", "status": "created", "fileFolderId": 5})
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(antwort))
+    assert jurnodes.lead_anlegen("Muster ./. X").kennung == "L-3" and jurnodes.pannen == []
+    jurnodes.datei_ablegen(5, "a.pdf", b"%PDF")        # auch hier: 201 ist kein Fehler
+    assert jurnodes.pannen == []
+
+
+def test_angenommen_ohne_lesbaren_inhalt_heisst_angelegt_und_nicht_gescheitert(ablage):
+    gesendet = []
+
+    def antwort(anfrage: httpx.Request) -> httpx.Response:
+        gesendet.append((anfrage.method, anfrage.url.path))
+        if anfrage.method == "POST":
+            return httpx.Response(201, content=b"")    # angelegt, aber die Antwort ist leer
+        return httpx.Response(405, json={"error": "ungültig"})
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(antwort))
+    client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jurnodes=jurnodes, jetzt=lambda: JETZT))
+    _, zugang = aufnehmen(client, ablage)
+    assert ablage.speicher.laden(zugang).lead_kennung == "unbekannt"
+    assert jurnodes.pannen == ["POST /lead: Status 201, Antwort ohne Kennung (kein lesbarer Inhalt)"]
+    for _ in range(3):
+        lauf(ablage.speicher, jurnodes)
+    assert [g for g in gesendet if g[0] == "POST"] == [("POST", "/lead")]      # genau ein Lead, für immer
+
+
+class ServerMitEigenerSuche(Server):
+    """Weist die Suche in der Form der Beschreibung ab und nimmt nur eine andere an."""
+    def __init__(self, annehmen):
+        super().__init__()
+        self.annehmen, self.suchen = annehmen, []
+
+    def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        if anfrage.url.path == "/lead/search":
+            params = dict(anfrage.url.params)
+            self.suchen.append(params)
+            if not self.annehmen(params):
+                return httpx.Response(405, json={"error": "Bitte Daten angeben"})
+            seite = int(params.get("page", 1))
+            alle = [{"identifier": f"L-{n}", "shortRubrum": f"Fremd {n} ./. X"} for n in range(60)]
+            alle.insert(55, {"identifier": "L-elf", "shortRubrum": "Muster ./. M-AB 4567 (Unfall 17.11.26)", "fileFolderId": 77})
+            if "shortRubrum" in params:
+                alle = [e for e in alle if e["shortRubrum"] == params["shortRubrum"]]
+            return httpx.Response(200, json={"elements": alle[(seite - 1) * 50: seite * 50]})
+        if anfrage.url.path == "/lead" and anfrage.method == "GET":
+            return httpx.Response(200, json={"identifier": "L-elf", "status": "created", "fileFolderId": 77})
+        return super().__call__(anfrage)
+
+
+@pytest.mark.parametrize("annehmen,erwartete_versuche", [
+    (lambda p: int(p.get("page", 0)) >= 1 and "shortRubrum" in p, 2),     # Seiten zählen ab 1
+    (lambda p: "shortRubrum" not in p and int(p.get("page", 0)) >= 1, 4), # kein Filter erlaubt: alles holen, hier vergleichen
+])
+def test_lead_suche_findet_ihren_weg_und_merkt_ihn(ablage, annehmen, erwartete_versuche):
+    client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jetzt=lambda: JETZT))
+    _, zugang = aufnehmen(client, ablage)              # abgeschickt, bevor jur|nodes angeschlossen war
+    server = ServerMitEigenerSuche(annehmen)
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
+    zahlen = lauf(ablage.speicher, jurnodes)
+    assert ablage.speicher.laden(zugang).lead_kennung == "L-elf" and server.leads == []     # gefunden, nicht neu angelegt
+    assert zahlen["leads_nachgeholt"] == 1 and zahlen["abgelegt"] == 3
+    assert jurnodes.pannen == []                       # die abgewiesenen Formen waren Versuche, keine Pannen
+    abgewiesen = [s for s in server.suchen if not annehmen(s)]
+    assert len(abgewiesen) == erwartete_versuche - 1
+    # Der gefundene Weg ist gemerkt: Eine zweite Suche probiert nichts mehr durch.
+    server.suchen.clear()
+    jurnodes.lead_suchen("Gibt es nicht")
+    assert all(annehmen(s) for s in server.suchen)
+
+
+def test_suche_die_in_jeder_form_scheitert_ist_ein_fehler_und_kein_nein(ablage):
+    server = ServerMitEigenerSuche(lambda p: False)
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
+    with pytest.raises(Exception):
+        jurnodes.lead_suchen("Muster ./. X")
+    assert jurnodes.pannen == ["GET /lead/search: Status 405"] and len(server.suchen) == 6

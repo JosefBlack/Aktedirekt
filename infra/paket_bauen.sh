@@ -19,7 +19,7 @@ fi
 find "$BAU/funktion" -name __pycache__ -type d -prune -exec rm -r {} +
 (cd "$BAU/funktion" && zip -qr "$BAU/paket/funktion.zip" .)
 sed 's#CodeUri: \.\./#CodeUri: funktion.zip#' infra/template.yaml > "$BAU/paket/template.yaml"
-cp infra/einrichten.sh infra/verwalten.sh infra/probepartner.py "$BAU/paket/"
+cp infra/einrichten.sh infra/verwalten.sh infra/probepartner.py infra/jurnodes_probe.py "$BAU/paket/"
 ZIEL="$PWD/ausgabe/aktedirekt-aws.zip"
 [ ! -e "$ZIEL" ] || mv "$ZIEL" "$ZIEL.alt"
 (cd "$BAU/paket" && zip -qr "$ZIEL" .)
