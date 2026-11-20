@@ -250,13 +250,13 @@ class JurNodes:
         """Der Lead mit dieser Kennung: Zustand, Aktenzeichen nach der Annahme, Dateiordner.
 
         Die Beschreibung des Herstellers sieht dafür ``GET /lead`` vor; der
-        Server der Kanzlei weist das ab ("Bitte Daten angeben", 20.11.2026).
-        Deshalb wird der Lead über die Suche gelesen, die dort geht: erst unter
+        Server der Kanzlei nimmt das nur mit ``leadIdentifier`` an (20.11.2026).
+        Wird es abgewiesen, wird der Lead über die Suche gelesen: erst unter
         den offenen, dann unter den angenommenen und den abgelehnten.
         """
         if self._lead_lesen_geht:
             try:
-                return self._lead(self._aufruf("GET", "/lead", still=True, params={"identifier": kennung}), "GET")
+                return self._lead(self._aufruf("GET", "/lead", still=True, params={"leadIdentifier": kennung}), "GET")
             except OhneKennung:
                 del self.pannen[-1:]
                 self._lead_lesen_geht = False
