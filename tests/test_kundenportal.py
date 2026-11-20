@@ -106,3 +106,20 @@ def test_verlauf_zeigt_wo_der_fall_steht(mandant):
     assert [v["titel"] for v in verlauf if v["aktuell"]] == ["Ansprüche angemeldet"]
     ablage.speicher.sachstand_setzen(kennung, "nicht_uebernommen", date(2026, 12, 2))
     assert client.get("/api/aufnahme", headers=kopf).json()["verlauf"] == []
+
+
+def test_verletzungen_werden_nur_gefragt_wenn_jemand_verletzt_ist(ablage):
+    client = TestClient(app_bauen(ablage.speicher, jetzt=lambda: JETZT))
+    abschnitte = {}
+    for verletzt in ("nein", "ja"):
+        kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
+        for schritt, werte in ANGABEN.items():
+            werte = {**werte, "verletzt": verletzt} if schritt == "unfall" else werte
+            client.put(f"/api/aufnahme/schritt/{schritt}", json=werte, headers=kopf)
+        zustand = client.post("/api/aufnahme/abschluss", headers=kopf, json={
+            "vollmacht": True, "widerruf": True, "datenschutz": True, "unterschrift": UNTERSCHRIFT}).json()
+        abschnitte[verletzt] = [a["abschnitt"] for a in zustand["ergaenzung_felder"]]
+    assert "verletzung" not in abschnitte["nein"] and "verletzung" in abschnitte["ja"]
+    antwort = client.put("/api/aufnahme/ergaenzung/verletzung", headers=kopf,
+                         json={"verletzungen": "Schleudertrauma", "krankgeschrieben": "ja", "krank_bis": "2026-12-01"})
+    assert antwort.json()["fehler"] == {}

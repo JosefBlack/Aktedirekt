@@ -68,8 +68,8 @@ def test_ergaenzen_speichert_abschnittsweise(umgebung):
     client, speicher, _, _ = umgebung
     kopf, zugang = aufnehmen(client, "ein-a")
     vorher = client.get("/api/aufnahme", headers=kopf).json()
-    assert vorher["ergaenzungen"] == {name: {} for name in ERGAENZUNGEN}
-    assert [a["abschnitt"] for a in vorher["ergaenzung_felder"]] == list(ERGAENZUNGEN)
+    assert vorher["ergaenzungen"] == {name: {} for name in ERGAENZUNGEN if name != "verletzung"}    # niemand verletzt
+    assert [a["abschnitt"] for a in vorher["ergaenzung_felder"]] == [n for n in ERGAENZUNGEN if n != "verletzung"]
 
     antwort = client.put("/api/aufnahme/ergaenzung/bank", headers=kopf,
                          json={"iban": "de89 3704 0044 0532 0130 00", "admin": "1"})

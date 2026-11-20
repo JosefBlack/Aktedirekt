@@ -215,6 +215,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "angaben": {s: a for s, a in aufnahme.angaben.items() if not s.startswith(ERG)},
             "ergaenzungen": aufnahme.ergaenzungen(),
             **bauplan[art.name],
+            "ergaenzung_felder": [a for a in bauplan[art.name]["ergaenzung_felder"] if a["abschnitt"] in aufnahme.ergaenzungen()],
             "vorbelegt": aufnahme.vorbelegt(),
             # Der Mandant sieht, was zu seinem Fall eingereicht wurde - auch von wem.
             "dateien": [{"kennung": d.kennung, "name": d.name, "von": einreicher(d.von)}

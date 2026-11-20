@@ -152,7 +152,7 @@ const EINGABE = {
   text: { type: "text" }, iban: { type: "text", autocapitalize: "characters", spellcheck: "false" },
   zahl: { type: "text", inputmode: "numeric" }, jahr: { type: "text", inputmode: "numeric" },
   plz: { type: "text", inputmode: "numeric" }, betrag: { type: "text", inputmode: "decimal" },
-  telefon: { type: "tel" }, email: { type: "email" }, datum_frei: { type: "date" }, datum: { type: "date" },
+  telefon: { type: "tel" }, email: { type: "email" }, datum_frei: { type: "date" }, datum_kommend: { type: "date" }, datum: { type: "date" },
   zeit: { type: "time" }, kennzeichen: { type: "text", autocapitalize: "characters" },
 };
 

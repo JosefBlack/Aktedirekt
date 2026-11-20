@@ -19,7 +19,7 @@ from typing import Any
 @dataclass(frozen=True)
 class Feld:
     name: str
-    # text | lang | datum | datum_frei | zeit | ja_nein | auswahl | email | telefon | plz |
+    # text | lang | datum | datum_frei | datum_kommend | zeit | ja_nein | auswahl | email | telefon | plz |
     # kennzeichen | iban | zahl | betrag | jahr
     art: str
     pflicht: bool = False
@@ -88,6 +88,8 @@ class Abschnitt:
     titel: str
     hinweis: str
     felder: tuple[Feld, ...]
+    # Nur anbieten, wenn in der ersten Stufe (Schritt, Feld) diesen Wert hat.
+    nur_wenn: tuple[str, str, str] | None = None
 
 
 # Die zweite Stufe: Was der Fragebogen der Kanzlei darüber hinaus wissen will.
@@ -128,6 +130,20 @@ ERGAENZUNGEN: dict[str, Abschnitt] = {
         Feld("besichtigungsort", "text", laenge=200, bezeichnung="Wo kann das Fahrzeug besichtigt werden?"),
         Feld("besichtigungstelefon", "telefon", bezeichnung="Telefon für die Besichtigung"),
     )),
+    "verletzung": Abschnitt("Ihre Verletzungen", "Für Schmerzensgeld, Verdienstausfall und Haushaltsführungsschaden. "
+                            "Atteste und Arztberichte laden Sie bitte unter „Unterlagen nachreichen“ hoch.", (
+        Feld("verletzungen", "lang", laenge=1000, bezeichnung="Welche Verletzungen haben Sie?",
+             hinweis="auch Beschwerden, die erst später aufgetreten sind"),
+        Feld("behandlung", "text", laenge=200, bezeichnung="Wo wurden Sie behandelt?",
+             hinweis="Arzt oder Krankenhaus mit Ort"),
+        Feld("krankgeschrieben", "ja_nein", bezeichnung="Sind oder waren Sie krankgeschrieben?"),
+        Feld("krank_bis", "datum_kommend", zeige_wenn=("krankgeschrieben", "ja"), bezeichnung="Krankgeschrieben bis"),
+        Feld("arbeitgeber", "text", laenge=200, bezeichnung="Arbeitgeber",
+             hinweis="für den Verdienstausfall – falls Sie angestellt sind"),
+        Feld("haushalt", "ja_nein", bezeichnung="Konnten Sie Ihren Haushalt eine Zeit lang nicht wie gewohnt führen?"),
+        Feld("einschraenkungen", "lang", laenge=1000, bezeichnung="Was konnten Sie wegen der Verletzung nicht tun?",
+             hinweis="Arbeit, Sport, Urlaub, Pflege von Angehörigen …"),
+    ), nur_wenn=("unfall", "verletzt", "ja")),
     "versicherungen": Abschnitt("Ihre Versicherungen", "Soweit vorhanden. Die Nummern stehen auf dem Versicherungsschein.", (
         Feld("haftpflicht", "text", bezeichnung="Kfz-Haftpflicht bei"),
         Feld("haftpflicht_nr", "text", laenge=60, bezeichnung="Versicherungsnummer Haftpflicht"),
@@ -280,6 +296,8 @@ U_UNFALL: tuple[Unterlage, ...] = (
               "Liegt es der Werkstatt oder dem Sachverständigen vor, schicken die es oft direkt."),
     Unterlage("rechnungen", "Rechnungen und Belege", "Rechnung",
               "Reparatur, Abschleppen, Mietwagen, Arzt, Medikamente, Fahrtkosten, beschädigte Kleidung."),
+    Unterlage("arzt", "Atteste und Arztberichte", "Attest",
+              "Nur wenn Sie verletzt wurden: Atteste, Arztbriefe, Krankschreibungen."),
     Unterlage("versicherung", "Post von Versicherungen", "Versicherung",
               "Jedes Schreiben, das Sie von einer Versicherung bekommen – auch von Ihrer eigenen."),
     Unterlage("sonstiges", "Sonstiges", "Sonstiges", ""),
@@ -370,6 +388,14 @@ def _pruefe(feld: Feld, wert: str, heute: date) -> str:
         except ValueError:
             return "Bitte ein Datum angeben."
         if tag > heute or tag.year < 1900:
+            return "Bitte das Datum prüfen."
+    elif feld.art == "datum_kommend":
+        # Ein Tag, der auch in der Zukunft liegen darf - etwa das Ende einer Krankschreibung.
+        try:
+            tag = date.fromisoformat(wert)
+        except ValueError:
+            return "Bitte ein Datum angeben."
+        if tag.year < 1900 or tag > heute + timedelta(days=730):
             return "Bitte das Datum prüfen."
     elif feld.art == "iban":
         if not iban_gueltig(wert):
@@ -494,7 +520,10 @@ class Aufnahme:
         return [s for s in self.fallart.schritte if s not in self.angaben]
 
     def ergaenzungen(self) -> dict[str, dict[str, str]]:
-        return {name: self.angaben.get(ERG + name, {}) for name in self.fallart.ergaenzungen}
+        """Die Abschnitte der zweiten Stufe, die zu diesem Fall passen, mit dem bisher Eingetragenen."""
+        return {name: self.angaben.get(ERG + name, {}) for name, a in self.fallart.ergaenzungen.items()
+                if a.nur_wenn is None or self.angaben.get(a.nur_wenn[0], {}).get(a.nur_wenn[1]) == a.nur_wenn[2]
+                or self.angaben.get(ERG + name)}
 
     def name(self) -> str:
         person = self.angaben.get(self.fallart.person, {})
@@ -512,7 +541,7 @@ class Aufnahme:
     def fuer_die_akte(self) -> list[dict[str, Any]]:
         """Alle Angaben mit Überschriften und Bezeichnungen, wie die Kanzlei sie liest."""
         def lesbar(f: Feld, wert: str) -> str:
-            if f.art in ("datum", "datum_frei"):
+            if f.art in ("datum", "datum_frei", "datum_kommend"):
                 try:
                     return date.fromisoformat(wert).strftime("%d.%m.%Y")
                 except ValueError:
