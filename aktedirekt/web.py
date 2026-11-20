@@ -85,7 +85,8 @@ def _feld(f: Feld) -> dict[str, Any]:
 
 
 def _abschnitte(abschnitte: dict[str, Abschnitt]) -> list[dict[str, Any]]:
-    return [{"abschnitt": name, "titel": a.titel, "hinweis": a.hinweis, "felder": [_feld(f) for f in a.felder]}
+    return [{"abschnitt": name, "titel": a.titel, "hinweis": a.hinweis, "wichtig": a.wichtig,
+             "felder": [_feld(f) for f in a.felder]}
             for name, a in abschnitte.items()]
 
 

@@ -90,6 +90,8 @@ class Abschnitt:
     felder: tuple[Feld, ...]
     # Nur anbieten, wenn in der ersten Stufe (Schritt, Feld) diesen Wert hat.
     nur_wenn: tuple[str, str, str] | None = None
+    # Steht auf der Statusseite hervorgehoben, solange nichts eingetragen ist.
+    wichtig: bool = False
 
 
 # Die zweite Stufe: Was der Fragebogen der Kanzlei darüber hinaus wissen will.
@@ -101,7 +103,7 @@ ERGAENZUNGEN: dict[str, Abschnitt] = {
         Feld("iban", "iban", laenge=42, bezeichnung="IBAN"),
         Feld("kontoinhaber", "text", bezeichnung="Kontoinhaber", hinweis="falls nicht Sie selbst"),
         Feld("bic", "text", laenge=11, bezeichnung="BIC", hinweis="nur bei ausländischem Konto"),
-    )),
+    ), wichtig=True),
     "person": Abschnitt("Zu Ihrer Person", "", (
         Feld("geburtsdatum", "datum_frei", bezeichnung="Geburtsdatum"),
         Feld("beruf", "text", bezeichnung="Berufliche Tätigkeit"),

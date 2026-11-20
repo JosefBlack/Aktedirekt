@@ -17,10 +17,11 @@ window.ergaenzungen_zeigen = function () {
   const liste = $("#ergaenzungsliste");
   liste.textContent = "";
   for (const a of felder) {
-    const li = knoten("li", ausgefuellt(a.abschnitt) ? { class: "erledigt" } : {});
+    const fertig_ = ausgefuellt(a.abschnitt);
+    const li = knoten("li", fertig_ ? { class: "erledigt" } : (a.wichtig ? { class: "wichtig" } : {}));
     const knopf = knoten("button", { type: "button" });
     knopf.append(knoten("span", {}, a.titel),
-      knoten("span", { class: "zustand" }, ausgefuellt(a.abschnitt) ? "eingetragen ✓" : "offen ›"));
+      knoten("span", { class: "zustand" }, fertig_ ? "eingetragen ✓" : (a.wichtig ? "bitte eintragen ›" : "offen ›")));
     knopf.addEventListener("click", () => abschnitt_oeffnen(a));
     li.append(knopf);
     liste.append(li);
