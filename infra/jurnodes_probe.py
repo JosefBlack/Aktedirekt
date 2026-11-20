@@ -119,6 +119,42 @@ else:
             print(f"    {t.get('name')} = {t.get('identifier')} ({t.get('type')})")
 UNFALL_VOM = next((str(t.get("identifier")) for t in typen or [] if isinstance(t, dict) and t.get("name") == "Unfall vom"), "")
 
+print("\n== 1c. Angenommene Leads: Akte finden und ihre Akteneigenschaften lesen (Namen, keine Werte)")
+status, art, daten, text = aufruf("GET", "/lead/search", {"status": "accepted", "page": 1})
+angenommen = [e for e in (daten.get("elements") if isinstance(daten, dict) else None) or [] if isinstance(e, dict)]
+if not angenommen:
+    print(f"  Status {status}: kein angenommener Lead.")
+for nr, e in enumerate(angenommen[:3], 1):
+    zeichen = e.get("acceptedRecord")
+    print(f"  Lead {nr}: acceptedRecord ist {type(zeichen).__name__}" + (f" mit {len(zeichen)} Zeichen" if isinstance(zeichen, str) else ""))
+    if not zeichen:
+        continue
+    status, art, daten, text = aufruf("GET", "/record", {"identifier": zeichen})
+    zeile("    GET /record mit dieser Angabe", status, art, daten, text)
+    akte = daten.get("identifier") if isinstance(daten, dict) and 200 <= status < 300 else None
+    if not akte:
+        status, art, daten, text = aufruf("GET", "/record/search", {"sign": zeichen, "page": 1})
+        zeile("    GET /record/search nach Aktenzeichen", status, art, daten, text)
+        treffer = [t for t in (daten.get("elements") if isinstance(daten, dict) else None) or [] if isinstance(t, dict)]
+        if treffer:
+            print(f"        ein Treffer hat die Felder: {felder(treffer[0], 0)}")
+        genau = [t for t in treffer if t.get("sign") == zeichen]
+        print(f"        Treffer: {len(treffer)}, davon mit genau diesem Aktenzeichen: {len(genau)}")
+        akte = genau[0].get("identifier") if genau else None
+    if not akte:
+        print("    -> Akte nicht gefunden.")
+        continue
+    for name, params in (("alle", {"recordIdentifier": akte, "page": 1}),
+                         ("nur Sachstand", {"recordIdentifier": akte, "type": "Sachstand", "page": 1})):
+        status, art, daten, text = aufruf("GET", "/record-subject/search", params)
+        zeile(f"    GET /record-subject/search ({name})", status, art, daten, text)
+        eintraege = [t for t in (daten.get("elements") if isinstance(daten, dict) else None) or [] if isinstance(t, dict)]
+        if eintraege:
+            print(f"        ein Eintrag hat die Felder: {felder(eintraege[0], 0)}")
+        for t in eintraege:
+            gefuellt = [k for k in t if k.startswith("value") and t[k] not in (None, "", [], -1)]
+            print(f"        Eigenschaft {t.get('recordSubject')!r}: gefüllt {', '.join(gefuellt) or 'nichts'}")
+
 if "anlegen" not in sys.argv[1:]:
     print("\nNur gelesen. Für die ganze Kette (ein Probe-Lead, lesen, eine Datei ablegen):")
     print("  bash aktedirekt/verwalten.sh jurnodes-probe anlegen")
