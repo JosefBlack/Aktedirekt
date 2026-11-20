@@ -10,9 +10,10 @@ from tests.test_tresen import anlegen, einloesen
 PDF = b"%PDF-1.7 Kostenvoranschlag"
 
 
-def einreichen(client, kopf, ablage, fall, name="kva.pdf", inhalt=PDF):
+def einreichen(client, kopf, ablage, fall, name="kva.pdf", inhalt=PDF, unterlage=""):
     basis = f"/api/partner/faelle/{fall}/dateien"
-    ziel = client.post(basis, headers=kopf, json={"name": name, "groesse": len(inhalt)})
+    ziel = client.post(basis, headers=kopf, json={"name": name, "groesse": len(inhalt),
+                                                  **({"unterlage": unterlage} if unterlage else {})})
     if ziel.status_code != 200:
         return ziel
     ablage.abliefern(client, kopf, ziel.json()["adresse"], inhalt)
@@ -133,3 +134,13 @@ def test_partner_nimmt_keine_unterlage_des_mandanten_zurueck(umgebung):
     eigene = hochladen(client, mandant, ablage, "foto.jpg", b"\xff\xd8\xff\xe0x").json()["kennung"]
     assert client.delete(f"/api/partner/faelle/{fall['fall']}/dateien/{eigene}", headers=kopf).status_code == 404
     assert len(speicher.dateien(fall["fall"])) == 1
+
+
+def test_werkstatt_ordnet_ihre_unterlage_der_checkliste_zu(umgebung):
+    client, speicher, _, ablage = umgebung
+    kopf = anmelden(client)
+    fall = anlegen(client, kopf)
+    antwort = einreichen(client, kopf, ablage, fall["fall"], unterlage="gutachten")
+    assert antwort.json()["name"] == "Gutachten - kva.pdf"
+    zustand = einloesen(client, fall["link"]).json()
+    assert next(u for u in zustand["unterlagen"] if u["schluessel"] == "gutachten")["anzahl"] == 1

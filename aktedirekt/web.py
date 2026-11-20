@@ -101,6 +101,14 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         if frist is None:
             return liste
         tage = (frist - jetzt().date()).days
+        if aufnahme.abgeschlossen_am is not None:
+            # Abgeschickt: Die Frist hat jetzt die Kanzlei im Blick - sobald sie das
+            # Mandat angenommen hat, braucht es den Hinweis nicht mehr.
+            if aufnahme.sachstand not in ("", "aufgenommen"):
+                return liste
+            liste.append({"art": "frist" if tage > 7 else "warnung", "text": wortlaut[
+                "frist_eingegangen" if tage >= 0 else "frist_abgelaufen"].format(datum=frist.strftime("%d.%m.%Y"), telefon=anruf)})
+            return liste
         schluessel = "frist_abgelaufen" if tage < 0 else "frist_knapp" if tage <= 7 else "frist"
         liste.append({"art": "frist" if schluessel == "frist" else "warnung",
                       "text": wortlaut[schluessel].format(datum=frist.strftime("%d.%m.%Y"), telefon=anruf)})

@@ -150,7 +150,8 @@ function unterlagen_oeffnen(f) {
 async function unterlage_hochladen(datei) {
   if (datei.size > 15 * 1024 * 1024) throw new Error("zu groß (höchstens 15 MB)");
   const basis = "/api/partner/faelle/" + unterlagen_fall.fall + "/dateien";
-  const ziel = await aufruf("POST", basis, { name: datei.name, groesse: datei.size });
+  const art = document.querySelector('input[name="u_art"]:checked');
+  const ziel = await aufruf("POST", basis, { name: datei.name, groesse: datei.size, unterlage: art ? art.value : "" });
   const hier = ziel.adresse.startsWith("/");
   let antwort;
   try {

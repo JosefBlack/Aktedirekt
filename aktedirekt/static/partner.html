@@ -87,6 +87,13 @@
 <section id="unterlagen" hidden>
   <h1 id="unterlagen-titel"></h1>
   <p>Kostenvoranschlag, Gutachten, Rechnung oder Fotos – als Foto oder PDF, je Datei bis 15 MB. Die Kanzlei und Ihr Kunde sehen, dass die Unterlage von Ihnen kommt.</p>
+  <fieldset><legend>Was laden Sie hoch?</legend>
+    <div class="wahl" id="u-art">
+      <label><input type="radio" name="u_art" value="gutachten" checked><span>Gutachten / KVA</span></label>
+      <label><input type="radio" name="u_art" value="rechnungen"><span>Rechnung</span></label>
+      <label><input type="radio" name="u_art" value="schaden"><span>Schadenfotos</span></label>
+      <label><input type="radio" name="u_art" value="sonstiges"><span>Sonstiges</span></label>
+    </div></fieldset>
   <div class="hochladen">
     <label class="knopf">Foto aufnehmen<input type="file" id="u-kamera" accept="image/*" capture="environment" hidden></label>
     <label class="knopf">Aus Dateien wählen<input type="file" id="u-auswahl" accept="image/jpeg,image/png,image/heic,image/heif,application/pdf" multiple hidden></label>

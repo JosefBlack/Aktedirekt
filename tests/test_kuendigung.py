@@ -252,3 +252,14 @@ def test_nicht_abgeschicktes_ist_fuer_die_kanzlei_nicht_da(umgebung):
     _, daten = beginnen(client)
     kennung = speicher.laden(daten["zugang"]).kennung
     assert client.get(f"/api/kanzlei/eingaenge/{kennung}", headers=kanzlei(client)).status_code == 404
+
+
+def test_nach_dem_abschicken_bittet_der_hinweis_nicht_mehr_ums_ausfuellen(umgebung):
+    client, speicher, _, _, _ = umgebung
+    kopf, _ = beginnen(client)
+    zustand = abschicken(client, kopf)
+    assert len(zustand["hinweise"]) == 1 and "eingegangen" in zustand["hinweise"][0]["text"]
+    assert "Fragebogen" not in zustand["hinweise"][0]["text"]
+    kennung = speicher.laden(kopf["Authorization"][7:]).kennung
+    speicher.sachstand_setzen(kennung, "angenommen", date(2026, 11, 20))
+    assert client.get("/api/aufnahme", headers=kopf).json()["hinweise"] == []
