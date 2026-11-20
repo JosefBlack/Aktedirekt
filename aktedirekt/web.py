@@ -43,6 +43,18 @@ from aktedirekt.speicher import Speicher
 MAX_JSON = 600 * 1024
 MAX_UNTERSCHRIFT = 400 * 1024
 MIN_UNTERSCHRIFT = 800
+# Die großen Schritte, die der Mandant auf seiner Statusseite sieht - und welche
+# Sachstände zu welchem Schritt gehören.
+VERLAUF = {
+    "unfall": (("Eingegangen", {"aufgenommen"}), ("Mandat angenommen", {"angenommen", "unterlagen_fehlen"}),
+               ("Ansprüche angemeldet", {"angemeldet", "mahnstufe_1", "mahnstufe_2", "mahnstufe_3"}),
+               ("Regulierung", {"teilweise_reguliert", "vollstaendig_reguliert", "gerichtlich"}),
+               ("Abgeschlossen", {"abgeschlossen"})),
+    "kuendigung": (("Eingegangen", {"aufgenommen"}),
+                   ("Mandat angenommen", {"angenommen", "unterlagen_fehlen", "angemeldet", "mahnstufe_1", "mahnstufe_2",
+                                          "mahnstufe_3", "teilweise_reguliert", "vollstaendig_reguliert"}),
+                   ("Gerichtliches Verfahren", {"gerichtlich"}), ("Abgeschlossen", {"abgeschlossen"})),
+}
 # Nachrichten des Mandanten an die Kanzlei: als Datei dieses "Einreichers" abgelegt.
 NACHRICHT = "#nachricht"
 MAX_NACHRICHT = 3000
@@ -170,6 +182,15 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         konto = partnerliste.konto(von)
         return konto.name if konto else ("Partner" if von else "")
 
+    def verlauf(aufnahme: Aufnahme) -> list[dict[str, Any]]:
+        """Die großen Schritte eines Falls und wo dieser gerade steht - als Orientierung für den Mandanten."""
+        stufe = aufnahme.sachstand or "aufgenommen"
+        if aufnahme.abgeschlossen_am is None or stufe == "nicht_uebernommen":
+            return []
+        schritte = VERLAUF.get(aufnahme.art, VERLAUF["unfall"])
+        hier = next((i for i, (_, stufen_) in enumerate(schritte) if stufe in stufen_), 0)
+        return [{"titel": titel, "erreicht": i <= hier, "aktuell": i == hier} for i, (titel, _) in enumerate(schritte)]
+
     def checkliste(aufnahme: Aufnahme) -> list[dict[str, Any]]:
         """Die Unterlagen, die die Kanzlei braucht, und wie viele dazu schon da sind."""
         anzahl: dict[str, int] = {}
@@ -204,6 +225,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "sachstand": stufen.bezeichnung(aufnahme.sachstand),
             "sachstand_seit": aufnahme.sachstand_seit.isoformat() if aufnahme.sachstand_seit else "",
             # Was der Stand bedeutet und was der Mandant tun kann - damit er nicht anrufen muss.
+            "verlauf": verlauf(aufnahme),
             "erklaerung": {k: portaltext(v) for k, v in portal["sachstand"].get(aufnahme.sachstand or "aufgenommen", {}).items()},
             "fragen": [{"frage": f["frage"], "antwort": portaltext(f["antwort"])} for f in portal["fragen"].get(art.name, [])],
             "telefon": telefon or "",
@@ -703,7 +725,9 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 "kurzrubrum": kurzrubrum(aufnahme),
                 "sachstand": stufen.bezeichnung(aufnahme.sachstand),
                 # "unbekannt" heißt: gemeldet, aber noch nicht bestätigt gefunden.
-                "in_jurnodes": aufnahme.lead_kennung not in ("", "unbekannt")}
+                "in_jurnodes": aufnahme.lead_kennung not in ("", "unbekannt"),
+                "nachrichten": [d.hochgeladen_am.isoformat(timespec="minutes") for d in speicher.dateien(aufnahme.kennung)
+                                if d.von == NACHRICHT and d.hochgeladen_am]}
 
     @app.get("/api/kanzlei/eingaenge")
     async def eingaenge(request: Request) -> dict[str, Any]:

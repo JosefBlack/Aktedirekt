@@ -140,6 +140,31 @@ Offen: Die Widerrufsbelehrung muss dem Mandanten dauerhaft zur Verfügung
 stehen. Bisher kann er sie nur selbst als PDF speichern; ein Versand per E-Mail
 fehlt noch.
 
+## Statusseite des Mandanten
+
+Nach dem Abschicken ist die Startseite des Mandanten seine Statusseite. Sie soll
+die Anrufe ersetzen, die sonst in der Kanzlei ankommen:
+
+* **Stand mit Erklärung:** zu jedem Sachstand, was er bedeutet und was der
+  Mandant tun kann, dazu ein Ablauf (Eingegangen → Mandat angenommen →
+  Ansprüche angemeldet → Regulierung → Abgeschlossen).
+* **Checkliste der Unterlagen:** je Art (Fahrzeugschein, Schadenfotos,
+  Rechnungen, Post von Versicherungen …) ein eigener Knopf für Foto oder
+  Datei. Der Dateiname beginnt dann mit der Art („Fahrzeugschein - IMG_1.jpg"),
+  so auch in jur|nodes. Was die Kanzlei sicher braucht und noch fehlt, steht
+  oben als „noch offen". Werkstatt und Sachverständiger ordnen ihre
+  Unterlagen ebenso zu.
+* **Nachricht an die Kanzlei:** kommt als PDF in den Eingang und mit dem
+  nächsten Abgleich in den Ordner in jur|nodes; die Kanzlei bekommt eine
+  E-Mail (ohne Inhalt) und sieht die Nachrichten in der Eingangsliste.
+* **Häufige Fragen** je Fallart.
+* **Persönlicher Link** für ein zweites Gerät oder nach einem Gerätewechsel
+  (der Zugang steht hinter dem `#` und reist nicht zum Server).
+
+Die Texte zu Sachständen und Fragen stehen in `aktedirekt/texte/portal.json`
+und sind **Entwürfe**; die Fassung der Kanzlei kommt wie die übrigen Texte über
+`kanzlei-texte/`.
+
 ## Übergabe an jur|nodes
 
 Beim Abschicken entsteht in jur|nodes ein Lead mit Kurzrubrum (höchstens 50

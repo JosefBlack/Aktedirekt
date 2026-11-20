@@ -37,3 +37,4 @@
   border-left: 4px solid var(--akzent); border-radius: 10px; }
 .vorschlag p { margin: 0 0 8px; }
 .vorschlag button { margin-top: 10px; }
+.eingang .nachricht { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--marke); }

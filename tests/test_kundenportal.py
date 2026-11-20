@@ -93,3 +93,16 @@ def test_nachricht_an_die_kanzlei_kommt_als_pdf_in_die_akte(ablage):
     assert inhalt.startswith(b"%PDF") and b"Versicherung hat angerufen" in inhalt
     # Die Kanzlei erfährt, dass etwas da ist - nicht, was.
     assert len(gemeldet) == 1 and "Versicherung" not in gemeldet[0][1]
+
+
+def test_verlauf_zeigt_wo_der_fall_steht(mandant):
+    client, kopf, ablage = mandant
+    assert client.get("/api/aufnahme", headers=kopf).json()["verlauf"] == []        # vor dem Abschicken nichts
+    abschicken(client, kopf)
+    kennung = zustand_kennung(ablage, kopf)
+    ablage.speicher.sachstand_setzen(kennung, "mahnstufe_2", date(2026, 12, 1))
+    verlauf = client.get("/api/aufnahme", headers=kopf).json()["verlauf"]
+    assert [v["titel"] for v in verlauf if v["erreicht"]] == ["Eingegangen", "Mandat angenommen", "Ansprüche angemeldet"]
+    assert [v["titel"] for v in verlauf if v["aktuell"]] == ["Ansprüche angemeldet"]
+    ablage.speicher.sachstand_setzen(kennung, "nicht_uebernommen", date(2026, 12, 2))
+    assert client.get("/api/aufnahme", headers=kopf).json()["verlauf"] == []

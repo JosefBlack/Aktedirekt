@@ -7,7 +7,7 @@ const UNFALL_SEITEN = ["start", "unfall", "fahrzeug", "gegner", "fotos", "person
 let SEITEN = UNFALL_SEITEN;
 const TITEL = { start: "Aktedirekt", unfall: "Der Unfall", fahrzeug: "Ihr Fahrzeug",
   gegner: "Das andere Fahrzeug", fotos: "Unterlagen", person: "Ihre Daten",
-  abschluss: "Unterschrift", fertig: "Eingegangen" };
+  abschluss: "Unterschrift", fertig: "Ihr Fall" };
 const START = {
   unfall: { titel: "Unfall melden", dauer: "In etwa fünf Minuten nehmen wir Ihren Unfall auf.",
     bereit: ["Kennzeichen des anderen Fahrzeugs", "Fotos vom Schaden und vom Unfallort", "Ihren Fahrzeugschein"] },
@@ -531,6 +531,13 @@ function fertig() {
   $("#stand-tun").textContent = (zustand.erklaerung || {}).tun || "";
   fragen_zeigen();
   nachrichten_zeigen();
+  const verlauf = $("#verlauf");
+  verlauf.textContent = "";
+  for (const v of zustand.verlauf || []) {
+    const li = knoten("li", { class: (v.erreicht ? "erreicht" : "") + (v.aktuell ? " aktuell" : "") }, v.titel);
+    if (v.aktuell) li.setAttribute("aria-current", "step");
+    verlauf.append(li);
+  }
   $("#anrufen").hidden = !zustand.telefon;
   $("#anrufen").textContent = "";
   if (zustand.telefon) {

@@ -82,6 +82,8 @@ async function liste_laden() {
     stand.append(teil("span", "seit", "eingegangen " + zeitpunkt(e.eingegangen_am)));
     li.append(stand);
     li.append(teil("span", "kfz", e.art + (e.vermittler ? " · über " + e.vermittler : "") + (e.in_jurnodes ? " · in jur|nodes" : " · noch nicht in jur|nodes")));
+    const n = (e.nachrichten || []).length;
+    if (n) li.append(teil("span", "nachricht", (n === 1 ? "1 Nachricht" : n + " Nachrichten") + " des Mandanten, zuletzt " + zeitpunkt(e.nachrichten[n - 1])));
     const oeffnen = () => eingang_laden(e.fall).catch(gescheitert);
     li.addEventListener("click", oeffnen);
     li.addEventListener("keydown", (ev) => { if (ev.key === "Enter") oeffnen(); });

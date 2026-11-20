@@ -124,3 +124,13 @@ form[data-seite="abschluss"] h2 { margin-top: 30px; }
 #anrufen a { color: var(--marke); font-weight: 600; }
 .checkliste li.huelle { background: none; border: 0; padding: 0; }
 .weitere summary { cursor: pointer; font-weight: 600; min-height: 48px; display: flex; align-items: center; color: var(--marke); }
+.verlauf { list-style: none; padding: 0; margin: 0 0 20px; display: flex; flex-direction: column; gap: 0; }
+.verlauf li { position: relative; padding: 4px 0 4px 30px; color: var(--leise); font-size: 15px; }
+.verlauf li::before { content: ""; position: absolute; left: 6px; top: 9px; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--rand); background: var(--grund); }
+.verlauf li:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 23px; bottom: -9px; width: 2px; background: var(--rand); }
+.verlauf li.erreicht { color: var(--schrift); }
+.verlauf li.erreicht::before { background: var(--gut); border-color: var(--gut); }
+.verlauf li.erreicht:not(:last-child)::after { background: var(--gut); }
+.verlauf li.aktuell { font-weight: 700; }
+.verlauf li.aktuell::before { box-shadow: 0 0 0 4px color-mix(in srgb, var(--gut) 25%, transparent); }
