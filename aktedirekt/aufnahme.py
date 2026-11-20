@@ -171,6 +171,8 @@ ERGAENZUNGEN: dict[str, Abschnitt] = {
 
 # Unter diesem Vorsatz stehen die Ergänzungen bei den Angaben der Aufnahme.
 ERG = "erg_"
+# Was die Kanzlei beim Mandanten anfordert (Punkte der Checkliste und ein Satz dazu).
+ANFORDERUNG = "#anforderung"
 
 # Wie die Felder der Unfallaufnahme in der Ansicht der Kanzlei heißen. Auf dem
 # Handy stehen diese Fragen fest in der Seite; hier nur die Kurzform für die Akte.

@@ -32,7 +32,7 @@ from fastapi.staticfiles import StaticFiles
 
 from aktedirekt import akte_pdf, dateien, erklaerungen, totp, zeit
 from aktedirekt.abgleich import ENTWURF_FRIST, alte_entwuerfe, als_fall, entwuerfe_loeschen, lead_anlegen
-from aktedirekt.aufnahme import (ERG, FALLARTEN, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
+from aktedirekt.aufnahme import (ANFORDERUNG, ERG, FALLARTEN, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
                                  kurzrubrum, unterlage_zu)
 from aktedirekt.jurnodes import JurNodes
 from aktedirekt.partner import FEHLVERSUCHE, SPERRE, Partnerliste
@@ -192,15 +192,35 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         hier = next((i for i, (_, stufen_) in enumerate(schritte) if stufe in stufen_), 0)
         return [{"titel": titel, "erreicht": i <= hier, "aktuell": i == hier} for i, (titel, _) in enumerate(schritte)]
 
+    def anforderung(aufnahme: Aufnahme) -> dict[str, Any] | None:
+        """Was die Kanzlei angefordert hat - ``None``, wenn nichts offen ist."""
+        a = aufnahme.angaben.get(ANFORDERUNG) or {}
+        punkte = [p for p in a.get("punkte", "").split(",") if p]
+        if not punkte and not a.get("text"):
+            return None
+        titel = {u.schluessel: u.titel for u in aufnahme.fallart.unterlagen}
+        return {"punkte": [titel[p] for p in punkte if p in titel], "schluessel": punkte,
+                "text": a.get("text", ""), "am": a.get("am", "")}
+
     def checkliste(aufnahme: Aufnahme) -> list[dict[str, Any]]:
-        """Die Unterlagen, die die Kanzlei braucht, und wie viele dazu schon da sind."""
+        """Die Unterlagen, die die Kanzlei braucht, und wie viele dazu schon da sind.
+
+        ``angefordert``: Die Kanzlei hat ausdrücklich danach gefragt;
+        ``nachgereicht``: Seit der Anforderung ist dazu etwas gekommen.
+        """
+        a = aufnahme.angaben.get(ANFORDERUNG) or {}
+        gefragt, seit = set(a.get("punkte", "").split(",")) - {""}, a.get("am", "")
         anzahl: dict[str, int] = {}
+        neu: set[str] = set()
         for d in speicher.dateien(aufnahme.kennung):
             u = unterlage_zu(aufnahme.fallart, d.name)
             if u is not None:
                 anzahl[u.schluessel] = anzahl.get(u.schluessel, 0) + 1
+                if seit and d.hochgeladen_am and d.hochgeladen_am.isoformat() >= seit:
+                    neu.add(u.schluessel)
         return [{"schluessel": u.schluessel, "titel": u.titel, "hinweis": u.hinweis, "wichtig": u.wichtig,
-                 "anzahl": anzahl.get(u.schluessel, 0)} for u in aufnahme.fallart.unterlagen]
+                 "anzahl": anzahl.get(u.schluessel, 0), "angefordert": u.schluessel in gefragt,
+                 "nachgereicht": u.schluessel in neu} for u in aufnahme.fallart.unterlagen]
 
     def zustand(aufnahme: Aufnahme) -> dict[str, Any]:
         konto = partnerliste.konto(aufnahme.partner)
@@ -213,7 +233,8 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "empfohlen": [u.titel for u in art.unterlagen if u.schluessel != "sonstiges"],
             "unterlagen": checkliste(aufnahme),
             "hinweise": hinweise(aufnahme),
-            "angaben": {s: a for s, a in aufnahme.angaben.items() if not s.startswith(ERG)},
+            "angaben": {s: a for s, a in aufnahme.angaben.items() if not s.startswith((ERG, "#"))},
+            "anforderung": anforderung(aufnahme),
             "ergaenzungen": aufnahme.ergaenzungen(),
             **bauplan[art.name],
             "ergaenzung_felder": [a for a in bauplan[art.name]["ergaenzung_felder"] if a["abschnitt"] in aufnahme.ergaenzungen()],
@@ -759,7 +780,26 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                                 if unterschrift else "",
                 "nachweis": {"zeitpunkt": nachweis.get("zeitpunkt", ""), "geraet": nachweis.get("geraet", "")},
                 "einwilligung_partner": aufnahme.einwilligung_partner
-                                        and aufnahme.einwilligung_widerrufen_am is None}
+                                        and aufnahme.einwilligung_widerrufen_am is None,
+                "checkliste": checkliste(aufnahme), "anforderung": anforderung(aufnahme)}
+
+    @app.put("/api/kanzlei/eingaenge/{fall}/anforderung")
+    async def anfordern(fall: str, request: Request) -> dict[str, Any]:
+        """Die Kanzlei sagt dem Mandanten, welche Unterlagen noch fehlen. Leer nimmt die Anforderung zurück."""
+        aufnahme = eingang_von(fall, request)
+        daten = await json_lesen(request)
+        punkte = daten.get("punkte", []) if isinstance(daten, dict) else None
+        text = daten.get("text", "") if isinstance(daten, dict) else None
+        gueltig = {u.schluessel for u in aufnahme.fallart.unterlagen}
+        if not isinstance(punkte, list) or not isinstance(text, str) or not all(isinstance(p, str) and p in gueltig for p in punkte):
+            raise HTTPException(400, "Die Angaben konnten nicht gelesen werden.")
+        text = " ".join("".join(z for z in text if z.isprintable()).split())[:500]
+        speicher.schritt_speichern(aufnahme.kennung, ANFORDERUNG, {
+            "punkte": ",".join(u.schluessel for u in aufnahme.fallart.unterlagen if u.schluessel in punkte), "text": text,
+            "am": jetzt().isoformat(timespec="seconds") if (punkte or text) else ""})
+        frisch = speicher.nach_kennung(aufnahme.kennung)
+        assert frisch is not None
+        return {"anforderung": anforderung(frisch)}
 
     @app.delete("/api/kanzlei/eingaenge/{fall}")
     async def eingang_loeschen(fall: str, request: Request) -> dict[str, Any]:

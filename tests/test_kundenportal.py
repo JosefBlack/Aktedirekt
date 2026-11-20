@@ -37,7 +37,8 @@ def test_checkliste_zaehlt_hochgeladenes_je_punkt(mandant):
     zustand = client.get("/api/aufnahme", headers=kopf).json()
     assert punkt(zustand, "fahrzeugschein") == {"schluessel": "fahrzeugschein", "titel": "Fahrzeugschein",
                                                 "hinweis": "Zulassungsbescheinigung Teil I – Vorder- und Rückseite.",
-                                                "wichtig": True, "anzahl": 0}
+                                                "wichtig": True, "anzahl": 0, "angefordert": False,
+                                                "nachgereicht": False}
     assert hochladen(client, kopf, ablage, "IMG_1.jpg", JPG, unterlage="fahrzeugschein").json()["name"] == "Fahrzeugschein - IMG_1.jpg"
     hochladen(client, kopf, ablage, "IMG_2.jpg", JPG, unterlage="fahrzeugschein")
     hochladen(client, kopf, ablage, "IMG_3.jpg", JPG)
@@ -123,3 +124,34 @@ def test_verletzungen_werden_nur_gefragt_wenn_jemand_verletzt_ist(ablage):
     antwort = client.put("/api/aufnahme/ergaenzung/verletzung", headers=kopf,
                          json={"verletzungen": "Schleudertrauma", "krankgeschrieben": "ja", "krank_bis": "2026-12-01"})
     assert antwort.json()["fehler"] == {}
+
+
+def test_kanzlei_fordert_unterlagen_an_und_sieht_was_nachkommt(ablage):
+    from aktedirekt.partner import PartnerKonto, Partnerliste
+    from tests.test_kuendigung import KONTEN, kanzlei
+    uhr = {"jetzt": JETZT}
+    client = TestClient(app_bauen(ablage.speicher, partner=Partnerliste(list(KONTEN)), jetzt=lambda: uhr["jetzt"]))
+    kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
+    hochladen(client, kopf, ablage, "alt.jpg", JPG, unterlage="fahrzeugschein")
+    abschicken(client, kopf)
+    fall = zustand_kennung(ablage, kopf)
+    k = kanzlei(client)
+    pfad = f"/api/kanzlei/eingaenge/{fall}/anforderung"
+    assert client.put(pfad, json={"punkte": ["passwort"], "text": ""}, headers=k).status_code == 400
+    assert client.put(pfad, json={"punkte": ["fahrzeugschein"], "text": ""}).status_code == 401
+    uhr["jetzt"] = datetime(2026, 11, 20, 9, 0)
+    k = kanzlei(client)                                     # die Sitzung von gestern gilt nicht mehr
+    antwort = client.put(pfad, json={"punkte": ["rechnungen", "fahrzeugschein"], "text": "Bitte die Rückseite."}, headers=k)
+    assert antwort.json()["anforderung"]["punkte"] == ["Fahrzeugschein", "Rechnungen und Belege"]
+    zustand = client.get("/api/aufnahme", headers=kopf).json()
+    assert zustand["anforderung"]["text"] == "Bitte die Rückseite."
+    assert punkt(zustand, "fahrzeugschein")["angefordert"] and not punkt(zustand, "fahrzeugschein")["nachgereicht"]
+    uhr["jetzt"] = datetime(2026, 11, 20, 10, 0)
+    hochladen(client, kopf, ablage, "neu.jpg", JPG, unterlage="fahrzeugschein")
+    zustand = client.get("/api/aufnahme", headers=kopf).json()
+    assert punkt(zustand, "fahrzeugschein")["nachgereicht"] and not punkt(zustand, "rechnungen")["nachgereicht"]
+    eingang = client.get(f"/api/kanzlei/eingaenge/{fall}", headers=k).json()
+    assert punkt(eingang["checkliste"] and {"unterlagen": eingang["checkliste"]}, "fahrzeugschein")["anzahl"] == 2
+    # Zurücknehmen
+    assert client.put(pfad, json={"punkte": [], "text": ""}, headers=k).json()["anforderung"] is None
+    assert client.get("/api/aufnahme", headers=kopf).json()["anforderung"] is None

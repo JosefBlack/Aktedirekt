@@ -331,8 +331,8 @@ KONTAKTE_ANLEGEN = True
 def mandant_als_kontakt(aufnahme: Aufnahme) -> dict[str, Any] | None:
     """Der Mandant, wie jur|nodes einen Kontakt erwartet - ``None``, wenn der Name fehlt."""
     v: dict[str, Any] = {}
-    for abschnitt in aufnahme.angaben.values():
-        if isinstance(abschnitt, dict):
+    for name, abschnitt in aufnahme.angaben.items():
+        if isinstance(abschnitt, dict) and not name.startswith("#"):
             v.update({k: str(w).strip() for k, w in abschnitt.items() if w not in ("", None)})
     if not v.get("nachname"):
         return None

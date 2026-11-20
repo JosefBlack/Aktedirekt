@@ -128,6 +128,46 @@ async function datei_oeffnen(fall, datei) {
   setTimeout(() => URL.revokeObjectURL(verweis.href), 60000);
 }
 
+// Unterlagen beim Mandanten anfordern: Er sieht die Punkte oben auf seiner Seite.
+function anforderung_bauen(fall, e) {
+  const kasten = teil("div", "anfordern nicht-drucken");
+  kasten.append(teil("h2", "", "Unterlagen beim Mandanten anfordern"));
+  kasten.append(teil("p", "klein", "Der Mandant sieht die gewählten Punkte und Ihren Satz oben auf seiner Seite und kann dort direkt hochladen."
+    + (e.anforderung && e.anforderung.am ? " Zuletzt angefordert: " + zeitpunkt(e.anforderung.am) + "." : "")));
+  const gewaehlt = new Set((e.anforderung && e.anforderung.schluessel) || []);
+  for (const u of e.checkliste || []) {
+    const marke = document.createElement("label");
+    marke.className = "haken";
+    const kasten_ = document.createElement("input");
+    kasten_.type = "checkbox";
+    kasten_.value = u.schluessel;
+    kasten_.checked = gewaehlt.has(u.schluessel);
+    marke.append(kasten_, teil("span", "", u.titel + " · " + (u.anzahl ? u.anzahl + " vorhanden" : "nichts vorhanden")
+      + (u.angefordert ? (u.nachgereicht ? " · seit Anforderung nachgereicht" : " · angefordert, noch nichts Neues") : "")));
+    kasten.append(marke);
+  }
+  const satz = document.createElement("input");
+  satz.type = "text";
+  satz.maxLength = 500;
+  satz.placeholder = "Optional: ein Satz dazu, z. B. „Bitte auch die Rückseite.“";
+  satz.value = (e.anforderung && e.anforderung.text) || "";
+  kasten.append(satz);
+  const knopf = teil("button", "schlicht rand", "Anforderung speichern");
+  knopf.type = "button";
+  const ok = teil("span", "klein ok", "");
+  knopf.addEventListener("click", async () => {
+    knopf.disabled = true;
+    try {
+      const punkte = Array.from(kasten.querySelectorAll("input[type=checkbox]:checked")).map((k) => k.value);
+      const antwort = await aufruf("PUT", "/api/kanzlei/eingaenge/" + fall + "/anforderung", { punkte, text: satz.value });
+      ok.textContent = antwort.anforderung ? " Gespeichert – der Mandant sieht es." : " Zurückgenommen.";
+    } catch (fehler) { gescheitert(fehler); }
+    knopf.disabled = false;
+  });
+  kasten.append(knopf, ok);
+  return kasten;
+}
+
 async function eingang_laden(fall) {
   melden("");
   const e = await aufruf("GET", "/api/kanzlei/eingaenge/" + fall);
@@ -162,6 +202,8 @@ async function eingang_laden(fall) {
     }
     blatt.append(anlagen);
   } else blatt.append(teil("p", "leer", "keine"));
+
+  blatt.append(anforderung_bauen(fall, e));
 
   blatt.append(teil("h2", "", "Auftrag und Unterschrift"));
   blatt.append(zeilen([["Unterschrieben am", zeitpunkt(e.nachweis.zeitpunkt)], ["Gerät", e.nachweis.geraet]]));

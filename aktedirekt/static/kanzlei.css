@@ -38,3 +38,7 @@
 .vorschlag p { margin: 0 0 8px; }
 .vorschlag button { margin-top: 10px; }
 .eingang .nachricht { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--marke); }
+.anfordern { margin-top: 24px; }
+.anfordern input[type=text] { margin-top: 12px; }
+.anfordern .ok { margin-left: 10px; color: var(--gut); }
+@media print { .nicht-drucken { display: none !important; } }

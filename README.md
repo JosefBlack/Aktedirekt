@@ -157,6 +157,9 @@ die Anrufe ersetzen, die sonst in der Kanzlei ankommen:
 * **Nachricht an die Kanzlei:** kommt als PDF in den Eingang und mit dem
   nächsten Abgleich in den Ordner in jur|nodes; die Kanzlei bekommt eine
   E-Mail (ohne Inhalt) und sieht die Nachrichten in der Eingangsliste.
+* **Unterlagen anfordern:** In der Ansicht der Kanzlei kreuzt man an, was
+  fehlt, und schreibt einen Satz dazu. Der Mandant sieht es oben auf seiner
+  Seite und lädt direkt dort hoch; die Kanzlei sieht, was seitdem kam.
 * **Häufige Fragen** je Fallart.
 * **Persönlicher Link** für ein zweites Gerät oder nach einem Gerätewechsel
   (der Zugang steht hinter dem `#` und reist nicht zum Server).

@@ -317,6 +317,12 @@ function knopf_datei(text, kamera, unterlage, stand) {
   return marke;
 }
 
+// Offen ist, was die Kanzlei angefordert hat und seitdem nicht kam - oder, ohne
+// Anforderung, was sie sicher braucht und noch fehlt.
+function ist_offen(u) {
+  return u.angefordert ? !u.nachgereicht : (u.wichtig && !u.anzahl);
+}
+
 function checkliste_zeigen() {
   for (const [ziel, stand] of [[$("#checkliste"), $("#ladestand")], [$("#checkliste2"), $("#ladestand2")]]) {
     ziel.textContent = "";
@@ -324,27 +330,39 @@ function checkliste_zeigen() {
     const kurz = ziel.id === "checkliste2";
     let weitere = null;
     for (const u of zustand.unterlagen || []) {
-      if (kurz && !(u.wichtig && !u.anzahl) && !weitere) {
+      if (kurz && !ist_offen(u) && !weitere) {
         weitere = knoten("details", { class: "weitere" });
         weitere.append(knoten("summary", {}, "Weitere Unterlagen nachreichen"), knoten("ul", { class: "checkliste" }));
         const huelle = knoten("li", { class: "huelle" });
         huelle.append(weitere);
         ziel.append(huelle);
       }
-      const li = knoten("li", { class: u.anzahl ? "da" : (u.wichtig ? "offen" : "") });
+      const li = knoten("li", { class: ist_offen(u) ? "offen" : (u.anzahl ? "da" : "") });
       const kopf = knoten("div", { class: "punkt" });
-      kopf.append(knoten("strong", {}, u.titel),
-        knoten("span", { class: "marke" }, u.anzahl ? `✓ ${u.anzahl}` : (u.wichtig ? "wichtig" : "")));
+      const marke = u.angefordert ? (u.nachgereicht ? "✓ nachgereicht" : "angefordert")
+        : (u.anzahl ? `✓ ${u.anzahl}` : (u.wichtig ? "wichtig" : ""));
+      kopf.append(knoten("strong", {}, u.titel), knoten("span", { class: "marke" }, marke));
       li.append(kopf);
       if (u.hinweis) li.append(knoten("p", { class: "klein" }, u.hinweis));
       const knoepfe = knoten("div", { class: "knoepfe" });
       knoepfe.append(knopf_datei("Foto", true, u.schluessel, stand), knopf_datei("Datei", false, u.schluessel, stand));
       li.append(knoepfe);
-      (weitere && !(u.wichtig && !u.anzahl) ? $("ul", weitere) : ziel).append(li);
+      (weitere && !ist_offen(u) ? $("ul", weitere) : ziel).append(li);
     }
   }
-  const offen = (zustand.unterlagen || []).filter((u) => u.wichtig && !u.anzahl).map((u) => u.titel);
-  $("#offen").hidden = !offen.length;
+  const anf = zustand.anforderung;
+  $("#anforderung").hidden = !anf;
+  if (anf) {
+    const punkte = $("#anforderung-punkte");
+    punkte.textContent = "";
+    for (const u of (zustand.unterlagen || []).filter((x) => x.angefordert)) {
+      punkte.append(knoten("li", { class: u.nachgereicht ? "erledigt" : "" }, u.titel + (u.nachgereicht ? " – nachgereicht ✓" : "")));
+    }
+    $("#anforderung-text").textContent = anf.text || "";
+    $("#anforderung-text").hidden = !anf.text;
+  }
+  const offen = (zustand.unterlagen || []).filter(ist_offen).map((u) => u.titel);
+  $("#offen").hidden = !offen.length || !!anf;
   $("#offen").textContent = offen.length ? "Noch offen: " + offen.join(", ") + "." : "";
 }
 $("#fotos-weiter").addEventListener("click", naechste);
