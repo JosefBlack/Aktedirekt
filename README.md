@@ -33,7 +33,7 @@ und nur das. Sie sehen den **Sachstand in festen Stufen** („Mahnstufe 2",
 
 ## Stand
 
-Vorhanden und geprüft (314 Prüfungen, ohne Netz; was eine Ablage braucht,
+Vorhanden und geprüft (320 Prüfungen, ohne Netz; was eine Ablage braucht,
 läuft gegen die örtliche und gegen ein nachgestelltes AWS):
 
 | Datei | Inhalt |
@@ -164,7 +164,21 @@ das Anlegen an, gilt der Lead als angelegt, auch ohne Kennung; die Kennung wird
 über das Kurzrubrum gesucht. Beim Nachholen wird zuerst gesucht, ob es den Lead
 schon gibt, und lässt sich das nicht klären, wird nicht angelegt.
 
-**Gegen den Server der Kanzlei ist die Übergabe der Dateien noch nicht gelaufen.** Es folgt der
+**Was der Server der Kanzlei anders macht als die Beschreibung 1.0.2**
+(festgestellt am 20.11.2026 mit `verwalten.sh jurnodes-probe`):
+
+- `POST /lead` ohne Vermittler antwortet mit Status 500 und leerem Inhalt –
+  und legt den Lead trotzdem an. Das Portal sucht danach, ob er entstanden ist.
+- `POST /lead` mit einem Vermittler, den jur|nodes nicht kennt: Status 405,
+  nichts angelegt. Das Portal legt dann ohne Vermittler an.
+- `GET /lead/search` zählt Seiten ab 1, nicht ab 0.
+- `GET /lead?identifier=…` wird abgewiesen („Bitte Daten angeben“). Das Portal
+  liest einen Lead deshalb über die Suche.
+- `POST /file-system/add-file` in den Ordner eines Leads funktioniert.
+
+**Mit einem echten Fall durchgelaufen ist die Übergabe noch nicht**, und was
+nach der Annahme eines Leads geschieht (Akte, Sachstand), ist am Server der
+Kanzlei noch ungeprüft. Es folgt der
 Beschreibung des Herstellers und dem, was jusperfect an diesem Server gelernt
 hat (Ordner und Umbenennen in Kopfzeilen, Datei als Formularteil).
 

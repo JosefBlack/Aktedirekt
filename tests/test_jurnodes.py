@@ -47,10 +47,11 @@ def test_get_traegt_den_schluessel_ebenfalls():
 
 @pytest.mark.parametrize("status", [400, 401, 405, 500])
 def test_fehler_tragen_kein_wort_des_servers(status):
-    j = client({("GET", "/lead"): (status, {"error": "Mandant Erika Muster unbekannt"})})
+    j = client({("GET", "/record"): (status, {"error": "Mandant Erika Muster unbekannt"})})
     with pytest.raises(JurNodesFehler) as f:
-        j.lead("L-1")
+        j.akte_status("A-1")
     assert "Muster" not in str(f.value)
+    assert not any("Muster" in p for p in j.pannen) and j.pannen == [f"GET /record: Status {status}"]
 
 
 def test_akteneigenschaft_nimmt_nur_den_gefragten_namen():

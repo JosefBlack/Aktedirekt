@@ -145,11 +145,22 @@ ordner = lead.get("fileFolderId")
 print(f"  -> Kennung vorhanden ({len(kennung)} Zeichen), Dateiordner genannt: {'ja' if ordner else 'nein'}")
 
 print("\n== 3. Den Probe-Lead lesen")
-status, art, daten, text = aufruf("GET", "/lead", {"identifier": kennung})
-zeile("GET /lead", status, art, daten, text)
-gelesen = kennung_aus(daten)
-if gelesen and gelesen.get("fileFolderId"):
-    ordner = gelesen["fileFolderId"]
+for name, params in (("GET /lead mit identifier", {"identifier": kennung}),
+                     ("GET /lead mit leadIdentifier", {"leadIdentifier": kennung}),
+                     ("GET /lead mit id", {"id": kennung})):
+    status, art, daten, text = aufruf("GET", "/lead", params)
+    zeile(name, status, art, daten, text)
+    gelesen = kennung_aus(daten)
+    if gelesen and gelesen.get("fileFolderId"):
+        ordner = gelesen["fileFolderId"]
+print("  Wie viele Leads die Suche je Zustand nennt (nur die Anzahl):")
+for zustand in (None, "created", "accepted", "rejected"):
+    status, art, daten, text = aufruf("GET", "/lead/search", {"page": 1, **({"status": zustand} if zustand else {})})
+    elemente = daten.get("elements") if isinstance(daten, dict) else None
+    anzahl = daten.get("amountTotal") if isinstance(daten, dict) else None
+    zustaende = sorted({str(e.get("status")) for e in elemente or [] if isinstance(e, dict)})
+    print(f"    {zustand or 'ohne Angabe'}: Status {status}"
+          + (f", {anzahl} insgesamt, Zustände auf Seite 1: {', '.join(zustaende) or '-'}" if 200 <= status < 300 else f" - Server sagt: {wortlaut(daten, text)}"))
 print(f"  -> Dateiordner jetzt genannt: {'ja' if ordner else 'nein'}")
 
 print("\n== 4. Eine kleine PDF-Datei in den Ordner des Leads legen")

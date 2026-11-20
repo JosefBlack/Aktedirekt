@@ -541,3 +541,102 @@ def test_vermittler_unter_dem_namen_den_jurnodes_kennt(ablage):
     client = TestClient(app_bauen(ablage.speicher, partner=partner, jurnodes=jurnodes, jetzt=lambda: JETZT))
     aufnehmen(client, ablage)
     assert gesendet[0]["broker"] == "Autohaus Beispiel"
+
+
+# ---- Der Server der Kanzlei, so wie ihn das Prüfprogramm am 20.11.2026 zeigte ----
+
+class ServerDerKanzlei(Server):
+    """POST /lead ohne Vermittler: legt an und antwortet 500. Mit unbekanntem Vermittler: 405.
+    GET /lead: 405 "Bitte Daten angeben". Suche: Seiten ab 1, ohne Angabe nur offene Leads."""
+    def __init__(self):
+        super().__init__()
+        self.liste, self.lesen = [], 0
+
+    def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        weg, params = anfrage.url.path, dict(anfrage.url.params)
+        if anfrage.method == "POST" and weg == "/lead":
+            modell = json.loads(anfrage.content)["model"]
+            if "broker" in modell:
+                return httpx.Response(405, json={"error": "Der Vermittler konnte nicht gefunden werden"})
+            self.leads.append(modell)
+            self.liste.append({"identifier": f"lead-{len(self.liste) + 1:09d}", "shortRubrum": modell["shortRubrum"],
+                               "status": "created", "acceptedRecord": None, "fileFolderId": 70 + len(self.liste),
+                               "correspondenceFolderId": 1, "created": "x", "leadDate": modell["leadDate"]})
+            return httpx.Response(500, json={})
+        if weg == "/lead":
+            self.lesen += 1
+            return httpx.Response(405, json={"error": "Bitte Daten angeben"})
+        if weg == "/lead/search":
+            if params.get("page") == "0":
+                return httpx.Response(405, json={"error": "Bitte geben Sie eine Seitenzahl > 0 an"})
+            gewollt = params.get("status", "created")
+            alle = [e for e in self.liste if e["status"] == gewollt
+                    and ("shortRubrum" not in params or e["shortRubrum"] == params["shortRubrum"])]
+            seite = int(params.get("page", 1))
+            return httpx.Response(200, json={"actuallyPage": seite, "amountTotal": len(alle), "pagesTotal": 1,
+                                             "elements": alle if seite == 1 else []})
+        if weg == "/record":
+            if params.get("identifier") != "rec-uuid-1":
+                return httpx.Response(405, json={"error": "Bitte Daten angeben"})
+            return httpx.Response(200, json={"identifier": "rec-uuid-1", "recordStatus": "active", "fileFolderId": 99})
+        if weg == "/record/search":
+            return httpx.Response(200, json={"elements": [{"identifier": "rec-uuid-1", "sign": "40566/26"}]})
+        if weg == "/record-subject/search":
+            return httpx.Response(200, json={"elements": [{"recordSubject": "Sachstand", "valueText": "Mahnstufe 2"}]})
+        if weg == "/file-system/add-file":
+            antwort = super().__call__(anfrage)
+            return httpx.Response(200, json={"identifier": "f", "fileName": "x", "folderId": 1}) if antwort.status_code == 200 else antwort
+        return httpx.Response(404, json={})
+
+
+@pytest.fixture
+def kanzlei_server(ablage):
+    server = ServerDerKanzlei()
+    jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(server))
+    client = TestClient(app_bauen(ablage.speicher, partner=PARTNER, jurnodes=jurnodes, jetzt=lambda: JETZT))
+    return client, ablage.speicher, server, ablage, jurnodes
+
+
+def test_ganzer_weg_am_server_der_kanzlei(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    kopf, zugang = aufnehmen(client, ablage)           # über die Werkstatt: der Vermittler ist jur|nodes unbekannt
+    aufnahme = speicher.laden(zugang)
+    assert aufnahme.lead_kennung == "lead-000000001" and len(server.leads) == 1
+    assert "broker" not in server.leads[0]
+
+    # Erster Lauf: die drei Dateien in den Ordner des Leads - gelesen über die Suche.
+    zahlen = lauf(speicher, jurnodes)
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "fehler": 0}
+    assert {a["ordner"] for a in server.abgelegt} == {"70"}
+
+    # Die Kanzlei nimmt an und setzt den Sachstand.
+    server.liste[0].update(status="accepted", acceptedRecord="40566/26")
+    hochladen(client, kopf, ablage, "rechnung.pdf", b"%PDF-1.7 Rechnung")
+    zahlen = lauf(speicher, jurnodes)
+    assert zahlen["geaendert"] == 1 and zahlen["fehler"] == 0 and zahlen["abgelegt"] == 2
+    aufnahme = speicher.laden(zugang)
+    assert aufnahme.sachstand == "mahnstufe_2" and aufnahme.akte_kennung == "rec-uuid-1"
+    assert [a["ordner"] for a in server.abgelegt[3:]] == ["99", "99"]
+
+    # Über Tage hinweg: kein zweiter Lead, und GET /lead wird nach der ersten Abweisung je Lauf nicht mehr versucht.
+    for _ in range(4):
+        lauf(speicher, jurnodes)
+    assert len(server.leads) == 1 and server.lesen == 1
+
+
+def test_abgelehnter_lead_wird_ueber_die_suche_erkannt(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    _, zugang = aufnehmen(client, ablage, einladung="")
+    server.liste[0]["status"] = "rejected"             # abgelehnt, bevor der erste Lauf kam
+    zahlen = lauf(speicher, jurnodes)
+    assert zahlen["abgelegt"] == 0 and server.abgelegt == [] and len(server.leads) == 1
+    assert speicher.laden(zugang).sachstand == "nicht_uebernommen"
+
+
+def test_verschwundener_lead_ist_ein_fehler_und_kein_anlass_neu_anzulegen(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    aufnehmen(client, ablage, einladung="")
+    server.liste.clear()                               # jur|nodes nennt ihn in keinem Zustand mehr
+    zahlen = lauf(speicher, jurnodes)
+    assert zahlen["fehler"] >= 1 and len(server.leads) == 1
+    assert "GET /lead/search: Lead mit bekannter Kennung nicht gefunden" in jurnodes.pannen

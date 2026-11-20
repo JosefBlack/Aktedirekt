@@ -232,7 +232,7 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
     # Wohin: in den Ordner der Akte, sobald es sie gibt, sonst in den des Leads.
     ordner = jurnodes.akte_ordner(aufnahme.akte_kennung) if aufnahme.akte_kennung else 0
     if not ordner:
-        ordner = jurnodes.lead(aufnahme.lead_kennung).ordner
+        ordner = jurnodes.lead(aufnahme.lead_kennung, kurzrubrum(aufnahme)).ordner
     if not ordner:
         jurnodes.pannen.append("Übergabe: jur|nodes nennt zu Lead und Akte keinen Dateiordner")
         return 0
@@ -285,7 +285,7 @@ def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerlis
         fall = als_fall(aufnahme)
         lead = None
         try:
-            lead = jurnodes.lead(aufnahme.lead_kennung)
+            lead = jurnodes.lead(aufnahme.lead_kennung, kurzrubrum(aufnahme))
             geaendert = fall_abgleichen(fall, jurnodes, stufen, heute, lead)
             if geaendert:
                 speicher.sachstand_setzen(aufnahme.kennung, fall.sachstand.schluessel, heute, fall.akte_kennung)

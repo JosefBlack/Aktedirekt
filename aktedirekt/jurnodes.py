@@ -73,6 +73,7 @@ class JurNodes:
         self.letzter_status = 0
         # Welche Form der Lead-Suche dieser Server annimmt (wird beim ersten Erfolg gemerkt).
         self._zaehlweise: int | None = None
+        self._lead_lesen_geht = True
 
     def close(self) -> None:
         self._client.close()
@@ -190,18 +191,18 @@ class JurNodes:
     # dort geht; die übrigen bleiben für den Fall, dass sich das wieder ändert.
     _ERSTE_SEITE: tuple[int | None, ...] = (1, None, 0)
 
-    def _lead_liste(self, kurzrubrum: str, mit_filter: bool) -> list[dict[str, Any]]:
-        """Alle Leads mit genau diesem Kurzrubrum - gesucht mit oder ohne Filter des Servers.
+    def _lead_eintraege(self, filter_: dict[str, Any]) -> list[dict[str, Any]]:
+        """Alle Einträge der Lead-Suche zu diesem Filter, über alle Seiten.
 
         Wirft einen Fehler, wenn der Server die Suche in keiner Zählweise annimmt.
         """
         zaehlweisen = [self._zaehlweise] if self._zaehlweise is not None else list(self._ERSTE_SEITE)
-        treffer: list[dict[str, Any]] = []
+        eintraege: list[dict[str, Any]] = []
         for nr, erste in enumerate(zaehlweisen):
             letzte = nr == len(zaehlweisen) - 1
             seite = 0
             while seite < 20:                          # nie endlos blättern
-                params: dict[str, Any] = {"shortRubrum": kurzrubrum} if mit_filter else {}
+                params = dict(filter_)
                 if erste is not None:
                     params["page"] = erste + seite
                 try:
@@ -212,17 +213,16 @@ class JurNodes:
                         raise
                     if seite == 0:
                         break                          # diese Zählweise nimmt der Server nicht: die nächste
-                    return treffer
+                    return eintraege
                 self._zaehlweise = erste
                 elemente = daten.get("elements") if isinstance(daten, dict) else None
-                treffer += [e for e in elemente or [] if isinstance(e, dict) and e.get("shortRubrum") == kurzrubrum
-                            and self._lead_daten(e) is not None]
+                eintraege += [e for e in elemente or [] if isinstance(e, dict) and self._lead_daten(e) is not None]
                 seite += 1
                 if not elemente or erste is None:
-                    return treffer
+                    return eintraege
             else:
-                return treffer
-        return treffer
+                return eintraege
+        return eintraege
 
     def lead_suchen(self, kurzrubrum: str) -> Lead | None:
         """Der jüngste Lead mit genau diesem Kurzrubrum - ``None``, wenn es keinen gibt.
@@ -236,16 +236,53 @@ class JurNodes:
         """
         kurzrubrum = kurzrubrum[:50]
         try:
-            treffer = self._lead_liste(kurzrubrum, mit_filter=True)
+            treffer = [e for e in self._lead_eintraege({"shortRubrum": kurzrubrum}) if e.get("shortRubrum") == kurzrubrum]
         except JurNodesFehler:
             treffer = []
             del self.pannen[-1:]                       # der Weg ohne Filter entscheidet
         if not treffer:
-            treffer = self._lead_liste(kurzrubrum, mit_filter=False)
+            treffer = [e for e in self._lead_eintraege({}) if e.get("shortRubrum") == kurzrubrum]
         return self._lead(treffer[-1], "GET") if treffer else None
 
-    def lead(self, kennung: str) -> Lead:
-        return self._lead(self._aufruf("GET", "/lead", params={"identifier": kennung}), "GET")
+    def lead(self, kennung: str, kurzrubrum: str = "") -> Lead:
+        """Der Lead mit dieser Kennung: Zustand, Aktenzeichen nach der Annahme, Dateiordner.
+
+        Die Beschreibung des Herstellers sieht dafür ``GET /lead`` vor; der
+        Server der Kanzlei weist das ab ("Bitte Daten angeben", 20.11.2026).
+        Deshalb wird der Lead über die Suche gelesen, die dort geht: erst unter
+        den offenen, dann unter den angenommenen und den abgelehnten.
+        """
+        if self._lead_lesen_geht:
+            try:
+                return self._lead(self._aufruf("GET", "/lead", still=True, params={"identifier": kennung}), "GET")
+            except OhneKennung:
+                del self.pannen[-1:]
+                self._lead_lesen_geht = False
+            except JurNodesFehler:
+                if self.letzter_status in (0, 401) or self.letzter_status >= 500:
+                    self._panne("GET", "/lead", f"Status {self.letzter_status}" if self.letzter_status else "nicht erreichbar")
+                    raise
+                self._lead_lesen_geht = False          # abgewiesen: dieser Server liest Leads so nicht
+        kurzrubrum = kurzrubrum[:50]
+        for zustand in (None, "accepted", "rejected"):
+            for mit_rubrum in ((True, False) if kurzrubrum else (False,)):
+                filter_: dict[str, Any] = {"shortRubrum": kurzrubrum} if mit_rubrum else {}
+                if zustand:
+                    filter_["status"] = zustand
+                try:
+                    eintraege = self._lead_eintraege(filter_)
+                except JurNodesFehler:
+                    if zustand is None and not mit_rubrum:
+                        raise                          # die schlichteste Suche geht nicht: echtes Problem
+                    del self.pannen[-1:]               # ein Zusatzfilter, den der Server nicht kennt
+                    continue
+                for e in eintraege:
+                    if str(e.get("identifier") or e.get("leadIdentifier")) == kennung:
+                        lead = self._lead(e, "GET")
+                        # Steht der Zustand nicht im Eintrag, sagt ihn der Filter, mit dem er gefunden wurde.
+                        return lead if lead.status or not zustand else Lead(lead.kennung, zustand, lead.akte_kennung, lead.ordner)
+        self._panne("GET", "/lead/search", "Lead mit bekannter Kennung nicht gefunden")
+        raise JurNodesFehler("jur|nodes nennt den Lead nicht mehr.")
 
     def akte_finden(self, angabe: str) -> str:
         """Die Kennung der Akte zu dem, was jur|nodes am angenommenen Lead nennt.
