@@ -12,6 +12,7 @@ und liest zweitens zu jedem Fall den Sachstand.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from datetime import date, datetime, timedelta
 
@@ -227,7 +228,15 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
              "blatt": aufnahme.jurnodes.get("blatt", ""), "unterschrift": bool(aufnahme.jurnodes.get("unterschrift", False))}
     ausstehend = [d for d in speicher.dateien(aufnahme.kennung) if d.kennung not in stand["dateien"]]
     blatt = blatt_fuer_die_akte(aufnahme, speicher, partner, stufen)
-    summe = hashlib.sha256(blatt).hexdigest()
+    # Ein neues Blatt gibt es, wenn sich Angaben ändern - nicht schon, weil eine
+    # Anlage dazukam (die kommt ja selbst in den Ordner). Verglichen wird deshalb
+    # nur der Inhalt ohne Anlagenliste.
+    summe = hashlib.sha256(json.dumps([aufnahme.fuer_die_akte(), aufnahme.einwilligung_partner,
+                                       aufnahme.einwilligung_widerrufen_am is None], ensure_ascii=False,
+                                      default=str).encode()).hexdigest()
+    if stand["blatt"] and stand["blatt"] == hashlib.sha256(blatt).hexdigest():
+        stand["blatt"] = summe                     # nach altem Verfahren abgelegt und unverändert
+        speicher.jurnodes_setzen(aufnahme.kennung, stand)
     if summe == stand["blatt"] and stand["unterschrift"] and not ausstehend:
         return 0                                   # nichts Neues - jur|nodes wird gar nicht erst gefragt
     # Wohin: in den Ordner der Akte, sobald es sie gibt, sonst in den des Leads.

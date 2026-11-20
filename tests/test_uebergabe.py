@@ -179,9 +179,9 @@ def test_nach_der_annahme_in_den_ordner_der_akte(umgebung):
     server.status = "accepted"
     hochladen(client, kopf, ablage, "rechnung.pdf", b"%PDF-1.7 Rechnung")
     zahlen = lauf(speicher, jurnodes)
-    # "abgelegt" zählt zwei: die Rechnung und das Blatt, das sie jetzt unter den Anlagen nennt.
-    assert zahlen["geaendert"] == 1 and zahlen["abgelegt"] == 2
-    assert [a["ordner"] for a in server.abgelegt[3:]] == ["99", "99"]
+    # Nur die Rechnung: Ein neues Blatt gibt es erst, wenn sich Angaben ändern.
+    assert zahlen["geaendert"] == 1 and zahlen["abgelegt"] == 1
+    assert [(a["ordner"], a["name"]) for a in server.abgelegt[3:]] == [("99", "rechnung.pdf")]
     assert speicher.laden(zugang).akte_kennung == "A-9"
 
 
@@ -651,10 +651,10 @@ def test_ganzer_weg_am_server_der_kanzlei(kanzlei_server):
     server.liste[0].update(status="accepted", acceptedRecord="40566/26")
     hochladen(client, kopf, ablage, "rechnung.pdf", b"%PDF-1.7 Rechnung")
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen["geaendert"] == 1 and zahlen["fehler"] == 0 and zahlen["abgelegt"] == 2
+    assert zahlen["geaendert"] == 1 and zahlen["fehler"] == 0 and zahlen["abgelegt"] == 1
     aufnahme = speicher.laden(zugang)
     assert aufnahme.sachstand == "mahnstufe_2" and aufnahme.akte_kennung == "rec-uuid-1"
-    assert [a["ordner"] for a in server.abgelegt[3:]] == ["99", "99"]
+    assert [a["ordner"] for a in server.abgelegt[3:]] == ["99"]
 
     # Über Tage hinweg: kein zweiter Lead, und GET /lead wird nach der ersten Abweisung je Lauf nicht mehr versucht.
     for _ in range(4):
@@ -787,3 +787,21 @@ def test_vermerk_nach_serverfehler_nie_ein_zweiter(kanzlei_server):
     aufnehmen(client, ablage)
     server.liste[0].update(status="accepted", acceptedRecord="rec-uuid-1")
     assert [lauf(speicher, jurnodes)["vermerke"] for _ in range(3)] == [0, 0, 0] and len(server.vermerke) == 1
+
+
+def test_altes_blatt_wird_nicht_noch_einmal_abgelegt(umgebung):
+    """Nach dem alten Verfahren (Prüfsumme des PDFs) vermerkt: kein zweites Blatt nach dem Einspielen."""
+    import hashlib
+    from aktedirekt.abgleich import blatt_fuer_die_akte
+    from aktedirekt.sachstand import Stufen
+    client, speicher, server, ablage, jurnodes = umgebung
+    kopf, zugang = aufnehmen(client, ablage)
+    lauf(speicher, jurnodes)
+    aufnahme = speicher.laden(zugang)
+    alt = hashlib.sha256(blatt_fuer_die_akte(aufnahme, speicher, PARTNER, Stufen.laden())).hexdigest()
+    speicher.jurnodes_setzen(aufnahme.kennung, {**aufnahme.jurnodes, "blatt": alt})
+    vorher = len(server.abgelegt)
+    assert lauf(speicher, jurnodes)["abgelegt"] == 0 and len(server.abgelegt) == vorher
+    # Auch eine Anlage danach bringt kein neues Blatt - nur die Anlage selbst.
+    hochladen(client, kopf, ablage, "rechnung.pdf", b"%PDF-1.7 Rechnung")
+    assert lauf(speicher, jurnodes)["abgelegt"] == 1 and server.abgelegt[-1]["name"] == "rechnung.pdf"
