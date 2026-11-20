@@ -59,10 +59,11 @@ def ablage(request, tmp_path, monkeypatch):
         yield Ablage("aws", AwsSpeicher(TABELLE, BUCKET, REGION))
 
 
-def hochladen(client, kopf, ablage, name: str, inhalt: bytes, angekuendigt: int | None = None):
+def hochladen(client, kopf, ablage, name: str, inhalt: bytes, angekuendigt: int | None = None, unterlage: str = ""):
     """Ankündigen, abliefern, prüfen lassen - gibt die letzte Antwort zurück."""
     ziel = client.post("/api/aufnahme/dateien", headers=kopf,
-                       json={"name": name, "groesse": len(inhalt) if angekuendigt is None else angekuendigt})
+                       json={"name": name, "groesse": len(inhalt) if angekuendigt is None else angekuendigt,
+                             **({"unterlage": unterlage} if unterlage else {})})
     if ziel.status_code != 200:
         return ziel
     ablage.abliefern(client, kopf, ziel.json()["adresse"], inhalt)

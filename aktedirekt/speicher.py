@@ -384,6 +384,17 @@ class Speicher:
                        (datei.kennung, kennung, datei.name, art, datei.groesse, jetzt.isoformat(), datei.von))
         return datei
 
+    def datei_hinterlegen(self, kennung: str, name: str, art: str, inhalt: bytes, jetzt: datetime,
+                          von: str) -> Datei:
+        """Eine Datei, die die Anwendung selbst erzeugt hat (etwa eine Nachricht als PDF)."""
+        datei = Datei(secrets.token_hex(12), name, art, len(inhalt), von, jetzt)
+        (self._ordner / "dateien" / f"{datei.kennung}.{art}").write_bytes(inhalt)
+        with closing(self._db()) as db, db:
+            db.execute("INSERT INTO datei (kennung, aufnahme, name, art, groesse, hochgeladen_am, von) "
+                       "VALUES (?,?,?,?,?,?,?)",
+                       (datei.kennung, kennung, name, art, datei.groesse, jetzt.isoformat(), von))
+        return datei
+
     def upload_verwerfen(self, kennung: str, datei_kennung: str) -> None:
         if self._wartend(kennung, datei_kennung) is None:
             return

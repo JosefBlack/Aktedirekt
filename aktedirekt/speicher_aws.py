@@ -308,6 +308,16 @@ class AwsSpeicher:
         groesse = int(bereich.rsplit("/", 1)[1]) if "/" in bereich else int(antwort["ContentLength"])
         return antwort["Body"].read(), groesse
 
+    def datei_hinterlegen(self, kennung: str, name: str, art: str, inhalt: bytes, jetzt: datetime,
+                          von: str) -> Datei:
+        """Eine Datei, die die Anwendung selbst erzeugt hat (etwa eine Nachricht als PDF)."""
+        datei = Datei(secrets.token_hex(12), name, art, len(inhalt), von, jetzt)
+        self._s3.put_object(Bucket=self._bucket, Key=f"dateien/{kennung}/{datei.kennung}.{art}", Body=inhalt)
+        self._tabelle.put_item(Item={"pk": f"A#{kennung}", "sk": f"D#{jetzt.isoformat()}#{datei.kennung}",
+                                     "datei": datei.kennung, "name": name, "art": art, "groesse": len(inhalt),
+                                     "von": von})
+        return datei
+
     def upload_uebernehmen(self, kennung: str, datei_kennung: str, art: str, jetzt: datetime) -> Datei:
         w = self._wartend(kennung, datei_kennung)
         assert w is not None

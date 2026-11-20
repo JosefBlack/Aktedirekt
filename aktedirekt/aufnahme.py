@@ -256,6 +256,47 @@ K_ERGAENZUNGEN: dict[str, Abschnitt] = {
 
 
 @dataclass(frozen=True)
+class Unterlage:
+    """Eine Art von Unterlage, die die Kanzlei braucht - als Punkt der Checkliste."""
+    schluessel: str
+    titel: str                         # so sieht es der Mandant
+    kurz: str                          # Vorsatz im Dateinamen, so sieht es die Kanzlei
+    hinweis: str = ""
+    wichtig: bool = False              # fehlt es, steht es als "noch offen" da
+
+
+U_UNFALL: tuple[Unterlage, ...] = (
+    Unterlage("schaden", "Fotos vom Schaden", "Schadenfoto",
+              "Rundum aus etwa drei Metern, dann jede beschädigte Stelle nah. Auch Innenraum und Gegenstände.", True),
+    Unterlage("fahrzeugschein", "Fahrzeugschein", "Fahrzeugschein",
+              "Zulassungsbescheinigung Teil I – Vorder- und Rückseite.", True),
+    Unterlage("unfallort", "Fotos vom Unfallort", "Unfallort",
+              "Endstellung der Fahrzeuge, Spuren, Schilder und Ampeln – falls vorhanden."),
+    Unterlage("gegner", "Kennzeichen und Unterlagen der Gegenseite", "Gegenseite",
+              "Foto vom Kennzeichen, ausgetauschte Daten, Europäischer Unfallbericht."),
+    Unterlage("polizei", "Schreiben der Polizei", "Polizei",
+              "Unfallmitteilung, Aktenzeichen, Anhörungsbogen."),
+    Unterlage("gutachten", "Gutachten oder Kostenvoranschlag", "Gutachten",
+              "Liegt es der Werkstatt oder dem Sachverständigen vor, schicken die es oft direkt."),
+    Unterlage("rechnungen", "Rechnungen und Belege", "Rechnung",
+              "Reparatur, Abschleppen, Mietwagen, Arzt, Medikamente, Fahrtkosten, beschädigte Kleidung."),
+    Unterlage("versicherung", "Post von Versicherungen", "Versicherung",
+              "Jedes Schreiben, das Sie von einer Versicherung bekommen – auch von Ihrer eigenen."),
+    Unterlage("sonstiges", "Sonstiges", "Sonstiges", ""),
+)
+U_KUENDIGUNG: tuple[Unterlage, ...] = (
+    Unterlage("kuendigung", "Kündigungsschreiben", "Kuendigung",
+              "Alle Seiten – und den Briefumschlag, falls Sie ihn noch haben.", True),
+    Unterlage("vertrag", "Arbeitsvertrag", "Arbeitsvertrag", "Mit allen Nachträgen und Änderungen.", True),
+    Unterlage("lohn", "Lohnabrechnungen", "Lohnabrechnung", "Die letzten drei Monate.", True),
+    Unterlage("abmahnung", "Abmahnungen", "Abmahnung", "Falls Sie welche erhalten haben."),
+    Unterlage("schriftverkehr", "Schriftverkehr mit dem Arbeitgeber", "Schriftverkehr",
+              "E-Mails, Briefe, Chatnachrichten zur Kündigung."),
+    Unterlage("sonstiges", "Sonstiges", "Sonstiges", "Zeugnis, Aufhebungsangebot, Schreiben des Betriebsrats …"),
+)
+
+
+@dataclass(frozen=True)
 class Fallart:
     name: str
     titel: str
@@ -265,7 +306,7 @@ class Fallart:
     hinweise_der_schritte: dict[str, str]
     ergaenzungen: dict[str, Abschnitt]
     person: str                        # der Schritt mit Namen und Anschrift
-    empfohlen: tuple[str, ...]
+    unterlagen: tuple[Unterlage, ...]
     # Baut das Handy die Formulare der ersten Stufe aus diesen Angaben?
     dynamisch: bool
 
@@ -273,16 +314,21 @@ class Fallart:
 FALLARTEN: dict[str, Fallart] = {
     "unfall": Fallart(
         "unfall", "Verkehrsunfall", "Verkehrsunfall", SCHRITTE, UNFALL_TITEL, {}, ERGAENZUNGEN, "person",
-        ("Fotos vom Schaden und vom Unfallort", "Fahrzeugschein", "Gutachten oder Kostenvoranschlag", "Rechnungen"),
-        False),
+        U_UNFALL, False),
     "kuendigung": Fallart(
         "kuendigung", "Kündigung", "Kuendigung", {n: a.felder for n, a in K_SCHRITTE.items()},
         {n: a.titel for n, a in K_SCHRITTE.items()}, {n: a.hinweis for n, a in K_SCHRITTE.items()},
         K_ERGAENZUNGEN, "kperson",
-        ("Kündigungsschreiben", "Arbeitsvertrag", "die letzten drei Lohnabrechnungen", "Abmahnungen",
-         "Schriftverkehr mit dem Arbeitgeber"),
-        True),
+        U_KUENDIGUNG, True),
 }
+
+def unterlage_zu(art: "Fallart", dateiname: str) -> Unterlage | None:
+    """Zu welchem Punkt der Checkliste eine Datei gehört - nach dem Vorsatz in ihrem Namen."""
+    for u in art.unterlagen:
+        if dateiname.startswith(u.kurz + " - "):
+            return u
+    return None
+
 
 # Drei Wochen ab Zugang der Kündigung. Bewusst ohne Verlängerung über
 # Wochenenden und Feiertage: Genannt wird der Tag, der in keinem Fall zu spät

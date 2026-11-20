@@ -1,0 +1,99 @@
+{
+  "_hinweis": [
+    "ENTWURF - Wortlaut bitte durch die Kanzlei prüfen und anpassen, bevor echte Mandanten das Portal nutzen.",
+    "Was der Mandant auf seiner Statusseite liest: was sein Sachstand bedeutet, was er tun kann,",
+    "und Antworten auf die Fragen, die sonst am Telefon gestellt werden.",
+    "{telefon} wird durch ' unter <Nummer der Kanzlei>' ersetzt (oder leer gelassen).",
+    "Eine Fassung der Kanzlei unter kanzlei-texte/portal.json ersetzt diese Datei beim Bau."
+  ],
+  "sachstand": {
+    "aufgenommen": {
+      "was": "Ihre Angaben sind bei uns eingegangen. Wir prüfen sie und entscheiden, ob wir das Mandat übernehmen.",
+      "tun": "Laden Sie die Unterlagen hoch, die in der Liste unten noch offen sind. Je vollständiger Ihre Angaben, desto schneller können wir für Sie tätig werden."
+    },
+    "nicht_uebernommen": {
+      "was": "Wir können das Mandat leider nicht übernehmen. Sie erhalten dazu eine Nachricht von uns.",
+      "tun": "Bei Fragen erreichen Sie uns telefonisch{telefon}."
+    },
+    "angenommen": {
+      "was": "Wir haben Ihr Mandat übernommen und bearbeiten Ihren Fall.",
+      "tun": "Leiten Sie uns jedes Schreiben weiter, das Sie zu diesem Fall bekommen – einfach hier fotografieren und hochladen."
+    },
+    "unterlagen_fehlen": {
+      "was": "Um weiterzumachen, brauchen wir noch Unterlagen von Ihnen.",
+      "tun": "Bitte laden Sie die Unterlagen hoch, die in der Liste unten als offen markiert sind. Was wir sonst noch brauchen, haben wir Ihnen geschrieben."
+    },
+    "angemeldet": {
+      "was": "Wir haben Ihre Ansprüche bei der Gegenseite angemeldet. Sie hat jetzt Zeit, sie zu prüfen – üblich sind einige Wochen.",
+      "tun": "Sie müssen nichts tun. Verhandeln Sie nicht selbst mit der Gegenseite oder ihrer Versicherung, sondern schicken Sie uns deren Schreiben hier hoch."
+    },
+    "mahnstufe_1": {
+      "was": "Die Gegenseite hat noch nicht (vollständig) gezahlt. Wir haben sie daran erinnert.",
+      "tun": "Sie müssen nichts tun. Sagen Sie uns Bescheid, wenn bei Ihnen eine Zahlung eingeht."
+    },
+    "mahnstufe_2": {
+      "was": "Die Gegenseite hat trotz Erinnerung nicht (vollständig) gezahlt. Wir haben sie erneut und mit Frist aufgefordert.",
+      "tun": "Sie müssen nichts tun. Sagen Sie uns Bescheid, wenn bei Ihnen eine Zahlung eingeht."
+    },
+    "mahnstufe_3": {
+      "was": "Die Gegenseite hat die letzte Frist verstreichen lassen. Wir prüfen die nächsten Schritte, auch ein gerichtliches Vorgehen.",
+      "tun": "Bevor wir klagen, sprechen wir mit Ihnen. Sie müssen von sich aus nichts tun."
+    },
+    "teilweise_reguliert": {
+      "was": "Die Gegenseite hat einen Teil gezahlt. Um den Rest kümmern wir uns weiter.",
+      "tun": "Sagen Sie uns Bescheid, wenn bei Ihnen eine Zahlung eingeht, damit wir sie zuordnen können."
+    },
+    "vollstaendig_reguliert": {
+      "was": "Die Gegenseite hat die geltend gemachten Ansprüche bezahlt.",
+      "tun": "Ihr Geld erhalten Sie, soweit es bei uns eingeht, umgehend auf Ihr Konto. Wir schließen den Fall in Kürze ab."
+    },
+    "gerichtlich": {
+      "was": "Ihr Fall wird vor Gericht geführt. Das dauert erfahrungsgemäß einige Monate.",
+      "tun": "Termine und alles, was Sie tun müssen, teilen wir Ihnen gesondert mit."
+    },
+    "abgeschlossen": {
+      "was": "Ihr Fall ist abgeschlossen.",
+      "tun": "Vielen Dank für Ihr Vertrauen. Bei Fragen erreichen Sie uns telefonisch{telefon}."
+    }
+  },
+  "fragen": {
+    "unfall": [
+      {"frage": "Was kostet mich die Kanzlei?",
+       "antwort": "Haben Sie den Unfall nicht verschuldet, muss die Versicherung der Gegenseite in der Regel auch unsere Kosten tragen. Bei einem Mitverschulden zahlt sie anteilig; den Rest übernimmt, falls vorhanden, Ihre Rechtsschutzversicherung. Bevor Ihnen selbst Kosten entstehen könnten, sprechen wir mit Ihnen."},
+      {"frage": "Die Versicherung der Gegenseite hat sich bei mir gemeldet. Was soll ich tun?",
+       "antwort": "Machen Sie keine Angaben zur Schuldfrage und unterschreiben Sie nichts. Fotografieren Sie das Schreiben und laden Sie es unter „Post von Versicherungen“ hoch. Am Telefon genügt: „Ich werde anwaltlich vertreten.“ Den Rest übernehmen wir."},
+      {"frage": "Muss ich in die Werkstatt, die die Versicherung empfiehlt?",
+       "antwort": "Nein. Sie dürfen Ihr Fahrzeug in einer Werkstatt Ihrer Wahl reparieren lassen."},
+      {"frage": "Darf ich einen eigenen Gutachter beauftragen?",
+       "antwort": "Ja, außer bei kleinen Schäden – die Grenze liegt bei etwa 750 Euro. Die Kosten des Gutachters muss dann in der Regel die Versicherung der Gegenseite tragen. Beauftragen Sie keinen Gutachter, den Ihnen die gegnerische Versicherung schickt."},
+      {"frage": "Bekomme ich einen Mietwagen oder eine Entschädigung?",
+       "antwort": "Für die Zeit, in der Sie Ihr Fahrzeug nicht nutzen können, steht Ihnen meist ein Mietwagen oder eine Nutzungsausfallentschädigung zu. Nehmen Sie einen Mietwagen nur so lange wie nötig und eher eine Klasse kleiner als Ihr eigenes Fahrzeug, und laden Sie die Rechnung hoch."},
+      {"frage": "Muss ich den Unfall meiner eigenen Versicherung melden?",
+       "antwort": "Ja, die meisten Verträge verlangen eine Meldung innerhalb einer Woche – auch wenn Sie keine Schuld trifft. Das ist keine Schadensmeldung gegen Sie, sondern eine Pflicht aus Ihrem Vertrag."},
+      {"frage": "Wie lange dauert es, bis gezahlt wird?",
+       "antwort": "Die Versicherung darf Ansprüche erst prüfen; üblich sind etwa vier bis sechs Wochen. Den aktuellen Stand sehen Sie jederzeit oben auf dieser Seite. Wir mahnen, wenn die Versicherung sich zu viel Zeit lässt."},
+      {"frage": "Wohin geht das Geld?",
+       "antwort": "Zahlungen gehen meist an die Kanzlei; wir leiten sie umgehend auf Ihr Konto weiter. Tragen Sie dafür unter „Angaben vervollständigen“ Ihre Bankverbindung ein. Haben Sie mit der Werkstatt vereinbart, dass sie direkt bezahlt wird, geht dieser Teil an die Werkstatt."},
+      {"frage": "Ich bin verletzt worden. Was ist wichtig?",
+       "antwort": "Gehen Sie zum Arzt und lassen Sie die Verletzungen bescheinigen – auch scheinbar leichte. Laden Sie Atteste, Rezepte und Quittungen unter „Rechnungen und Belege“ hoch. Notieren Sie, was Sie wegen der Verletzung nicht tun konnten."},
+      {"frage": "Mir ist noch etwas eingefallen – wie sage ich es Ihnen?",
+       "antwort": "Schreiben Sie uns unten auf dieser Seite eine Nachricht. Sie kommt direkt in Ihre Akte."}
+    ],
+    "kuendigung": [
+      {"frage": "Was muss ich jetzt sofort tun?",
+       "antwort": "Melden Sie sich spätestens drei Tage nach Erhalt der Kündigung bei der Agentur für Arbeit arbeitsuchend – sonst kann es eine Sperre beim Arbeitslosengeld geben. Gegen die Kündigung selbst muss innerhalb von drei Wochen geklagt werden; darum kümmern wir uns."},
+      {"frage": "Soll ich weiter zur Arbeit gehen?",
+       "antwort": "Ja. Bis zum Ende der Kündigungsfrist besteht Ihr Arbeitsverhältnis weiter. Bleiben Sie nur fern, wenn Ihr Arbeitgeber Sie schriftlich freistellt oder Sie krankgeschrieben sind."},
+      {"frage": "Mein Arbeitgeber legt mir etwas zum Unterschreiben vor.",
+       "antwort": "Unterschreiben Sie nichts, ohne es uns vorher gezeigt zu haben – insbesondere keinen Aufhebungsvertrag und keine Ausgleichsquittung. Laden Sie das Schreiben hoch und schreiben Sie uns eine Nachricht."},
+      {"frage": "Bekomme ich eine Abfindung?",
+       "antwort": "Einen gesetzlichen Anspruch gibt es nur in Ausnahmefällen. Häufig wird eine Abfindung aber im Kündigungsschutzverfahren vereinbart. Ob und in welcher Höhe das realistisch ist, besprechen wir mit Ihnen."},
+      {"frage": "Was kostet mich das Verfahren?",
+       "antwort": "Im arbeitsgerichtlichen Verfahren der ersten Instanz trägt jede Seite ihre Anwaltskosten selbst – auch wer gewinnt. Eine Rechtsschutzversicherung übernimmt diese Kosten meist. Die voraussichtlichen Kosten nennen wir Ihnen, bevor sie entstehen."},
+      {"frage": "Was ist mit meinem Resturlaub und dem Zeugnis?",
+       "antwort": "Beides klären wir mit. Notieren Sie, wie viele Urlaubstage Sie noch haben, und laden Sie ein bereits erhaltenes Zeugnis unter „Sonstiges“ hoch."},
+      {"frage": "Mir ist noch etwas eingefallen – wie sage ich es Ihnen?",
+       "antwort": "Schreiben Sie uns unten auf dieser Seite eine Nachricht. Sie kommt direkt in Ihre Akte."}
+    ]
+  }
+}

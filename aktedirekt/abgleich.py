@@ -206,7 +206,8 @@ def blatt_fuer_die_akte(aufnahme: Aufnahme, speicher: Any, partner: Partnerliste
     anlagen = []
     for d in speicher.dateien(aufnahme.kennung):
         einreicher = partner.konto(d.von)
-        anlagen.append(_dateiname(d.name, d.art) + (f" (eingereicht von {einreicher.name if einreicher else 'Partner'})" if d.von else ""))
+        anlagen.append(_dateiname(d.name, d.art) + (f" (eingereicht von {einreicher.name if einreicher else 'Partner'})"
+                                                     if d.von and not d.von.startswith("#") else ""))
     teile = aufnahme.fuer_die_akte() + [erklaerungen.fuer_die_akte(aufnahme.art, nachweis)]
     return akte_pdf.erzeugen(kurzrubrum(aufnahme), kopf, teile, anlagen)
 

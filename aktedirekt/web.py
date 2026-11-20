@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from aktedirekt import akte_pdf, dateien, erklaerungen, totp, zeit
 from aktedirekt.abgleich import ENTWURF_FRIST, alte_entwuerfe, als_fall, entwuerfe_loeschen, lead_anlegen
 from aktedirekt.aufnahme import (ERG, FALLARTEN, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
-                                 kurzrubrum)
+                                 kurzrubrum, unterlage_zu)
 from aktedirekt.jurnodes import JurNodes
 from aktedirekt.partner import FEHLVERSUCHE, SPERRE, Partnerliste
 from aktedirekt.sachstand import Stufen
@@ -43,6 +43,10 @@ from aktedirekt.speicher import Speicher
 MAX_JSON = 600 * 1024
 MAX_UNTERSCHRIFT = 400 * 1024
 MIN_UNTERSCHRIFT = 800
+# Nachrichten des Mandanten an die Kanzlei: als Datei dieses "Einreichers" abgelegt.
+NACHRICHT = "#nachricht"
+MAX_NACHRICHT = 3000
+MAX_NACHRICHTEN = 30
 _PNG = b"\x89PNG\r\n\x1a\n"
 SITZUNG_DAUER = timedelta(hours=8)
 # So lange kann der Kunde den Code vom Tresen auf seinem Gerät einlösen.
@@ -84,6 +88,11 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     texte = {"einwilligung_partner": _text("einwilligung_partner.txt")}
     wortlaut = json.loads(_text("hinweise.json"))
     anruf = f": {telefon}" if telefon else ""
+    portal = json.loads(_text("portal.json"))
+    unter = f" unter {telefon}" if telefon else ""
+
+    def portaltext(text: str) -> str:
+        return text.replace("{telefon}", unter)
 
     def hinweise(aufnahme: Aufnahme) -> list[dict[str, str]]:
         """Was dem Mandanten über seinen Angaben stehen soll - bisher nur bei Kündigung."""
@@ -148,8 +157,20 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     } for name, art in FALLARTEN.items()}
 
     def einreicher(von: str) -> str:
+        if von == NACHRICHT:
+            return ""
         konto = partnerliste.konto(von)
         return konto.name if konto else ("Partner" if von else "")
+
+    def checkliste(aufnahme: Aufnahme) -> list[dict[str, Any]]:
+        """Die Unterlagen, die die Kanzlei braucht, und wie viele dazu schon da sind."""
+        anzahl: dict[str, int] = {}
+        for d in speicher.dateien(aufnahme.kennung):
+            u = unterlage_zu(aufnahme.fallart, d.name)
+            if u is not None:
+                anzahl[u.schluessel] = anzahl.get(u.schluessel, 0) + 1
+        return [{"schluessel": u.schluessel, "titel": u.titel, "hinweis": u.hinweis, "wichtig": u.wichtig,
+                 "anzahl": anzahl.get(u.schluessel, 0)} for u in aufnahme.fallart.unterlagen]
 
     def zustand(aufnahme: Aufnahme) -> dict[str, Any]:
         konto = partnerliste.konto(aufnahme.partner)
@@ -159,7 +180,8 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "art": art.name,
             "titel": art.titel,
             "ablauf": list(art.schritte),
-            "empfohlen": list(art.empfohlen),
+            "empfohlen": [u.titel for u in art.unterlagen if u.schluessel != "sonstiges"],
+            "unterlagen": checkliste(aufnahme),
             "hinweise": hinweise(aufnahme),
             "angaben": {s: a for s, a in aufnahme.angaben.items() if not s.startswith(ERG)},
             "ergaenzungen": aufnahme.ergaenzungen(),
@@ -167,9 +189,16 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "vorbelegt": aufnahme.vorbelegt(),
             # Der Mandant sieht, was zu seinem Fall eingereicht wurde - auch von wem.
             "dateien": [{"kennung": d.kennung, "name": d.name, "von": einreicher(d.von)}
-                        for d in speicher.dateien(aufnahme.kennung)],
+                        for d in speicher.dateien(aufnahme.kennung) if d.von != NACHRICHT],
+            "nachrichten": [{"am": d.hochgeladen_am.isoformat(timespec="minutes") if d.hochgeladen_am else ""}
+                            for d in speicher.dateien(aufnahme.kennung) if d.von == NACHRICHT],
             "abgeschlossen": aufnahme.abgeschlossen_am is not None,
             "sachstand": stufen.bezeichnung(aufnahme.sachstand),
+            "sachstand_seit": aufnahme.sachstand_seit.isoformat() if aufnahme.sachstand_seit else "",
+            # Was der Stand bedeutet und was der Mandant tun kann - damit er nicht anrufen muss.
+            "erklaerung": {k: portaltext(v) for k, v in portal["sachstand"].get(aufnahme.sachstand or "aufgenommen", {}).items()},
+            "fragen": [{"frage": f["frage"], "antwort": portaltext(f["antwort"])} for f in portal["fragen"].get(art.name, [])],
+            "telefon": telefon or "",
             "partner": name,
             "einwilligung_partner": aufnahme.einwilligung_partner
                                     and aufnahme.einwilligung_widerrufen_am is None,
@@ -275,6 +304,12 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         if len(eigene(aufnahme, von)) >= grenze(von):
             raise HTTPException(409, f"Es sind höchstens {grenze(von)} Dateien möglich.")
         anzeige = "".join(z for z in name if z.isprintable() and z not in "/\\")[:80] or "Datei"
+        unterlage = daten.get("unterlage", "")
+        if unterlage:
+            passend = [u for u in aufnahme.fallart.unterlagen if u.schluessel == unterlage]
+            if not passend:
+                raise HTTPException(400, "Diese Art von Unterlage gibt es nicht.")
+            anzeige = passend[0].kurz + " - " + anzeige
         kennung, adresse = speicher.upload_vorbereiten(aufnahme.kennung, anzeige, groesse, jetzt(), von)
         return {"kennung": kennung, "adresse": adresse or f"{wohin}/{kennung}/inhalt"}
 
@@ -395,6 +430,41 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 # Die Aufnahme ist gespeichert; eine gescheiterte Nachricht darf sie nicht gefährden.
                 pass
         return JSONResponse({"fehler": {}, **zustand(fertig)})
+
+    @app.post("/api/aufnahme/nachricht")
+    async def nachricht(request: Request) -> JSONResponse:
+        """Der Mandant schreibt der Kanzlei, statt anzurufen. Die Nachricht kommt als PDF in die Akte."""
+        aufnahme = aufnahme_von(request)
+        if aufnahme.abgeschlossen_am is None:
+            raise HTTPException(409, "Bitte schicken Sie zuerst Ihre Angaben ab.")
+        daten = await json_lesen(request)
+        text = daten.get("text", "") if isinstance(daten, dict) else ""
+        if not isinstance(text, str):
+            raise HTTPException(400, "Die Angaben konnten nicht gelesen werden.")
+        text = "".join(z for z in text.replace("\r", "") if z == "\n" or z.isprintable()).strip()
+        if len(text) < 2:
+            return JSONResponse({"fehler": {"text": "Bitte schreiben Sie Ihre Nachricht."}}, status_code=422)
+        if len(text) > MAX_NACHRICHT:
+            return JSONResponse({"fehler": {"text": f"Bitte höchstens {MAX_NACHRICHT} Zeichen."}}, status_code=422)
+        bisher = [d for d in speicher.dateien(aufnahme.kennung) if d.von == NACHRICHT]
+        if len(bisher) >= MAX_NACHRICHTEN:
+            raise HTTPException(409, "Es sind schon viele Nachrichten eingegangen. Bitte rufen Sie uns an"
+                                     + (f" unter {telefon}." if telefon else "."))
+        zeitpunkt = jetzt()
+        pdf = akte_pdf.erzeugen("Nachricht des Mandanten", [
+            f"{kurzrubrum(aufnahme)} · über Aktedirekt am {zeitpunkt.strftime('%d.%m.%Y um %H:%M')} Uhr"],
+            [{"titel": "", "zeilen": [["Von", aufnahme.name()], ["Nachricht", text]]}], None)
+        speicher.datei_hinterlegen(aufnahme.kennung, f"Nachricht Mandant {zeitpunkt.strftime('%Y-%m-%d %H%M')}",
+                                   "pdf", pdf, zeitpunkt, NACHRICHT)
+        if eingang_melden is not None:
+            try:
+                eingang_melden(f"Aktedirekt: Nachricht eines Mandanten ({aufnahme.fallart.betreff})",
+                               "Ein Mandant hat über Aktedirekt eine Nachricht geschickt.\n"
+                               "Sie liegt bei seinem Eingang und kommt mit dem nächsten Abgleich in jur|nodes.\n"
+                               "Einzelheiten nach Anmeldung: " + (basis_url or str(request.base_url)).rstrip("/") + "/kanzlei")
+            except Exception:
+                pass
+        return JSONResponse({"fehler": {}, **zustand(aufnahme)})
 
     @app.delete("/api/aufnahme/einwilligung")
     async def widerrufen(request: Request) -> dict[str, Any]:

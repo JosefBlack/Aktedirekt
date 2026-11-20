@@ -99,3 +99,28 @@ input[inputmode] { font-variant-numeric: tabular-nums; }
 .verweis { display: inline-block; margin-top: 6px; padding: 8px 0; min-height: 44px; border: 0; background: none;
   font: inherit; font-size: 15px; color: var(--marke); text-decoration: underline; cursor: pointer; }
 form[data-seite="abschluss"] h2 { margin-top: 30px; }
+.checkliste { list-style: none; padding: 0; margin: 12px 0 0; }
+.checkliste li { background: var(--flaeche); border: 1.5px solid var(--rand); border-radius: 12px; padding: 12px; margin-top: 10px; }
+.checkliste li.offen { border-left: 5px solid var(--akzent); }
+.checkliste li.da { border-left: 5px solid var(--gut); }
+.checkliste .punkt { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.checkliste .marke { font-size: 14px; color: var(--leise); white-space: nowrap; }
+.checkliste li.da .marke { color: var(--gut); font-weight: 600; }
+.checkliste li.offen .marke { color: var(--akzent); font-weight: 600; }
+.checkliste p.klein { margin: 4px 0 0; }
+.knoepfe { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.knopf.klein-knopf { min-height: 46px; margin-top: 10px; font-weight: 600; }
+.liste-hochgeladen { margin-top: 16px; }
+.liste-hochgeladen summary { cursor: pointer; color: var(--leise); font-size: 15px; min-height: 44px; display: flex; align-items: center; }
+.stand p { margin: 8px 0 0; font-size: 16px; }
+.stand .tun { font-weight: 600; }
+.gut { color: var(--gut); font-weight: 600; }
+.gesendet { list-style: none; padding: 0; margin: 8px 0 0; }
+.fragen details { background: var(--flaeche); border: 1px solid var(--rand); border-radius: 10px; margin-top: 8px; padding: 0 12px; }
+.fragen summary { cursor: pointer; font-weight: 600; min-height: 48px; display: flex; align-items: center; }
+.fragen details p { margin: 0 0 12px; font-size: 16px; }
+#nachricht label { font-weight: 400; margin-top: 0; }
+#anrufen { margin-top: 24px; }
+#anrufen a { color: var(--marke); font-weight: 600; }
+.checkliste li.huelle { background: none; border: 0; padding: 0; }
+.weitere summary { cursor: pointer; font-weight: 600; min-height: 48px; display: flex; align-items: center; color: var(--marke); }

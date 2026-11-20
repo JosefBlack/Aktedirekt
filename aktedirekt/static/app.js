@@ -238,6 +238,11 @@ function ablauf_einrichten() {
 // ---- Fotos und Unterlagen ----------------------------------------------
 
 function dateien_zeigen() {
+  const zahl = zustand.dateien.length;
+  for (const z of [$("#dateizahl"), $("#dateizahl2")]) {
+    z.textContent = zahl ? `Hochgeladen: ${zahl} ${zahl === 1 ? "Datei" : "Dateien"}` : "Noch nichts hochgeladen";
+  }
+  checkliste_zeigen();
   for (const liste of [$("#dateiliste"), $("#dateiliste2")]) {
     liste.textContent = "";
     for (const d of zustand.dateien) {
@@ -262,9 +267,9 @@ function dateien_zeigen() {
 
 // Drei Schritte: ankündigen, abliefern, prüfen lassen. In AWS geht das Foto
 // dabei unmittelbar in den Dateispeicher der Kanzlei und nicht durch die Anwendung.
-async function eine_hochladen(datei) {
+async function eine_hochladen(datei, unterlage) {
   if (datei.size > 15 * 1024 * 1024) { const f = new Error("zu groß"); f.status = 413; throw f; }
-  const ziel = await aufruf("POST", "/api/aufnahme/dateien", { name: datei.name, groesse: datei.size });
+  const ziel = await aufruf("POST", "/api/aufnahme/dateien", { name: datei.name, groesse: datei.size, unterlage: unterlage || "" });
   const hier = ziel.adresse.startsWith("/");
   let antwort;
   try {
@@ -277,7 +282,7 @@ async function eine_hochladen(datei) {
   return aufruf("POST", "/api/aufnahme/dateien/" + ziel.kennung + "/fertig");
 }
 
-async function hochladen(auswahl, stand) {
+async function hochladen(auswahl, stand, unterlage) {
   const dateien = Array.from(auswahl.files);
   auswahl.value = "";
   melden("");
@@ -287,8 +292,10 @@ async function hochladen(auswahl, stand) {
     stand.hidden = false;
     stand.textContent = `Lade ${nr} von ${dateien.length} hoch …`;
     try {
-      const neu = await eine_hochladen(datei);
+      const neu = await eine_hochladen(datei, unterlage);
       zustand.dateien.push(neu);
+      const punkt = (zustand.unterlagen || []).find((u) => u.schluessel === unterlage);
+      if (punkt) punkt.anzahl += 1;
       dateien_zeigen();
     } catch (fehler) {
       melden(fehler.status === 413 ? `„${datei.name}“ ist zu groß (höchstens 15 MB).` : `„${datei.name}“: ${fehler.message}`);
@@ -297,8 +304,48 @@ async function hochladen(auswahl, stand) {
   stand.hidden = true;
 }
 
-for (const [feld, stand] of [["kamera", "ladestand"], ["auswahl", "ladestand"], ["kamera2", "ladestand2"], ["auswahl2", "ladestand2"]]) {
-  $("#" + feld).addEventListener("change", (e) => hochladen(e.target, $("#" + stand)));
+// Die Checkliste: je Art von Unterlage ein Punkt mit eigenem Knopf. So weiß
+// die Kanzlei, was eine Datei ist, und der Mandant sieht, was noch fehlt.
+const ANNEHMEN = "image/jpeg,image/png,image/heic,image/heif,application/pdf";
+
+function knopf_datei(text, kamera, unterlage, stand) {
+  const marke = knoten("label", { class: "knopf klein-knopf" }, text);
+  const feld = knoten("input", { type: "file", accept: kamera ? "image/*" : ANNEHMEN, hidden: "" });
+  if (kamera) feld.setAttribute("capture", "environment"); else feld.multiple = true;
+  feld.addEventListener("change", () => hochladen(feld, stand, unterlage));
+  marke.append(feld);
+  return marke;
+}
+
+function checkliste_zeigen() {
+  for (const [ziel, stand] of [[$("#checkliste"), $("#ladestand")], [$("#checkliste2"), $("#ladestand2")]]) {
+    ziel.textContent = "";
+    // Nach dem Abschicken zuerst, was noch fehlt; der Rest liegt eine Ebene tiefer.
+    const kurz = ziel.id === "checkliste2";
+    let weitere = null;
+    for (const u of zustand.unterlagen || []) {
+      if (kurz && !(u.wichtig && !u.anzahl) && !weitere) {
+        weitere = knoten("details", { class: "weitere" });
+        weitere.append(knoten("summary", {}, "Weitere Unterlagen nachreichen"), knoten("ul", { class: "checkliste" }));
+        const huelle = knoten("li", { class: "huelle" });
+        huelle.append(weitere);
+        ziel.append(huelle);
+      }
+      const li = knoten("li", { class: u.anzahl ? "da" : (u.wichtig ? "offen" : "") });
+      const kopf = knoten("div", { class: "punkt" });
+      kopf.append(knoten("strong", {}, u.titel),
+        knoten("span", { class: "marke" }, u.anzahl ? `✓ ${u.anzahl}` : (u.wichtig ? "wichtig" : "")));
+      li.append(kopf);
+      if (u.hinweis) li.append(knoten("p", { class: "klein" }, u.hinweis));
+      const knoepfe = knoten("div", { class: "knoepfe" });
+      knoepfe.append(knopf_datei("Foto", true, u.schluessel, stand), knopf_datei("Datei", false, u.schluessel, stand));
+      li.append(knoepfe);
+      (weitere && !(u.wichtig && !u.anzahl) ? $("ul", weitere) : ziel).append(li);
+    }
+  }
+  const offen = (zustand.unterlagen || []).filter((u) => u.wichtig && !u.anzahl).map((u) => u.titel);
+  $("#offen").hidden = !offen.length;
+  $("#offen").textContent = offen.length ? "Noch offen: " + offen.join(", ") + "." : "";
 }
 $("#fotos-weiter").addEventListener("click", naechste);
 
@@ -417,9 +464,78 @@ function unterlagen_zeigen() {
   }
 }
 
+// ---- Nachricht und persönlicher Link -------------------------------------
+
+const nachricht = $("#nachricht");
+nachricht.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("#nachricht-ok").hidden = true;
+  sperren(nachricht, true);
+  try {
+    const antwort = await aufruf("POST", "/api/aufnahme/nachricht", { text: $("#nachricht-text").value });
+    fehler_zeigen(nachricht, antwort.fehler || {});
+    if (!Object.keys(antwort.fehler || {}).length) {
+      zustand = { ...zustand, ...antwort };
+      $("#nachricht-text").value = "";
+      $("#nachricht-ok").hidden = false;
+      nachrichten_zeigen();
+    }
+  } catch (fehler) { melden(fehler.message); }
+  sperren(nachricht, false);
+});
+
+// Der Zugang steht hinter dem # und reist deshalb nicht zum Server.
+$("#link-sichern").addEventListener("click", async () => {
+  const link = location.origin + "/#z=" + encodeURIComponent(zugang);
+  try {
+    if (navigator.share) await navigator.share({ title: "Mein Fall – Aktedirekt", url: link });
+    else await navigator.clipboard.writeText(link);
+    $("#link-ok").hidden = !!navigator.share;
+  } catch (e) {
+    if (e && e.name === "AbortError") return;
+    window.prompt("Ihr persönlicher Link – bitte kopieren und gut aufbewahren:", link);
+  }
+});
+
 // ---- Ablauf -------------------------------------------------------------
 
+function datum_lesbar(iso) {
+  if (!iso) return "";
+  const [j, m, t] = iso.slice(0, 10).split("-");
+  return `${t}.${m}.${j}` + (iso.length > 10 ? ", " + iso.slice(11, 16) + " Uhr" : "");
+}
+
+function fragen_zeigen() {
+  const ziel = $("#fragen");
+  ziel.textContent = "";
+  for (const f of zustand.fragen || []) {
+    const d = knoten("details");
+    d.append(knoten("summary", {}, f.frage), knoten("p", {}, f.antwort));
+    ziel.append(d);
+  }
+  $("#fragen-block").hidden = !(zustand.fragen || []).length;
+}
+
+function nachrichten_zeigen() {
+  const ziel = $("#nachrichten");
+  ziel.textContent = "";
+  for (const n of zustand.nachrichten || []) ziel.append(knoten("li", {}, "Nachricht gesendet am " + datum_lesbar(n.am)));
+}
+
 function fertig() {
+  const neu = !zustand.sachstand || zustand.sachstand === "Aufgenommen";
+  $("#fertig-titel").textContent = neu ? "Vielen Dank" : "Ihr Fall";
+  $("#fertig-dank").hidden = !neu;
+  $("#sachstand-seit").textContent = zustand.sachstand_seit ? " seit " + datum_lesbar(zustand.sachstand_seit) : "";
+  $("#stand-was").textContent = (zustand.erklaerung || {}).was || "";
+  $("#stand-tun").textContent = (zustand.erklaerung || {}).tun || "";
+  fragen_zeigen();
+  nachrichten_zeigen();
+  $("#anrufen").hidden = !zustand.telefon;
+  $("#anrufen").textContent = "";
+  if (zustand.telefon) {
+    $("#anrufen").append("Lieber persönlich? ", knoten("a", { href: "tel:" + zustand.telefon.replace(/[^0-9+]/g, "") }, zustand.telefon));
+  }
   $("#sachstand").textContent = zustand.sachstand;
   $("#auskunft").hidden = !zustand.einwilligung_partner;
   $("#auskunft-text").textContent = zustand.partner + " darf diesen Stand sehen.";
@@ -456,9 +572,6 @@ function uebernehmen() {
   $("#block-partner").hidden = !zustand.partner;
   $("#partnerhinweis").hidden = !zustand.partner;
   $("#partnerhinweis").textContent = zustand.partner ? "Aufnahme über " + zustand.partner : "";
-  const empfohlen = $("#empfohlen");
-  empfohlen.textContent = "";
-  for (const punkt of zustand.empfohlen || []) empfohlen.append(knoten("li", {}, punkt));
   dateien_zeigen();
 }
 
@@ -500,6 +613,13 @@ for (const knopf of $$("[data-fallart]")) {
 
 (async function beginnen() {
   try { zugang = localStorage.getItem(MERKER) || ""; } catch (e) { zugang = ""; }
+  // Persönlicher Link von einem anderen Gerät: Zugang übernehmen.
+  const mitgebracht = new URLSearchParams(location.hash.slice(1)).get("z");
+  if (mitgebracht) {
+    history.replaceState(null, "", location.pathname);
+    zugang = mitgebracht;
+    try { localStorage.setItem(MERKER, zugang); } catch (e) { /* privates Fenster */ }
+  }
   // Code vom Tresen: hinter dem # der Adresse, damit er nicht zum Server reist.
   const code = new URLSearchParams(location.hash.slice(1)).get("u");
   if (code) {

@@ -118,14 +118,10 @@
 
 <section data-seite="fotos" hidden>
   <h1>Fotos und Unterlagen</h1>
-  <p>Fotografieren Sie, was Sie zur Hand haben. Sie können auch später noch etwas nachreichen. Hilfreich sind:</p>
-  <ul id="empfohlen"></ul>
-  <div class="hochladen">
-    <label class="knopf">Foto aufnehmen<input type="file" id="kamera" accept="image/*" capture="environment" hidden></label>
-    <label class="knopf">Aus Dateien wählen<input type="file" id="auswahl" accept="image/jpeg,image/png,image/heic,image/heif,application/pdf" multiple hidden></label>
-  </div>
+  <p>Fotografieren Sie, was Sie zur Hand haben – je Punkt einfach auf „Foto“ tippen. Was fehlt, können Sie später nachreichen.</p>
+  <ul id="checkliste" class="checkliste"></ul>
   <p id="ladestand" class="klein" hidden></p>
-  <ul id="dateiliste" class="dateien"></ul>
+  <details class="liste-hochgeladen"><summary id="dateizahl">Hochgeladen</summary><ul id="dateiliste" class="dateien"></ul></details>
   <button type="button" class="haupt" id="fotos-weiter">Weiter</button>
 </section>
 
@@ -171,30 +167,53 @@
 </form>
 
 <section data-seite="fertig" hidden>
-  <h1>Vielen Dank</h1>
-  <p>Ihre Angaben sind bei der Kanzlei eingegangen. Wir prüfen sie und melden uns bei Ihnen. Das Mandat kommt erst mit unserer Annahme zustande.</p>
-  <div class="stand"><span class="klein">Stand</span><strong id="sachstand"></strong></div>
+  <h1 id="fertig-titel">Vielen Dank</h1>
+  <p id="fertig-dank">Ihre Angaben sind bei der Kanzlei eingegangen. Wir prüfen sie und melden uns bei Ihnen. Das Mandat kommt erst mit unserer Annahme zustande.</p>
+  <div class="stand"><span class="klein">Stand<span id="sachstand-seit"></span></span><strong id="sachstand"></strong>
+    <p id="stand-was"></p><p id="stand-tun" class="tun"></p></div>
   <div id="auskunft" class="auskunft" hidden>
     <p id="auskunft-text" class="klein"></p>
     <button type="button" class="neben" id="widerrufen">Einverständnis widerrufen</button>
   </div>
-  <div id="unterlagen" hidden>
-    <h2>Ihre Unterlagen</h2>
-    <p class="klein">Zum Speichern oder Ausdrucken – so, wie Sie sie bestätigt haben.</p>
-    <ul id="unterlagenliste" class="abschnitte"></ul>
-  </div>
+
+  <h2>Unterlagen nachreichen</h2>
+  <p id="offen" class="hinweis" hidden></p>
+  <ul id="checkliste2" class="checkliste"></ul>
+  <p id="ladestand2" class="klein" hidden></p>
+  <details class="liste-hochgeladen"><summary id="dateizahl2">Hochgeladen</summary><ul id="dateiliste2" class="dateien"></ul></details>
+
+  <h2>Nachricht an die Kanzlei</h2>
+  <form id="nachricht" novalidate>
+    <label for="nachricht-text" class="klein">Eine Frage, eine neue Information, eine Zahlung ist eingegangen? Schreiben Sie es uns – die Nachricht kommt direkt in Ihre Akte.</label>
+    <textarea id="nachricht-text" name="text" rows="4" maxlength="3000" placeholder="Ihre Nachricht"></textarea>
+    <p class="fehler" data-fehler="text"></p>
+    <p id="nachricht-ok" class="gut" hidden>Ihre Nachricht ist bei uns eingegangen.</p>
+    <button type="submit" class="haupt">Nachricht senden</button>
+  </form>
+  <ul id="nachrichten" class="klein gesendet"></ul>
+
   <div id="ergaenzen" hidden>
     <h2>Angaben vervollständigen</h2>
     <p class="klein">Das hilft uns, Ihren Schaden schneller geltend zu machen. Nichts davon ist Pflicht – tragen Sie ein, was Sie wissen, wann es Ihnen passt.</p>
     <ul id="ergaenzungsliste" class="abschnitte"></ul>
   </div>
-  <p>Sie können weitere Fotos und Unterlagen nachreichen:</p>
-  <div class="hochladen">
-    <label class="knopf">Foto aufnehmen<input type="file" id="kamera2" accept="image/*" capture="environment" hidden></label>
-    <label class="knopf">Aus Dateien wählen<input type="file" id="auswahl2" accept="image/jpeg,image/png,image/heic,image/heif,application/pdf" multiple hidden></label>
+
+  <div id="fragen-block" hidden>
+    <h2>Häufige Fragen</h2>
+    <div id="fragen" class="fragen"></div>
   </div>
-  <p id="ladestand2" class="klein" hidden></p>
-  <ul id="dateiliste2" class="dateien"></ul>
+
+  <div id="unterlagen" hidden>
+    <h2>Ihre Unterlagen</h2>
+    <p class="klein">Zum Speichern oder Ausdrucken – so, wie Sie sie bestätigt haben.</p>
+    <ul id="unterlagenliste" class="abschnitte"></ul>
+  </div>
+
+  <h2>Diese Seite wiederfinden</h2>
+  <p class="klein">Ihr Zugang ist auf diesem Gerät gespeichert. Auf einem anderen Gerät oder nach einem Gerätewechsel öffnen Sie Ihren Fall mit Ihrem persönlichen Link. Bewahren Sie ihn auf wie ein Passwort – wer ihn hat, sieht Ihre Angaben.</p>
+  <button type="button" class="neben" id="link-sichern">Persönlichen Link kopieren</button>
+  <p id="link-ok" class="gut" hidden>Der Link ist kopiert. Speichern Sie ihn zum Beispiel in einer Notiz.</p>
+  <p id="anrufen" class="klein" hidden></p>
 </section>
 <form data-seite="ergaenzung" id="ergaenzung" novalidate hidden>
   <h1 id="ergaenzung-titel"></h1>
