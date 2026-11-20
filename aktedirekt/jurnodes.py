@@ -12,7 +12,8 @@ Gebraucht werden diese Rechte des Schnittstellenbenutzers:
 ``write:leads`` (anlegen), ``read:leads``, ``read:records``,
 ``search:leads``, ``search:records_subject`` und, für die Übergabe von Aufnahme und Anlagen,
 ``write:file``; für das Eintragen von Unfalltag und Schadennummer als
-Akteneigenschaften ``write:records_subject`` und ``read:config``; dazu ``search:records``, falls jur|nodes am angenommenen
+Akteneigenschaften ``write:records_subject`` und ``read:config``; für das
+Anlegen des Mandanten als Kontakt am Lead ``write:contact`` und ``write:lead_contact``; dazu ``search:records``, falls jur|nodes am angenommenen
 Lead das Aktenzeichen und nicht die Kennung der Akte nennt. jur|nodes meldet keine Änderungen von sich aus;
 der Sachstand wird deshalb in Abständen abgefragt.
 
@@ -375,3 +376,25 @@ class JurNodes:
         else:
             modell["valueText"] = text
         self._aufruf("POST", "/record-subject/record-record-subject", json={"model": modell})
+
+    def kontakt_anlegen(self, modell: dict[str, Any]) -> str:
+        """Legt einen neuen Kontakt an und gibt seine Kennung zurück.
+
+        ``Ungewiss``, wenn danach offen ist, ob es ihn gibt (Serverfehler,
+        Antwort ohne Kennung): Dann darf nicht noch einmal angelegt werden.
+        """
+        try:
+            daten = self._aufruf("POST", "/contact", json={"model": {**modell, "identifier": None}})
+        except JurNodesFehler:
+            if self.letzter_status in (400, 401, 405):
+                raise                                  # klar abgewiesen: nichts angelegt
+            raise Ungewiss("Offen, ob jur|nodes den Kontakt angelegt hat.")
+        for kandidat in [daten] + ([daten.get(k) for k in ("model", "contact", "data", "result")] if isinstance(daten, dict) else []):
+            if isinstance(kandidat, dict) and kandidat.get("identifier"):
+                return str(kandidat["identifier"])
+        self._panne("POST", "/contact", f"Status {self.letzter_status}, Antwort ohne Kennung")
+        raise Ungewiss("jur|nodes hat geantwortet, aber keine Kennung des Kontakts genannt.")
+
+    def lead_kontakt(self, lead: str, kontakt: str) -> None:
+        """Hängt einen bestehenden Kontakt an einen Lead."""
+        self._aufruf("POST", "/lead-contact", json={"leadIdentifier": lead, "contactIdentifier": kontakt})

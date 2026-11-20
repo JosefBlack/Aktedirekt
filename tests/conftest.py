@@ -67,3 +67,10 @@ def hochladen(client, kopf, ablage, name: str, inhalt: bytes, angekuendigt: int 
         return ziel
     ablage.abliefern(client, kopf, ziel.json()["adresse"], inhalt)
     return client.post(f"/api/aufnahme/dateien/{ziel.json()['kennung']}/fertig", headers=kopf)
+
+
+@pytest.fixture(autouse=True)
+def ohne_kontakte(monkeypatch, request):
+    """Kontakte in jur|nodes legen nur die Tests an, die es ausdrücklich prüfen."""
+    from aktedirekt import abgleich
+    monkeypatch.setattr(abgleich, "KONTAKTE_ANLEGEN", "kontakt" in request.node.name)

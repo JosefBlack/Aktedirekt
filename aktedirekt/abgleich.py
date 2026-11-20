@@ -262,7 +262,8 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
 
 # Was aus der Aufnahme als Akteneigenschaft nach jur|nodes geht: Name der
 # Eigenschaft dort (wie in der Verwaltung von jur|nodes angezeigt) -> Feld der Aufnahme.
-EIGENSCHAFTEN = {"unfall": {"Unfall vom": "unfalldatum", "Schadennummer": "gegner_schadennummer"}}
+EIGENSCHAFTEN = {"unfall": {"Unfall vom": "unfalldatum", "Schadennummer": "gegner_schadennummer",
+                            "Kennzeichen": "kennzeichen", "Kennzeichen Gegner": "gegner_kennzeichen"}}
 EIGENSCHAFT_VERSUCHE = 3
 
 
@@ -309,10 +310,75 @@ def eigenschaften_setzen(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, 
     return anzahl
 
 
+KONTAKT_UNGEWISS = "ungewiss"
+# Schalter: Mandant als Kontakt in jur|nodes anlegen.
+KONTAKTE_ANLEGEN = True
+
+
+def mandant_als_kontakt(aufnahme: Aufnahme) -> dict[str, Any] | None:
+    """Der Mandant, wie jur|nodes einen Kontakt erwartet - ``None``, wenn der Name fehlt."""
+    v: dict[str, Any] = {}
+    for abschnitt in aufnahme.angaben.values():
+        if isinstance(abschnitt, dict):
+            v.update({k: str(w).strip() for k, w in abschnitt.items() if w not in ("", None)})
+    if not v.get("nachname"):
+        return None
+    erreichbar = [{"id": -1, "contactType": art, "subject": "Privat", "value": v[feld][:70]}
+                  for art, feld in (("phone", "telefon"), ("mail", "email")) if len(v.get(feld, "")) >= 3]
+    anschrift = {"id": -1, "subject": "Privat", "street": v.get("strasse", "")[:100], "postcode": v.get("plz", "")[:20],
+                 "city": v.get("ort", "")[:70], "country": "Deutschland", "contacts": erreichbar}
+    # Das Geschlecht verlangt jur|nodes bei Personen; die Aufnahme fragt es nicht ab.
+    return {"contactType": "Person", "firstName": v.get("vorname", "")[:70], "lastName": v["nachname"][:150],
+            "gender": "neutral", "addresses": [anschrift]}
+
+
+def kontakt_anlegen(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, lead: Any) -> int:
+    """Legt den Mandanten einmal als Kontakt an und hängt ihn an den offenen Lead.
+
+    Nie doppelt: Vor dem Anlegen wird vermerkt, dass es versucht wird. Bleibt
+    danach offen, ob es den Kontakt gibt, wird nicht noch einmal angelegt -
+    die Kanzlei sieht es am Lead. Nur eine klare Abweisung wird wiederholt,
+    höchstens dreimal.
+    """
+    stand = dict(aufnahme.jurnodes)
+    if not KONTAKTE_ANLEGEN:
+        return 0
+    if (lead is None or lead.status != "created" or aufnahme.abgeschlossen_am is None or stand.get("kontakt_am_lead")
+            or stand.get("kontakt") == KONTAKT_UNGEWISS or stand.get("kontakt_versuche", 0) >= EIGENSCHAFT_VERSUCHE):
+        return 0
+    kontakt = stand.get("kontakt", "")
+    try:
+        if not kontakt:
+            modell = mandant_als_kontakt(aufnahme)
+            if modell is None:
+                return 0
+            speicher.jurnodes_setzen(aufnahme.kennung, {**stand, "kontakt": KONTAKT_UNGEWISS})
+            try:
+                kontakt = jurnodes.kontakt_anlegen(modell)
+            except Ungewiss:
+                raise
+            except JurNodesFehler:
+                stand["kontakt_versuche"] = stand.get("kontakt_versuche", 0) + 1
+                speicher.jurnodes_setzen(aufnahme.kennung, stand)       # klar abgewiesen: nichts angelegt
+                raise
+            stand["kontakt"] = kontakt
+            speicher.jurnodes_setzen(aufnahme.kennung, stand)
+        try:
+            jurnodes.lead_kontakt(aufnahme.lead_kennung, kontakt)
+        except JurNodesFehler:
+            stand["kontakt_versuche"] = stand.get("kontakt_versuche", 0) + 1
+            speicher.jurnodes_setzen(aufnahme.kennung, stand)
+            raise
+    except Ungewiss:
+        raise JurNodesFehler("Offen, ob der Kontakt angelegt ist.")
+    speicher.jurnodes_setzen(aufnahme.kennung, {**stand, "kontakt_am_lead": True})
+    return 1
+
+
 def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerliste,
                      stufen: Stufen, heute: date) -> dict[str, int]:
     """Ein Durchlauf. Ein Fehler bei einem Fall hält die übrigen nicht auf."""
-    zahlen = {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "eigenschaften": 0, "fehler": 0}
+    zahlen = {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "eigenschaften": 0, "kontakte": 0, "fehler": 0}
     for aufnahme in speicher.ohne_lead():
         if lead_anlegen(aufnahme, speicher, jurnodes, partner, heute, nachholen=True):
             zahlen["leads_nachgeholt"] += 1
@@ -365,6 +431,15 @@ def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerlis
             zahlen["fehler"] += 1
         except Exception as fehler:
             jurnodes.pannen.append(f"Eigenschaften: {type(fehler).__name__}")
+            zahlen["fehler"] += 1
+        try:
+            frisch = speicher.nach_kennung(aufnahme.kennung)
+            if frisch is not None:
+                zahlen["kontakte"] += kontakt_anlegen(frisch, speicher, jurnodes, lead)
+        except JurNodesFehler:
+            zahlen["fehler"] += 1
+        except Exception as fehler:
+            jurnodes.pannen.append(f"Kontakt: {type(fehler).__name__}")
             zahlen["fehler"] += 1
     return zahlen
 

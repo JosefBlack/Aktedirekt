@@ -52,6 +52,7 @@ class Server:
     def __init__(self):
         self.abgelegt, self.leads, self.status, self.kaputt_ab = [], [], "created", None
         self.typen, self.eigenschaften = [], []
+        self.kontakte, self.am_lead, self.kontakt_status = [], [], 404
 
     def eigenschaften_weg(self, anfrage):
         weg = anfrage.url.path
@@ -60,6 +61,14 @@ class Server:
         if weg == "/record-subject/record-record-subject":
             self.eigenschaften.append(json.loads(anfrage.content)["model"])
             return httpx.Response(200, json={"id": len(self.eigenschaften)})
+        if weg == "/contact" and anfrage.method == "POST":
+            if self.kontakt_status == 404:              # dieser Server kennt keine Kontakte: wie bisher
+                return httpx.Response(405, json={"error": "nein"})
+            self.kontakte.append(json.loads(anfrage.content)["model"])
+            return httpx.Response(self.kontakt_status, json={"identifier": f"K-{len(self.kontakte)}"} if self.kontakt_status == 200 else {})
+        if weg == "/lead-contact":
+            self.am_lead.append(json.loads(anfrage.content))
+            return httpx.Response(200, json={})
         return None
 
     def __call__(self, anfrage: httpx.Request) -> httpx.Response:
@@ -126,7 +135,7 @@ def test_aufnahme_unterschrift_und_anlage_landen_im_ordner_des_leads(umgebung):
     aufnehmen(client, ablage)
     assert server.abgelegt == []                       # beim Abschicken nur der Lead - Dateien folgen im Lauf
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "eigenschaften": 0, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "eigenschaften": 0, "kontakte": 0, "fehler": 0}
     namen = [a["name"] for a in server.abgelegt]
     assert namen[0].startswith("Aufnahme Aktedirekt ") and namen[0].endswith(".pdf")
     assert namen[1:] == ["Unterschrift Aktedirekt.png", "Schaden _vorne.jpg"]
@@ -230,7 +239,7 @@ def test_akte_wird_ueber_das_aktenzeichen_gefunden(mit_aktenzeichen):
     _, zugang = aufnehmen(client, ablage)
     server.status = "accepted"                         # die Kanzlei nimmt an, bevor der erste Lauf kommt
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 1, "abgelegt": 3, "eigenschaften": 0, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 1, "abgelegt": 3, "eigenschaften": 0, "kontakte": 0, "fehler": 0}
     aufnahme = speicher.laden(zugang)
     assert aufnahme.sachstand == "angemeldet" and aufnahme.akte_kennung == "rec-uuid-1"
     assert {a["ordner"] for a in server.abgelegt} == {"99"}
@@ -632,7 +641,7 @@ def test_ganzer_weg_am_server_der_kanzlei(kanzlei_server):
 
     # Erster Lauf: die drei Dateien in den Ordner des Leads - gelesen über die Suche.
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "eigenschaften": 0, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "eigenschaften": 0, "kontakte": 0, "fehler": 0}
     assert {a["ordner"] for a in server.abgelegt} == {"70"}
 
     # Die Kanzlei nimmt an und setzt den Sachstand.
@@ -706,3 +715,31 @@ def test_abgewiesene_akteneigenschaft_wird_nach_drei_laeufen_aufgegeben(kanzlei_
     fehler = [lauf(speicher, jurnodes)["fehler"] for _ in range(5)]
     assert fehler == [1, 1, 1, 0, 0]
     assert lauf(speicher, jurnodes)["abgelegt"] == 0    # die Übergabe der Dateien hat darunter nicht gelitten
+
+
+def test_mandant_wird_einmal_als_kontakt_an_den_lead_gehaengt(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    server.kontakt_status = 200
+    aufnehmen(client, ablage)
+    assert lauf(speicher, jurnodes)["kontakte"] == 1
+    k = server.kontakte[0]
+    assert (k["contactType"], k["lastName"], k["identifier"]) == ("Person", "Muster", None)
+    assert k["addresses"][0]["contacts"][0]["contactType"] == "phone"
+    assert server.am_lead == [{"leadIdentifier": "lead-000000001", "contactIdentifier": "K-1"}]
+    assert lauf(speicher, jurnodes)["kontakte"] == 0 and len(server.kontakte) == 1
+
+
+def test_serverfehler_beim_kontakt_fuehrt_nie_zu_einem_zweiten(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    server.kontakt_status = 500                         # angelegt, aber Status 500 - wie beim Lead
+    aufnehmen(client, ablage)
+    assert [lauf(speicher, jurnodes)["fehler"] for _ in range(3)] == [1, 0, 0]
+    assert len(server.kontakte) == 1 and server.am_lead == []
+
+
+def test_kein_kontakt_mehr_wenn_der_lead_schon_angenommen_ist(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    server.kontakt_status = 200
+    aufnehmen(client, ablage)
+    server.liste[0].update(status="accepted", acceptedRecord="40566/26")
+    assert lauf(speicher, jurnodes)["kontakte"] == 0 and server.kontakte == []

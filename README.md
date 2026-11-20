@@ -269,7 +269,7 @@ dieselbe Oberfläche einhüllen.
 
 1. Ein eigener Schnittstellenbenutzer für Aktedirekt mit den Rechten
    `write:leads`, `read:leads`, `read:records`, `search:records_subject`,
-   `write:file`, `write:records_subject`, `read:config`.
+   `write:file`, `write:records_subject`, `read:config`, `write:contact`, `write:lead_contact`.
 2. Die Akteneigenschaft „Sachstand" in jur|nodes als Auswahlfeld mit den
    Bezeichnungen aus `sachstaende.json`.
 3. Deckt web|nodes, der Mandantenkanal von jur|nodes, einen Teil der
