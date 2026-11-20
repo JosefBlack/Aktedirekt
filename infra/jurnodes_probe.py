@@ -106,6 +106,19 @@ for name, params in (("Kurzrubrum, Seite 0", {"shortRubrum": RUBRUM, "page": 0})
     if isinstance(elemente, list) and elemente and isinstance(elemente[0], dict):
         print(f"      ein Eintrag hat die Felder: {felder(elemente[0], 0)}")
 
+print("\n== 1b. Welche Akteneigenschaften jur|nodes kennt (Anzeigename = Word-Name, Art)")
+status, art, daten, text = aufruf("GET", "/record-subject/types")
+typen = daten if isinstance(daten, list) else next((daten[k] for k in ("elements", "data", "result", "types")
+                                                    if isinstance(daten, dict) and isinstance(daten.get(k), list)), None)
+if typen is None:
+    zeile("GET /record-subject/types", status, art, daten, text)
+else:
+    print(f"  GET /record-subject/types: Status {status}, {len(typen)} Einträge")
+    for t in typen:
+        if isinstance(t, dict) and not t.get("deleted"):
+            print(f"    {t.get('name')} = {t.get('identifier')} ({t.get('type')})")
+UNFALL_VOM = next((str(t.get("identifier")) for t in typen or [] if isinstance(t, dict) and t.get("name") == "Unfall vom"), "")
+
 if "anlegen" not in sys.argv[1:]:
     print("\nNur gelesen. Für die ganze Kette (ein Probe-Lead, lesen, eine Datei ablegen):")
     print("  bash aktedirekt/verwalten.sh jurnodes-probe anlegen")
@@ -173,6 +186,20 @@ else:
     status, art, daten, text = aufruf("POST", "/file-system/add-file", koerper=koerper, kopf={
         "Content-Type": f"multipart/form-data; boundary={grenze}", "folderId": str(ordner), "autoRenameIfExist": "true"})
     zeile("POST /file-system/add-file", status, art, daten, text)
+
+print("\n== 4b. Am Probe-Lead die Akteneigenschaft 'Unfall vom' eintragen und wieder lesen")
+if not UNFALL_VOM:
+    print("  übersprungen: Die Liste aus 1b nennt keine Eigenschaft 'Unfall vom'.")
+else:
+    modell = {"model": {"id": -1, "recordSubject": UNFALL_VOM, "leadIdentifier": kennung, "valueDate": date.today().isoformat()}}
+    status, art, daten, text = aufruf("POST", "/record-subject/record-record-subject", koerper=json.dumps(modell).encode(),
+                                      kopf={"Content-Type": "application/json"})
+    zeile("POST /record-subject/record-record-subject", status, art, daten, text)
+    status, art, daten, text = aufruf("GET", "/record-subject/search", {"leadIdentifier": kennung, "page": 1})
+    zeile("GET /record-subject/search (Lead)", status, art, daten, text)
+    elemente = daten.get("elements") if isinstance(daten, dict) else None
+    if isinstance(elemente, list) and elemente and isinstance(elemente[0], dict):
+        print(f"      ein Eintrag hat die Felder: {felder(elemente[0], 0)}")
 
 print("\n== 5. Den Probe-Lead über die Suche wiederfinden")
 for name, params in (("Kurzrubrum, Seite 1", {"shortRubrum": RUBRUM, "page": 1}), ("Kurzrubrum, Seite 0", {"shortRubrum": RUBRUM, "page": 0}),

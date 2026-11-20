@@ -11,7 +11,8 @@ Repository jusperfect unter ``schnittstelle/``). Zwei Eigenheiten daraus:
 Gebraucht werden diese Rechte des Schnittstellenbenutzers:
 ``write:leads`` (anlegen), ``read:leads``, ``read:records``,
 ``search:leads``, ``search:records_subject`` und, für die Übergabe von Aufnahme und Anlagen,
-``write:file``; dazu ``search:records``, falls jur|nodes am angenommenen
+``write:file``; für das Eintragen von Unfalltag und Schadennummer als
+Akteneigenschaften ``write:records_subject`` und ``read:config``; dazu ``search:records``, falls jur|nodes am angenommenen
 Lead das Aktenzeichen und nicht die Kennung der Akte nennt. jur|nodes meldet keine Änderungen von sich aus;
 der Sachstand wird deshalb in Abständen abgefragt.
 
@@ -70,6 +71,7 @@ class JurNodes:
             transport=transport,
         )
         self.pannen: list[str] = []
+        self._eigenschaften: dict[str, str] | None = None
         self.letzter_status = 0
         # Welche Form der Lead-Suche dieser Server annimmt (wird beim ersten Erfolg gemerkt).
         self._zaehlweise: int | None = None
@@ -349,3 +351,27 @@ class JurNodes:
             if isinstance(eintrag, dict) and eintrag.get("recordSubject") == name:
                 return str(eintrag.get("valueText") or "")
         return ""
+
+    def eigenschaft_namen(self) -> dict[str, str]:
+        """Anzeigename -> Word-Name aller Akteneigenschaften, die jur|nodes kennt (einmal je Lauf gelesen)."""
+        if self._eigenschaften is None:
+            daten = self._aufruf("GET", "/record-subject/types")
+            if isinstance(daten, dict):
+                daten = next((daten[k] for k in ("elements", "data", "result", "types") if isinstance(daten.get(k), list)), [])
+            self._eigenschaften = {str(e["name"]): str(e["identifier"]) for e in daten or []
+                                   if isinstance(e, dict) and e.get("name") and e.get("identifier") and not e.get("deleted")}
+        return self._eigenschaften
+
+    def eigenschaft_setzen(self, word_name: str, *, lead: str = "", aktenzeichen: str = "",
+                           text: str = "", datum: date | None = None) -> None:
+        """Trägt eine Akteneigenschaft neu ein - am Lead oder, ist er angenommen, an der Akte."""
+        modell: dict[str, Any] = {"id": -1, "recordSubject": word_name}
+        if aktenzeichen:
+            modell["recordSign"] = aktenzeichen
+        else:
+            modell["leadIdentifier"] = lead
+        if datum is not None:
+            modell["valueDate"] = datum.isoformat()
+        else:
+            modell["valueText"] = text
+        self._aufruf("POST", "/record-subject/record-record-subject", json={"model": modell})

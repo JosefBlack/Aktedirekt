@@ -132,7 +132,7 @@ Anmeldung erscheint wieder der QR-Code.
 
 Erst, wenn es in jur|nodes einen **eigenen Schnittstellenbenutzer** für
 Aktedirekt gibt (Rechte: `write:leads`, `read:leads`, `search:leads`,
-`read:records`, `search:records`, `search:records_subject`, `write:file`) und die Akteneigenschaft „Sachstand" angelegt ist.
+`read:records`, `search:records`, `search:records_subject`, `write:file`, `write:records_subject`, `read:config`) und die Akteneigenschaft „Sachstand" angelegt ist.
 Eingetragen wird der Zugang in der CloudShell; das Skript fragt Adresse,
 Benutzer und Schlüssel ab (der Schlüssel erscheint dabei nicht auf dem
 Bildschirm und nicht im Verlauf) und prüft ihn, bevor es ihn speichert:

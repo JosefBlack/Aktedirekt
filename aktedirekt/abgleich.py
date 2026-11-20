@@ -222,8 +222,8 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
     """
     if not aufnahme.lead_kennung or aufnahme.abgeschlossen_am is None:
         return 0
-    stand = {"dateien": list(aufnahme.jurnodes.get("dateien", [])), "blatt": aufnahme.jurnodes.get("blatt", ""),
-             "unterschrift": bool(aufnahme.jurnodes.get("unterschrift", False))}
+    stand = {**aufnahme.jurnodes, "dateien": list(aufnahme.jurnodes.get("dateien", [])),
+             "blatt": aufnahme.jurnodes.get("blatt", ""), "unterschrift": bool(aufnahme.jurnodes.get("unterschrift", False))}
     ausstehend = [d for d in speicher.dateien(aufnahme.kennung) if d.kennung not in stand["dateien"]]
     blatt = blatt_fuer_die_akte(aufnahme, speicher, partner, stufen)
     summe = hashlib.sha256(blatt).hexdigest()
@@ -260,10 +260,59 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
     return anzahl
 
 
+# Was aus der Aufnahme als Akteneigenschaft nach jur|nodes geht: Name der
+# Eigenschaft dort (wie in der Verwaltung von jur|nodes angezeigt) -> Feld der Aufnahme.
+EIGENSCHAFTEN = {"unfall": {"Unfall vom": "unfalldatum", "Schadennummer": "gegner_schadennummer"}}
+EIGENSCHAFT_VERSUCHE = 3
+
+
+def eigenschaften_setzen(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, lead: Any) -> int:
+    """Trägt Unfalltag und Schadennummer als Akteneigenschaften ein - jede einmal.
+
+    Am Lead, solange er offen ist; an der Akte, sobald er angenommen wurde.
+    Was die Kanzlei danach in jur|nodes ändert, bleibt unberührt: Eingetragen
+    wird nur, was noch nie eingetragen wurde. Weist jur|nodes es ab, wird es
+    nach drei Läufen nicht weiter versucht.
+    """
+    plan = EIGENSCHAFTEN.get(aufnahme.art, {})
+    stand = dict(aufnahme.jurnodes)
+    gesetzt = dict(stand.get("eigenschaften", {}))
+    if not plan or lead is None or aufnahme.abgeschlossen_am is None or stand.get("eigenschaften_versuche", 0) >= EIGENSCHAFT_VERSUCHE:
+        return 0
+    werte = {}
+    for abschnitt in aufnahme.angaben.values():
+        if isinstance(abschnitt, dict):
+            werte.update({k: v for k, v in abschnitt.items() if v not in ("", None)})
+    offen = {name: str(werte[feld]).strip() for name, feld in plan.items() if name not in gesetzt and feld in werte}
+    offen = {name: wert for name, wert in offen.items() if len(wert) >= 3}     # jur|nodes verlangt mindestens drei Zeichen
+    if not offen:
+        return 0
+    ziel = ({"aktenzeichen": lead.akte_kennung} if lead.status == "accepted" and lead.akte_kennung
+            else {"lead": aufnahme.lead_kennung})
+    anzahl = 0
+    try:
+        namen = jurnodes.eigenschaft_namen()
+        for name, wert in offen.items():
+            if name not in namen:
+                continue                            # diese Eigenschaft gibt es in jur|nodes nicht
+            if plan[name].endswith("datum"):
+                jurnodes.eigenschaft_setzen(namen[name], datum=date.fromisoformat(wert[:10]), **ziel)
+            else:
+                jurnodes.eigenschaft_setzen(namen[name], text=wert[:70], **ziel)
+            gesetzt[name] = True
+            anzahl += 1
+            speicher.jurnodes_setzen(aufnahme.kennung, {**stand, "eigenschaften": gesetzt})
+    except (JurNodesFehler, ValueError):
+        speicher.jurnodes_setzen(aufnahme.kennung, {**stand, "eigenschaften": gesetzt,
+                                                    "eigenschaften_versuche": stand.get("eigenschaften_versuche", 0) + 1})
+        raise JurNodesFehler("Akteneigenschaften nicht eingetragen.")
+    return anzahl
+
+
 def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerliste,
                      stufen: Stufen, heute: date) -> dict[str, int]:
     """Ein Durchlauf. Ein Fehler bei einem Fall hält die übrigen nicht auf."""
-    zahlen = {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "fehler": 0}
+    zahlen = {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "eigenschaften": 0, "fehler": 0}
     for aufnahme in speicher.ohne_lead():
         if lead_anlegen(aufnahme, speicher, jurnodes, partner, heute, nachholen=True):
             zahlen["leads_nachgeholt"] += 1
@@ -307,6 +356,15 @@ def alles_abgleichen(speicher: Speicher, jurnodes: JurNodes, partner: Partnerlis
             zahlen["fehler"] += 1
         except Exception as fehler:
             jurnodes.pannen.append(f"Übergabe: {type(fehler).__name__}")
+            zahlen["fehler"] += 1
+        try:
+            frisch = speicher.nach_kennung(aufnahme.kennung)
+            if frisch is not None and lead is not None and lead.status != "rejected":
+                zahlen["eigenschaften"] += eigenschaften_setzen(frisch, speicher, jurnodes, lead)
+        except JurNodesFehler:
+            zahlen["fehler"] += 1
+        except Exception as fehler:
+            jurnodes.pannen.append(f"Eigenschaften: {type(fehler).__name__}")
             zahlen["fehler"] += 1
     return zahlen
 

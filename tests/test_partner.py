@@ -241,7 +241,7 @@ def test_abgleich_holt_lead_nach_und_liest_den_sachstand(umgebung):
 
     jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim", transport=httpx.MockTransport(antwort))
     zahlen = alles_abgleichen(speicher, jurnodes, partnerliste(), Stufen.laden(), date(2026, 11, 20))
-    assert zahlen == {"leads_nachgeholt": 1, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 1, "abgelegt": 0, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 1, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 1, "abgelegt": 0, "eigenschaften": 0, "fehler": 0}
     assert angelegt[0]["model"]["broker"] == "Autohaus Beispiel"
     aufnahme = speicher.nach_kennung(kennung)
     assert (aufnahme.lead_kennung, aufnahme.akte_kennung) == ("L-5", "A-5")
@@ -249,7 +249,7 @@ def test_abgleich_holt_lead_nach_und_liest_den_sachstand(umgebung):
     assert faelle(client, anmelden(client))[0]["sachstand"] == "Mahnstufe 1"
     # Ein zweiter Lauf legt nichts doppelt an und ändert nichts.
     zahlen = alles_abgleichen(speicher, jurnodes, partnerliste(), Stufen.laden(), date(2026, 11, 21))
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "eigenschaften": 0, "fehler": 0}
     assert len(angelegt) == 1
 
 
@@ -259,7 +259,7 @@ def test_abgleich_uebersteht_den_ausfall_von_jurnodes(umgebung):
     jurnodes = JurNodes("https://jurnodes.example", "portal", "geheim",
                         transport=httpx.MockTransport(lambda a: httpx.Response(500, json={})))
     zahlen = alles_abgleichen(speicher, jurnodes, partnerliste(), Stufen.laden(), date(2026, 11, 20))
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 1, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 1, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 0, "eigenschaften": 0, "fehler": 0}
 
 
 def test_als_fall_nennt_keinen_aufnehmenden_partner(umgebung):

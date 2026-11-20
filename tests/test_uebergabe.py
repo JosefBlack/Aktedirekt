@@ -51,8 +51,20 @@ class Server:
     """Stellt jur|nodes nach und merkt sich, was abgelegt wurde."""
     def __init__(self):
         self.abgelegt, self.leads, self.status, self.kaputt_ab = [], [], "created", None
+        self.typen, self.eigenschaften = [], []
+
+    def eigenschaften_weg(self, anfrage):
+        weg = anfrage.url.path
+        if weg == "/record-subject/types":
+            return httpx.Response(200, json=self.typen)
+        if weg == "/record-subject/record-record-subject":
+            self.eigenschaften.append(json.loads(anfrage.content)["model"])
+            return httpx.Response(200, json={"id": len(self.eigenschaften)})
+        return None
 
     def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        if (fertig := self.eigenschaften_weg(anfrage)) is not None:
+            return fertig
         weg = anfrage.url.path
         if anfrage.method == "POST" and weg == "/lead":
             self.leads.append(json.loads(anfrage.content)["model"])
@@ -114,7 +126,7 @@ def test_aufnahme_unterschrift_und_anlage_landen_im_ordner_des_leads(umgebung):
     aufnehmen(client, ablage)
     assert server.abgelegt == []                       # beim Abschicken nur der Lead - Dateien folgen im Lauf
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "eigenschaften": 0, "fehler": 0}
     namen = [a["name"] for a in server.abgelegt]
     assert namen[0].startswith("Aufnahme Aktedirekt ") and namen[0].endswith(".pdf")
     assert namen[1:] == ["Unterschrift Aktedirekt.png", "Schaden _vorne.jpg"]
@@ -183,6 +195,8 @@ def test_abgelehnter_lead_bekommt_nichts_mehr(umgebung):
 class ServerMitAktenzeichen(Server):
     """Wie der Server der Kanzlei: /record kennt nur Kennungen, der Lead nennt das Aktenzeichen."""
     def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        if (fertig := self.eigenschaften_weg(anfrage)) is not None:
+            return fertig
         weg = anfrage.url.path
         self.gefragt = getattr(self, "gefragt", [])
         self.gefragt.append((anfrage.method, weg, dict(anfrage.url.params)))
@@ -216,7 +230,7 @@ def test_akte_wird_ueber_das_aktenzeichen_gefunden(mit_aktenzeichen):
     _, zugang = aufnehmen(client, ablage)
     server.status = "accepted"                         # die Kanzlei nimmt an, bevor der erste Lauf kommt
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 1, "abgelegt": 3, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 1, "abgelegt": 3, "eigenschaften": 0, "fehler": 0}
     aufnahme = speicher.laden(zugang)
     assert aufnahme.sachstand == "angemeldet" and aufnahme.akte_kennung == "rec-uuid-1"
     assert {a["ordner"] for a in server.abgelegt} == {"99"}
@@ -265,6 +279,8 @@ class ServerOhneKennung(Server):
         self.suche, self.suchen_geht = [], True
 
     def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        if (fertig := self.eigenschaften_weg(anfrage)) is not None:
+            return fertig
         weg = anfrage.url.path
         if anfrage.method == "POST" and weg == "/lead":
             self.leads.append(json.loads(anfrage.content)["model"])
@@ -389,6 +405,8 @@ class ServerMitEigenerSuche(Server):
         self.annehmen, self.suchen = annehmen, []
 
     def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        if (fertig := self.eigenschaften_weg(anfrage)) is not None:
+            return fertig
         if anfrage.url.path == "/lead/search":
             params = dict(anfrage.url.params)
             self.suchen.append(params)
@@ -444,6 +462,8 @@ class ServerMitFehler500(ServerMitEigenerSuche):
         self.legt_trotzdem_an, self.angelegt = legt_trotzdem_an, []
 
     def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        if (fertig := self.eigenschaften_weg(anfrage)) is not None:
+            return fertig
         if anfrage.method == "POST" and anfrage.url.path == "/lead":
             modell = json.loads(anfrage.content)["model"]
             self.leads.append(modell)
@@ -553,6 +573,8 @@ class ServerDerKanzlei(Server):
         self.liste, self.lesen = [], 0
 
     def __call__(self, anfrage: httpx.Request) -> httpx.Response:
+        if (fertig := self.eigenschaften_weg(anfrage)) is not None:
+            return fertig
         weg, params = anfrage.url.path, dict(anfrage.url.params)
         if anfrage.method == "POST" and weg == "/lead":
             modell = json.loads(anfrage.content)["model"]
@@ -606,7 +628,7 @@ def test_ganzer_weg_am_server_der_kanzlei(kanzlei_server):
 
     # Erster Lauf: die drei Dateien in den Ordner des Leads - gelesen über die Suche.
     zahlen = lauf(speicher, jurnodes)
-    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "fehler": 0}
+    assert zahlen == {"leads_nachgeholt": 0, "leads_offen": 0, "ohne_kennung": 0, "geaendert": 0, "abgelegt": 3, "eigenschaften": 0, "fehler": 0}
     assert {a["ordner"] for a in server.abgelegt} == {"70"}
 
     # Die Kanzlei nimmt an und setzt den Sachstand.
@@ -640,3 +662,43 @@ def test_verschwundener_lead_ist_ein_fehler_und_kein_anlass_neu_anzulegen(kanzle
     zahlen = lauf(speicher, jurnodes)
     assert zahlen["fehler"] >= 1 and len(server.leads) == 1
     assert "GET /lead/search: Lead mit bekannter Kennung nicht gefunden" in jurnodes.pannen
+
+
+TYPEN = [{"identifier": "Unfall_vom", "name": "Unfall vom", "type": "date"},
+         {"identifier": "Schadennummer", "name": "Schadennummer", "type": "text"},
+         {"identifier": "Alt", "name": "Hauptbetreff", "type": "text", "deleted": True}]
+
+
+def test_unfalltag_als_akteneigenschaft_am_lead_nur_einmal(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    server.typen = TYPEN
+    aufnehmen(client, ablage)
+    zahlen = lauf(speicher, jurnodes)
+    assert zahlen["eigenschaften"] == 1 and zahlen["fehler"] == 0 and zahlen["abgelegt"] == 3
+    assert server.eigenschaften == [{"id": -1, "recordSubject": "Unfall_vom", "leadIdentifier": "lead-000000001",
+                                     "valueDate": "2026-11-17"}]
+    zahlen = lauf(speicher, jurnodes)                   # zweiter Lauf: nichts doppelt, die Dateien bleiben vermerkt
+    assert zahlen["eigenschaften"] == 0 and zahlen["abgelegt"] == 0 and len(server.eigenschaften) == 1
+
+
+def test_akteneigenschaft_an_der_akte_wenn_schon_angenommen(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    aufnehmen(client, ablage)
+    lauf(speicher, jurnodes)                            # jur|nodes kennt die Eigenschaft noch nicht: nichts eingetragen
+    assert server.eigenschaften == []
+    server.typen = TYPEN
+    server.liste[0].update(status="accepted", acceptedRecord="40566/26")
+    jurnodes._eigenschaften = None
+    assert lauf(speicher, jurnodes)["eigenschaften"] == 1
+    assert server.eigenschaften[0]["recordSign"] == "40566/26" and "leadIdentifier" not in server.eigenschaften[0]
+
+
+def test_abgewiesene_akteneigenschaft_wird_nach_drei_laeufen_aufgegeben(kanzlei_server):
+    client, speicher, server, ablage, jurnodes = kanzlei_server
+    server.typen = None                                 # liefert 405
+    server.eigenschaften_weg = lambda anfrage: (httpx.Response(405, json={"error": "nein"})
+                                                if anfrage.url.path.startswith("/record-subject/types") else None)
+    aufnehmen(client, ablage)
+    fehler = [lauf(speicher, jurnodes)["fehler"] for _ in range(5)]
+    assert fehler == [1, 1, 1, 0, 0]
+    assert lauf(speicher, jurnodes)["abgelegt"] == 0    # die Übergabe der Dateien hat darunter nicht gelitten
