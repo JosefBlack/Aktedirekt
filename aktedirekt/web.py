@@ -63,6 +63,9 @@ _PNG = b"\x89PNG\r\n\x1a\n"
 SITZUNG_DAUER = timedelta(hours=8)
 # So lange kann der Kunde den Code vom Tresen auf seinem Gerät einlösen.
 UEBERGABE_DAUER = timedelta(hours=72)
+WIEDERFINDEN_DAUER = timedelta(hours=24)
+# Je E-Mail-Adresse höchstens so viele Links zum Wiederfinden, dann eine Stunde Pause.
+WIEDERFINDEN_HOECHSTENS = 3
 NEUER_ZUGANG_DAUER = timedelta(days=7)
 # So lange kann ein Partner eine versehentlich eingereichte Unterlage selbst zurücknehmen.
 ENTFERNEN_FRIST = timedelta(hours=24)
@@ -94,6 +97,7 @@ def _abschnitte(abschnitte: dict[str, Abschnitt]) -> list[dict[str, Any]]:
 def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
               jurnodes: JurNodes | None = None, basis_url: str = "", telefon: str = "",
               eingang_melden: Callable[[str, str], None] | None = None,
+              post: Any = None,
               epoche: Callable[[], float] = time.time,
               jetzt: Callable[[], datetime] = zeit.jetzt) -> FastAPI:
     app = FastAPI(title="Aktedirekt", docs_url=None, redoc_url=None, openapi_url=None)
@@ -103,6 +107,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     wortlaut = json.loads(_text("hinweise.json"))
     anruf = f": {telefon}" if telefon else ""
     portal = json.loads(_text("portal.json"))
+    mails = json.loads(_text("mail.json"))
     unter = f" unter {telefon}" if telefon else ""
 
     def portaltext(text: str) -> str:
@@ -468,6 +473,16 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         assert fertig is not None
         if jurnodes is not None:
             lead_anlegen(fertig, speicher, jurnodes, partnerliste, zeitpunkt.date())
+        if post is not None and mail_von(fertig):
+            # Eingangsbestätigung mit den Erklärungen als PDF: So hat der Mandant
+            # die Widerrufsbelehrung auf einem dauerhaften Datenträger.
+            try:
+                anlagen = [(e.titel + ".pdf", akte_pdf.erzeugen(e.titel, [], [{"titel": "", "zeilen": [["", e.text]]}], None),
+                            "application/pdf") for e in erklaerungen.liste(fertig.art) if e.text]
+                post.senden(mail_von(fertig), mails["eingang_betreff"], mails["eingang_text"].format(
+                    name=fertig.name(), portal=portal_adresse(request), telefon=unter), anlagen)
+            except Exception:
+                pass                                   # gespeichert ist es; die E-Mail darf das nicht gefährden
         if eingang_melden is not None:
             # Ohne Namen und ohne Inhalt: Die Nachricht geht unverschlüsselt per E-Mail.
             frist = fertig.klagefrist()
@@ -484,6 +499,57 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 # Die Aufnahme ist gespeichert; eine gescheiterte Nachricht darf sie nicht gefährden.
                 pass
         return JSONResponse({"fehler": {}, **zustand(fertig)})
+
+    def mail_von(aufnahme: Aufnahme) -> str:
+        return str(aufnahme.angaben.get(aufnahme.fallart.person, {}).get("email", "")).strip()
+
+    def portal_adresse(request: Request) -> str:
+        return (basis_url or str(request.base_url)).rstrip("/") + "/"
+
+    @app.get("/api/wiederfinden")
+    async def wiederfinden_moeglich() -> dict[str, Any]:
+        return {"per_email": post is not None, "telefon": telefon or ""}
+
+    @app.post("/api/wiederfinden")
+    async def wiederfinden(request: Request) -> dict[str, Any]:
+        """Neuer Link per E-Mail an die Adresse, die der Mandant in seiner Aufnahme angegeben hat.
+
+        Die Antwort ist immer dieselbe - sie verrät nicht, ob es zu einer
+        Adresse einen Fall gibt. Der alte Zugang gilt weiter, bis der neue Link
+        geöffnet wird; wer nur die E-Mail-Adresse kennt, sperrt also niemanden aus.
+        """
+        if post is None:
+            raise HTTPException(404, "Das geht hier nicht.")
+        daten = await json_lesen(request)
+        adresse = daten.get("email", "") if isinstance(daten, dict) else ""
+        if not isinstance(adresse, str) or not 3 <= len(adresse) <= 200 or "@" not in adresse:
+            return {"fehler": {"email": "Bitte die E-Mail-Adresse prüfen."}}
+        adresse = adresse.strip().lower()
+        antwort = {"fehler": {}, "gesendet": True}
+        zaehler = "mail#" + hashlib.sha256(adresse.encode()).hexdigest()
+        zeitpunkt = jetzt()
+        anzahl, bis = speicher.fehlversuche(zaehler)
+        if bis is not None and bis > zeitpunkt:
+            return antwort
+        if bis is not None and bis <= zeitpunkt:
+            anzahl = 0
+        treffer = [a for a in speicher.abgeschickte() if mail_von(a).lower() == adresse][:3]
+        if not treffer:
+            return antwort
+        anzahl += 1
+        speicher.fehlversuche_setzen(zaehler, anzahl, zeitpunkt + timedelta(hours=1)
+                                     if anzahl >= WIEDERFINDEN_HOECHSTENS else None, zeitpunkt)
+        links = []
+        for a in treffer:
+            code = speicher.uebergabe_anlegen(a.kennung, zeitpunkt + WIEDERFINDEN_DAUER, trotzdem=True)
+            if code:
+                links.append(f"{a.fallart.titel} vom {a.abgeschlossen_am:%d.%m.%Y}:\n{portal_adresse(request)}#u={code}")
+        try:
+            post.senden(adresse, mails["wiederfinden_betreff"], mails["wiederfinden_text"].format(
+                links="\n\n".join(links), stunden=int(WIEDERFINDEN_DAUER.total_seconds() // 3600), telefon=unter))
+        except Exception:
+            pass
+        return antwort
 
     @app.post("/api/aufnahme/nachricht")
     async def nachricht(request: Request) -> JSONResponse:
@@ -903,6 +969,15 @@ def _sns_melder(thema: str, region: str) -> Callable[[str, str], None] | None:
     return melden
 
 
+def _post(umgebung: Any, region: str) -> Any:
+    """E-Mails an Mandanten nur, wenn ein Absender eingetragen ist (und in SES bestätigt)."""
+    absender = umgebung.get("AKTEDIREKT_ABSENDER", "")
+    if not absender:
+        return None
+    from aktedirekt.post import SesPost
+    return SesPost(absender, umgebung.get("AKTEDIREKT_ABSENDER_NAME", ""), region)
+
+
 def app_aus_umgebung() -> FastAPI:
     """Baut die Anwendung aus den Einstellungen der Umgebung.
 
@@ -920,7 +995,8 @@ def app_aus_umgebung() -> FastAPI:
         jurnodes = jurnodes_aus_geheimnis(_geheimnis(umgebung["AKTEDIREKT_JURNODES_GEHEIMNIS"], region))
         return app_bauen(speicher, partner=partner, jurnodes=jurnodes, basis_url=basis_url,
                          telefon=umgebung.get("AKTEDIREKT_TELEFON", ""),
-                         eingang_melden=_sns_melder(umgebung.get("AKTEDIREKT_EINGANG_THEMA", ""), region))
+                         eingang_melden=_sns_melder(umgebung.get("AKTEDIREKT_EINGANG_THEMA", ""), region),
+                         post=_post(umgebung, region))
     jurnodes = None
     if umgebung.get("AKTEDIREKT_JURNODES_URL"):
         jurnodes = JurNodes(umgebung["AKTEDIREKT_JURNODES_URL"], umgebung["AKTEDIREKT_JURNODES_BENUTZER"],

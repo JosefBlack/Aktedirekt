@@ -30,13 +30,25 @@
     <button type="button" class="karte" data-fallart="unfall"><strong>Verkehrsunfall</strong><span>Unfall melden und Schaden geltend machen</span></button>
     <button type="button" class="karte" data-fallart="kuendigung"><strong>Kündigung erhalten</strong><span>Kündigungsschutz prüfen lassen – es laufen kurze Fristen</span></button>
     <p id="anderes" class="klein"></p>
+    <button type="button" class="verweis" data-wiederfinden>Sie haben schon etwas gemeldet? Fall wiederfinden</button>
   </div>
+  <form id="wiederfinden" novalidate hidden>
+    <h1>Fall wiederfinden</h1>
+    <p>Geben Sie die E-Mail-Adresse ein, die Sie bei Ihrer Meldung angegeben haben. Wir schicken Ihnen sofort einen Link zu Ihrem Fall.</p>
+    <label id="wiederfinden-feld">E-Mail-Adresse<input type="email" name="email" autocomplete="email" inputmode="email"></label>
+    <p class="fehler" data-fehler="email"></p>
+    <p id="wiederfinden-ok" class="gut" hidden>Wenn zu dieser Adresse ein Fall gehört, ist die E-Mail unterwegs. Schauen Sie bitte auch im Spam-Ordner nach.</p>
+    <p id="wiederfinden-tel" class="klein" hidden></p>
+    <button type="submit" class="haupt">Link schicken</button>
+    <button type="button" class="neben" id="wiederfinden-zurueck">Zurück</button>
+  </form>
   <div id="ohne-zugang" hidden>
     <h1>Ihren Fall öffnen</h1>
     <p>Fügen Sie hier Ihren persönlichen Link ein – oder den Link, den Ihnen die Kanzlei geschickt hat.</p>
     <label>Link<input type="text" id="link-eingabe" autocomplete="off" placeholder="https://…"></label>
     <p class="fehler" id="link-fehler"></p>
     <button type="button" class="haupt" id="link-oeffnen">Öffnen</button>
+    <button type="button" class="verweis" data-wiederfinden>Link nicht zur Hand? Per E-Mail wiederfinden</button>
     <p class="klein" id="ohne-zugang-neu">Sie möchten einen neuen Fall melden? <a href="/" id="neu-melden">Hier entlang.</a></p>
   </div>
   <div id="start-inhalt" hidden>

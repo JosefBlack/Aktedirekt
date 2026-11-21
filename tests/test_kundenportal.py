@@ -176,3 +176,65 @@ def test_kanzlei_gibt_dem_mandanten_einen_neuen_zugang(ablage):
     assert client.get("/api/aufnahme", headers=alt).status_code == 401
     assert client.post("/api/aufnahme/uebernahme", json={"code": code}).status_code == 410
     assert client.get("/api/aufnahme", headers={"Authorization": "Bearer " + neu["zugang"]}).status_code == 200
+
+
+def test_eingangsbestaetigung_per_email_mit_den_erklaerungen(ablage):
+    from aktedirekt.post import Postfach
+    post = Postfach()
+    client = TestClient(app_bauen(ablage.speicher, post=post, telefon="040 1", basis_url="https://portal.example",
+                                  jetzt=lambda: JETZT))
+    kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
+    abschicken(client, kopf)
+    assert len(post.gesendet) == 1
+    m = post.gesendet[0]
+    assert m["an"] == "erika@example.org" and "https://portal.example/" in m["text"] and "unter 040 1" in m["text"]
+    assert [a[0] for a in m["anlagen"]] == ["Auftrag und Vollmacht.pdf", "Widerrufsrecht.pdf", "Datenverarbeitung.pdf"]
+    assert all(a[1].startswith(b"%PDF") for a in m["anlagen"])
+    # Keine Angaben zum Fall in der E-Mail.
+    assert "Auffahrunfall" not in m["text"] and "B-XY" not in m["text"]
+
+
+def test_fall_wiederfinden_per_email(ablage):
+    from aktedirekt.post import Postfach
+    post = Postfach()
+    uhr = {"jetzt": JETZT}
+    client = TestClient(app_bauen(ablage.speicher, post=post, basis_url="https://portal.example", jetzt=lambda: uhr["jetzt"]))
+    assert client.get("/api/wiederfinden").json()["per_email"] is True
+    alt = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
+    abschicken(client, alt)
+    post.gesendet.clear()
+    # Unbekannte Adresse: dieselbe Antwort, keine E-Mail.
+    assert client.post("/api/wiederfinden", json={"email": "fremd@example.org"}).json() == {"fehler": {}, "gesendet": True}
+    assert post.gesendet == []
+    assert client.post("/api/wiederfinden", json={"email": "kein-at"}).json()["fehler"]
+    assert client.post("/api/wiederfinden", json={"email": " Erika@Example.org "}).json()["gesendet"] is True
+    m = post.gesendet[0]
+    assert m["an"] == "erika@example.org" and "Verkehrsunfall vom 19.11.2026" in m["text"]
+    code = m["text"].split("#u=")[1].split()[0]
+    # Bis zum Öffnen gilt der alte Zugang weiter - wer nur die Adresse kennt, sperrt niemanden aus.
+    assert client.get("/api/aufnahme", headers=alt).status_code == 200
+    neu = client.post("/api/aufnahme/uebernahme", json={"code": code}).json()
+    assert neu["abgeschlossen"] and client.get("/api/aufnahme", headers=alt).status_code == 401
+    # Höchstens drei je Stunde.
+    for _ in range(4):
+        client.post("/api/wiederfinden", json={"email": "erika@example.org"})
+    assert len(post.gesendet) == 3
+    uhr["jetzt"] = datetime(2026, 11, 19, 11, 1)
+    client.post("/api/wiederfinden", json={"email": "erika@example.org"})
+    assert len(post.gesendet) == 4
+
+
+def test_ohne_email_dienst_kein_wiederfinden(mandant):
+    client, _, _ = mandant
+    assert client.get("/api/wiederfinden").json()["per_email"] is False
+    assert client.post("/api/wiederfinden", json={"email": "a@b.de"}).status_code == 404
+
+
+def test_email_ist_richtig_aufgebaut():
+    from email import message_from_bytes, policy
+    from aktedirekt.post import nachricht
+    roh = nachricht("portal@kanzlei.example", "Kanzlei Beispiel", "a@b.de", "Betreff ü", "Text ä",
+                    [("Widerrufsrecht.pdf", b"%PDF-1.4", "application/pdf")])
+    m = message_from_bytes(roh, policy=policy.default)
+    assert m["From"] == "Kanzlei Beispiel <portal@kanzlei.example>" and m.is_multipart()
+    assert [t.get_filename() for t in m.iter_attachments()] == ["Widerrufsrecht.pdf"]

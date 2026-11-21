@@ -683,6 +683,38 @@ $("#neu-melden").addEventListener("click", (e) => {
   wahl_zeigen();
 });
 
+// ---- Fall wiederfinden per E-Mail -----------------------------------------
+
+const wieder = $("#wiederfinden");
+async function wiederfinden_zeigen() {
+  for (const id of ["wahl", "start-inhalt", "ohne-zugang"]) $("#" + id).hidden = true;
+  wieder.hidden = false;
+  $("#wiederfinden-ok").hidden = true;
+  try {
+    const d = await aufruf("GET", "/api/wiederfinden");
+    $("button.haupt", wieder).hidden = !d.per_email;
+    $("#wiederfinden-feld").hidden = !d.per_email;
+    $("#wiederfinden-tel").hidden = d.per_email;
+    $("#wiederfinden-tel").textContent = d.per_email ? "" : "Bitte rufen Sie uns an" + (d.telefon ? " unter " + d.telefon : "") + " – wir schicken Ihnen einen neuen Link.";
+  } catch (e) { /* dann eben mit Formular */ }
+  window.scrollTo(0, 0);
+}
+for (const k of $$("[data-wiederfinden]")) k.addEventListener("click", wiederfinden_zeigen);
+$("#wiederfinden-zurueck").addEventListener("click", () => {
+  wieder.hidden = true;
+  if (ALS_APP && !zustand) $("#ohne-zugang").hidden = false; else wahl_zeigen();
+});
+wieder.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  sperren(wieder, true);
+  try {
+    const antwort = await aufruf("POST", "/api/wiederfinden", { email: $('[name="email"]', wieder).value });
+    fehler_zeigen(wieder, antwort.fehler || {});
+    $("#wiederfinden-ok").hidden = !antwort.gesendet;
+  } catch (fehler) { melden(fehler.message); }
+  sperren(wieder, false);
+});
+
 (async function beginnen() {
   try { zugang = localStorage.getItem(MERKER) || ""; } catch (e) { zugang = ""; }
   // Persönlicher Link von einem anderen Gerät: Zugang übernehmen.

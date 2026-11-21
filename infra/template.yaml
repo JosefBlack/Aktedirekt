@@ -32,6 +32,19 @@ Parameters:
     Type: String
     Default: ""
     Description: Die Nummer, die Mandanten in Hinweisen genannt wird (etwa bei knapper Klagefrist). Leer lassen, dann steht dort keine.
+  Absender:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$"
+    Description: >
+      Absenderadresse für E-Mails an Mandanten (Eingangsbestätigung mit
+      Widerrufsbelehrung, Link zum Wiederfinden), etwa portal@kanzlei.de. Leer:
+      keine E-Mails an Mandanten. Ihre Domain wird in Amazon SES angelegt; die
+      drei DKIM-Einträge aus den Ausgaben gehören in das DNS der Domain.
+  AbsenderName:
+    Type: String
+    Default: ""
+    Description: Name, der als Absender erscheint (etwa der Name der Kanzlei).
   AbgleichMinuten:
     Type: Number
     Default: 15
@@ -40,6 +53,7 @@ Parameters:
 
 Conditions:
   MitBasisUrl: !Not [!Equals [!Ref BasisUrl, ""]]
+  MitAbsender: !Not [!Equals [!Ref Absender, ""]]
 
 Globals:
   Function:
@@ -56,8 +70,20 @@ Globals:
         AKTEDIREKT_BASIS_URL: !Ref BasisUrl
         AKTEDIREKT_TELEFON: !Ref KanzleiTelefon
         AKTEDIREKT_EINGANG_THEMA: !Ref EingangThema
+        AKTEDIREKT_ABSENDER: !Ref Absender
+        AKTEDIREKT_ABSENDER_NAME: !Ref AbsenderName
 
 Resources:
+  # ── E-Mail-Versand (Amazon SES) ──────────────────────────────────────────
+  # Die Domain der Absenderadresse; bestätigt ist sie, sobald die drei
+  # DKIM-Einträge im DNS stehen. Bis SES das Konto für den Versand an beliebige
+  # Adressen freigibt ("Produktionszugang"), gehen E-Mails nur an bestätigte Adressen.
+  AbsenderDomain:
+    Type: AWS::SES::EmailIdentity
+    Condition: MitAbsender
+    Properties:
+      EmailIdentity: !Select [1, !Split ["@", !Ref Absender]]
+
   # ── Schlüssel und Geheimnisse ────────────────────────────────────────────
   Schluessel:
     Type: AWS::KMS::Key
@@ -250,6 +276,14 @@ Resources:
               Effect: Allow
               Action: sns:Publish
               Resource: !Ref EingangThema
+            # E-Mails an Mandanten - nur mit der eingetragenen Absenderadresse.
+            - Sid: EMails
+              Effect: Allow
+              Action: [ses:SendEmail, ses:SendRawEmail]
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  ses:FromAddress: !If [MitAbsender, !Ref Absender, "keine@absender.invalid"]
             - Sid: Dateien
               Effect: Allow
               Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
@@ -413,3 +447,11 @@ Outputs:
     Value: !Ref JurNodesGeheimnis
   PartnerGeheimnis:
     Value: !Ref PartnerGeheimnis
+  DkimEintraege:
+    Condition: MitAbsender
+    Description: Drei CNAME-Einträge für das DNS der Absender-Domain (Name -> Ziel).
+    Value: !Join
+      - " | "
+      - - !Sub "${AbsenderDomain.DkimDNSTokenName1} -> ${AbsenderDomain.DkimDNSTokenValue1}"
+        - !Sub "${AbsenderDomain.DkimDNSTokenName2} -> ${AbsenderDomain.DkimDNSTokenValue2}"
+        - !Sub "${AbsenderDomain.DkimDNSTokenName3} -> ${AbsenderDomain.DkimDNSTokenValue3}"

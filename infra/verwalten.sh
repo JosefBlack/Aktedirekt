@@ -12,6 +12,10 @@
 #   bash verwalten.sh jurnodes             trägt den Zugang zu jur|nodes ein (fragt Adresse, Benutzer und
 #                                          Schlüssel ab; der Schlüssel erscheint nicht auf dem Bildschirm)
 #   bash verwalten.sh jurnodes-aus         nimmt den Zugang wieder heraus; das Portal meldet dann nichts mehr
+#   bash verwalten.sh absender <Adresse> ["Name"]  E-Mails an Mandanten einschalten (Amazon SES), etwa
+#                                          portal@kanzlei.de; zeigt danach die drei DNS-Einträge
+#   bash verwalten.sh email-stand          zeigt, ob SES die Domain bestätigt hat und frei versenden darf
+#   bash verwalten.sh email-probe <Adresse> schickt eine Probe-E-Mail an diese Adresse
 #   bash verwalten.sh jurnodes-probe       fragt jur|nodes probeweise ab und zeigt, wie der Server antwortet -
 #                                          Status und Namen der Felder, keine Inhalte. Mit dem Zusatz "anlegen"
 #                                          entsteht dabei genau ein Probe-Lead samt einer kleinen Datei.
@@ -105,12 +109,64 @@ PY
 )"
     python3 "$(dirname "$0")/jurnodes_probe.py" ${KENNUNG:+"$KENNUNG"}
     ;;
+  absender)
+    [ -n "$KENNUNG" ] || { echo "Bitte die Absenderadresse angeben, etwa: bash aktedirekt/verwalten.sh absender portal@kanzlei.de \"Kanzlei Muster\""; exit 1; }
+    # Die übrigen Einstellungen bleiben, wie sie sind; der Name darf Leerzeichen enthalten.
+    python3 -c 'import json, sys
+werte = [{"ParameterKey": "Absender", "ParameterValue": sys.argv[2]},
+         {"ParameterKey": "AbsenderName", "ParameterValue": sys.argv[3]}]
+werte += [{"ParameterKey": p, "UsePreviousValue": True}
+          for p in ("Stufe", "AlarmEmail", "BudgetUsd", "BasisUrl", "KanzleiTelefon", "AbgleichMinuten")]
+json.dump(werte, open(sys.argv[1], "w"))' "$NEU" "$KENNUNG" "${3:-}"
+    echo "== Absender $KENNUNG wird eingetragen (dauert wenige Minuten)"
+    aws cloudformation update-stack --stack-name "$STACK" --use-previous-template \
+      --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --parameters "file://$NEU" >/dev/null
+    aws cloudformation wait stack-update-complete --stack-name "$STACK" || {
+      echo "!! Das hat nicht geklappt. Gründe laut AWS:"
+      aws cloudformation describe-stack-events --stack-name "$STACK" --output text \
+        --query "StackEvents[?contains(ResourceStatus, 'FAILED')].[LogicalResourceId, ResourceStatusReason]" | head -8
+      exit 1; }
+    "$0" email-stand
+    ;;
+  email-stand)
+    ABS=$(aws cloudformation describe-stacks --stack-name "$STACK" \
+      --query "Stacks[0].Parameters[?ParameterKey=='Absender'].ParameterValue" --output text)
+    if [ -z "$ABS" ] || [ "$ABS" = "None" ]; then echo "Es ist kein Absender eingetragen."; exit 0; fi
+    DOMAIN="${ABS#*@}"
+    echo "Absender: $ABS"
+    echo
+    echo "Diese drei Einträge gehören in das DNS von $DOMAIN (Typ CNAME, Name -> Ziel):"
+    aws sesv2 get-email-identity --email-identity "$DOMAIN" --query "DkimAttributes.Tokens" --output text | tr '\t' '\n' | \
+      while read -r T; do [ -n "$T" ] && echo "  $T._domainkey.$DOMAIN  ->  $T.dkim.amazonses.com"; done
+    echo
+    STAND=$(aws sesv2 get-email-identity --email-identity "$DOMAIN" --query "DkimAttributes.Status" --output text)
+    case "$STAND" in
+      SUCCESS) echo "Domain: bestätigt.";;
+      PENDING) echo "Domain: noch nicht bestätigt - SES wartet auf die DNS-Einträge (kann nach dem Eintragen bis zu 72 Stunden dauern, meist weniger als eine).";;
+      *)       echo "Domain: $STAND - bitte die DNS-Einträge prüfen.";;
+    esac
+    FREI=$(aws sesv2 get-account --query "ProductionAccessEnabled" --output text)
+    if [ "$FREI" = "True" ]; then
+      echo "Versand: frei an alle Adressen."
+    else
+      echo "Versand: noch eingeschränkt (Sandbox) - E-Mails gehen nur an bestätigte Adressen."
+      echo "         Freigabe beantragen: AWS-Konsole -> Amazon SES -> Account dashboard -> Request production access."
+    fi
+    ;;
+  email-probe)
+    [ -n "$KENNUNG" ] || { echo "Bitte die Empfängeradresse angeben."; exit 1; }
+    ABS=$(aws cloudformation describe-stacks --stack-name "$STACK" \
+      --query "Stacks[0].Parameters[?ParameterKey=='Absender'].ParameterValue" --output text)
+    aws sesv2 send-email --from-email-address "$ABS" --destination "ToAddresses=$KENNUNG" \
+      --content "Simple={Subject={Data=Probe Aktedirekt,Charset=UTF-8},Body={Text={Data=Diese E-Mail kommt aus dem Portal Aktedirekt. Wenn sie angekommen ist - auch nicht im Spam-Ordner -, funktioniert der Versand.,Charset=UTF-8}}}" \
+      >/dev/null && echo "Verschickt an $KENNUNG - bitte auch im Spam-Ordner nachsehen."
+    ;;
   jurnodes-aus)
     aws secretsmanager put-secret-value --secret-id "$(ausgabe JurNodesGeheimnis)" \
       --secret-string '{"url": "", "benutzer": "", "schluessel": ""}' >/dev/null
     echo "Der Zugang ist herausgenommen. Neue Eingänge bleiben im Portal vorgemerkt."
     ;;
   *)
-    echo "Aufruf: bash verwalten.sh kennwort <Kennung> | faktor <Kennung> | liste | partner-neu | partner-aus <Kennung> | vermittler <Kennung> | jurnodes | jurnodes-aus | jurnodes-probe [anlegen]"; exit 1
+    echo "Aufruf: bash verwalten.sh kennwort <Kennung> | faktor <Kennung> | liste | absender <Adresse> [Name] | email-stand | email-probe <Adresse> | partner-neu | partner-aus <Kennung> | vermittler <Kennung> | jurnodes | jurnodes-aus | jurnodes-probe [anlegen]"; exit 1
     ;;
 esac

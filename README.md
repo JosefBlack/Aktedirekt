@@ -136,9 +136,13 @@ Platzhalter.** Der Wortlaut der Kanzlei gehört nicht hierher: Er liegt beim Bau
 des Pakets im Ordner `kanzlei-texte/` (nicht eingecheckt) und ersetzt dort die
 gleichnamigen Dateien.
 
-Offen: Die Widerrufsbelehrung muss dem Mandanten dauerhaft zur Verfügung
-stehen. Bisher kann er sie nur selbst als PDF speichern; ein Versand per E-Mail
-fehlt noch.
+Ist ein Absender eingetragen (Amazon SES, `verwalten.sh absender`), bekommt der
+Mandant nach dem Abschicken eine Eingangsbestätigung per E-Mail mit Vollmacht,
+Widerrufsbelehrung und Hinweisen zur Datenverarbeitung als PDF - auf einem
+dauerhaften Datenträger. Über „Fall wiederfinden" schickt ihm das Portal auf
+Wunsch einen neuen Link an die Adresse aus seiner Aufnahme. In keiner E-Mail
+stehen Angaben zum Fall. Die Texte stehen in `aktedirekt/texte/mail.json`
+(Entwurf).
 
 ## Statusseite des Mandanten
 
