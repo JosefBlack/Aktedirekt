@@ -128,6 +128,45 @@ async function datei_oeffnen(fall, datei) {
   setTimeout(() => URL.revokeObjectURL(verweis.href), 60000);
 }
 
+// Hat der Mandant seinen Link verloren (neues Handy, Verlauf gelöscht), bekommt er
+// hier einen neuen - per SMS, WhatsApp oder E-Mail aus der Kanzlei verschickt.
+function zugang_bauen(fall) {
+  const kasten = teil("div", "anfordern nicht-drucken");
+  kasten.append(teil("h2", "", "Neuer Zugang für den Mandanten"));
+  kasten.append(teil("p", "klein", "Wenn der Mandant seine Seite nicht mehr findet: Link erzeugen und ihm schicken. "
+    + "Er gilt eine Woche und nur einmal; der bisherige Zugang erlischt, sobald der Mandant den neuen Link öffnet."));
+  const knopf = teil("button", "schlicht rand", "Neuen Link erzeugen");
+  knopf.type = "button";
+  const ergebnis = teil("div", "neuer-zugang");
+  ergebnis.hidden = true;
+  knopf.addEventListener("click", async () => {
+    knopf.disabled = true;
+    try {
+      const z = await aufruf("POST", "/api/kanzlei/eingaenge/" + fall + "/zugang");
+      ergebnis.textContent = "";
+      const feld = document.createElement("input");
+      feld.type = "text";
+      feld.readOnly = true;
+      feld.value = z.link;
+      const kopieren = teil("button", "schlicht rand", "Kopieren");
+      kopieren.type = "button";
+      kopieren.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(z.link); kopieren.textContent = "Kopiert"; }
+        catch (e) { feld.select(); }
+      });
+      const bild = document.createElement("img");
+      bild.src = z.qr;
+      bild.alt = "QR-Code mit dem neuen Link";
+      bild.className = "qr";
+      ergebnis.append(feld, kopieren, teil("p", "klein", "Gültig bis " + zeitpunkt(z.gueltig_bis) + ". Zum Abscannen, wenn der Mandant in der Kanzlei ist:"), bild);
+      ergebnis.hidden = false;
+    } catch (fehler) { gescheitert(fehler); }
+    knopf.disabled = false;
+  });
+  kasten.append(knopf, ergebnis);
+  return kasten;
+}
+
 // Unterlagen beim Mandanten anfordern: Er sieht die Punkte oben auf seiner Seite.
 function anforderung_bauen(fall, e) {
   const kasten = teil("div", "anfordern nicht-drucken");
@@ -204,6 +243,7 @@ async function eingang_laden(fall) {
   } else blatt.append(teil("p", "leer", "keine"));
 
   blatt.append(anforderung_bauen(fall, e));
+  blatt.append(zugang_bauen(fall));
 
   blatt.append(teil("h2", "", "Auftrag und Unterschrift"));
   blatt.append(zeilen([["Unterschrieben am", zeitpunkt(e.nachweis.zeitpunkt)], ["Gerät", e.nachweis.geraet]]));

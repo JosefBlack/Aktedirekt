@@ -155,3 +155,24 @@ def test_kanzlei_fordert_unterlagen_an_und_sieht_was_nachkommt(ablage):
     # Zurücknehmen
     assert client.put(pfad, json={"punkte": [], "text": ""}, headers=k).json()["anforderung"] is None
     assert client.get("/api/aufnahme", headers=kopf).json()["anforderung"] is None
+
+
+def test_kanzlei_gibt_dem_mandanten_einen_neuen_zugang(ablage):
+    from aktedirekt.partner import Partnerliste
+    from tests.test_kuendigung import KONTEN, kanzlei
+    client = TestClient(app_bauen(ablage.speicher, partner=Partnerliste(list(KONTEN)), jetzt=lambda: JETZT))
+    alt = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
+    abschicken(client, alt)
+    fall = zustand_kennung(ablage, alt)
+    assert client.post(f"/api/kanzlei/eingaenge/{fall}/zugang").status_code == 401
+    k = kanzlei(client)
+    for _ in range(2):                                     # auch ein zweites Mal - der erste Code verfällt dabei
+        antwort = client.post(f"/api/kanzlei/eingaenge/{fall}/zugang", headers=k).json()
+    code = antwort["link"].split("#u=")[1]
+    assert antwort["qr"].startswith("data:image/svg+xml") and antwort["gueltig_bis"] == "2026-11-26T10:00"
+    neu = client.post("/api/aufnahme/uebernahme", json={"code": code}).json()
+    assert neu["abgeschlossen"] is True and neu["zugang"]
+    # Der alte Zugang (verlorenes Handy) gilt nicht mehr, der Code nur einmal.
+    assert client.get("/api/aufnahme", headers=alt).status_code == 401
+    assert client.post("/api/aufnahme/uebernahme", json={"code": code}).status_code == 410
+    assert client.get("/api/aufnahme", headers={"Authorization": "Bearer " + neu["zugang"]}).status_code == 200

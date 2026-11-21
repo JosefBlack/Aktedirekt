@@ -541,6 +541,7 @@ function nachrichten_zeigen() {
 }
 
 function fertig() {
+  als_app_hinweis();
   const neu = !zustand.sachstand || zustand.sachstand === "Aufgenommen";
   $("#fertig-titel").textContent = neu ? "Vielen Dank" : "Ihr Fall";
   $("#fertig-dank").hidden = !neu;
@@ -636,6 +637,52 @@ for (const knopf of $$("[data-fallart]")) {
   knopf.addEventListener("click", () => { gewaehlt = knopf.dataset.fallart; start_zeigen(gewaehlt); window.scrollTo(0, 0); });
 }
 
+// ---- Als App auf dem Startbildschirm --------------------------------------
+
+const ALS_APP = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let einbauen = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  einbauen = e;
+  $("#installieren").hidden = false;
+  $("#anleitung-android").hidden = true;
+});
+$("#installieren").addEventListener("click", async () => {
+  if (!einbauen) return;
+  einbauen.prompt();
+  try { await einbauen.userChoice; } catch (e) { /* egal */ }
+  einbauen = null;
+  $("#installieren").hidden = true;
+});
+function als_app_hinweis() {
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  $("#als-app").hidden = ALS_APP;
+  $("#anleitung-ios").hidden = !ios;
+  $("#anleitung-android").hidden = ios || !!einbauen;
+}
+
+// Im App-Symbol ohne gespeicherten Zugang (auf dem iPhone hat das Symbol einen
+// eigenen Speicher): Link einfügen statt von vorn beginnen.
+function link_uebernehmen(text) {
+  const wert = (text || "").trim();
+  const stelle = wert.indexOf("#");
+  const teile = new URLSearchParams(stelle >= 0 ? wert.slice(stelle + 1) : "");
+  if (teile.get("z") || teile.get("u")) {
+    location.hash = stelle >= 0 ? wert.slice(stelle + 1) : "";
+    location.reload();
+    return true;
+  }
+  return false;
+}
+$("#link-oeffnen").addEventListener("click", () => {
+  $("#link-fehler").textContent = link_uebernehmen($("#link-eingabe").value) ? "" : "Das ist kein Link zu Ihrem Fall. Bitte den ganzen Link einfügen.";
+});
+$("#neu-melden").addEventListener("click", (e) => {
+  e.preventDefault();
+  $("#ohne-zugang").hidden = true;
+  wahl_zeigen();
+});
+
 (async function beginnen() {
   try { zugang = localStorage.getItem(MERKER) || ""; } catch (e) { zugang = ""; }
   // Persönlicher Link von einem anderen Gerät: Zugang übernehmen.
@@ -655,6 +702,7 @@ for (const knopf of $$("[data-fallart]")) {
       zugang = zustand.zugang;
       try { localStorage.setItem(MERKER, zugang); } catch (e) { /* privates Fenster */ }
       uebernehmen();
+      if (zustand.abgeschlossen) return fertig();
       return zeigen("start");
     } catch (fehler) {
       zustand = null;
@@ -672,6 +720,12 @@ for (const knopf of $$("[data-fallart]")) {
       if (fehler.status === 401) { zugang = ""; try { localStorage.removeItem(MERKER); } catch (e) { /* egal */ } }
       else melden(fehler.message);
     }
+  }
+  if (!zustand && ALS_APP) {
+    $("#ohne-zugang").hidden = false;
+    $("#wahl").hidden = true;
+    $("#start-inhalt").hidden = true;
+    return zeigen("start");
   }
   if (!zustand) await wahl_zeigen();
   zeigen("start");

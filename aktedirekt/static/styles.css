@@ -139,3 +139,5 @@ form[data-seite="abschluss"] h2 { margin-top: 30px; }
 .anforderung ul { margin: 6px 0 0; }
 .anforderung li.erledigt { color: var(--gut); }
 .anforderung p { margin: 6px 0 0; }
+#link-fehler:empty { display: none; }
+#ohne-zugang a { color: var(--marke); }

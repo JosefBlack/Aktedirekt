@@ -217,16 +217,16 @@ class AwsSpeicher:
             "angaben": {}, "vom_partner": angaben, "sachstand": "aufgenommen"})
         return Aufnahme(kennung=kennung, angelegt_am=jetzt, partner=partner, vom_partner=angaben)
 
-    def uebergabe_anlegen(self, kennung: str, laeuft_ab: datetime) -> str | None:
+    def uebergabe_anlegen(self, kennung: str, laeuft_ab: datetime, trotzdem: bool = False) -> str | None:
         e = self._roh(kennung)
-        if not e or e.get("uebernommen"):
+        if not e or (e.get("uebernommen") and not trotzdem):
             return None
         code = secrets.token_urlsafe(24)
         summe = _pruefsumme(code)
         # Erst die Aufnahme auf den neuen Code zeigen lassen - und nur, wenn der
         # Kunde nicht gerade in diesem Augenblick übernommen hat.
         if not self._aendern(kennung, "SET uebergabe_sha = :u", {":u": summe},
-                             "attribute_exists(pk) AND attribute_not_exists(uebernommen)"):
+                             "attribute_exists(pk)" + ("" if trotzdem else " AND attribute_not_exists(uebernommen)")):
             return None
         if e.get("uebergabe_sha"):
             self._tabelle.delete_item(Key={"pk": f"U#{e['uebergabe_sha']}", "sk": "U"})
@@ -254,6 +254,9 @@ class AwsSpeicher:
         if not e or e.get("uebergabe_sha") != summe:
             return ""
         zugang = secrets.token_urlsafe(32)
+        if e.get("zugang_sha"):
+            # Der bisherige Zugang (etwa auf einem verlorenen Handy) gilt ab jetzt nicht mehr.
+            self._tabelle.delete_item(Key={"pk": f"Z#{e['zugang_sha']}", "sk": "Z"})
         self._tabelle.put_item(Item={"pk": f"Z#{_pruefsumme(zugang)}", "sk": "Z", "aufnahme": kennung})
         self._aendern(kennung, "SET zugang_sha = :z, uebernommen = :ja",
                       {":z": _pruefsumme(zugang), ":ja": True})

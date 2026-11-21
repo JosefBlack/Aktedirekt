@@ -31,6 +31,14 @@
     <button type="button" class="karte" data-fallart="kuendigung"><strong>Kündigung erhalten</strong><span>Kündigungsschutz prüfen lassen – es laufen kurze Fristen</span></button>
     <p id="anderes" class="klein"></p>
   </div>
+  <div id="ohne-zugang" hidden>
+    <h1>Ihren Fall öffnen</h1>
+    <p>Fügen Sie hier Ihren persönlichen Link ein – oder den Link, den Ihnen die Kanzlei geschickt hat.</p>
+    <label>Link<input type="text" id="link-eingabe" autocomplete="off" placeholder="https://…"></label>
+    <p class="fehler" id="link-fehler"></p>
+    <button type="button" class="haupt" id="link-oeffnen">Öffnen</button>
+    <p class="klein" id="ohne-zugang-neu">Sie möchten einen neuen Fall melden? <a href="/" id="neu-melden">Hier entlang.</a></p>
+  </div>
   <div id="start-inhalt" hidden>
     <h1 id="start-titel"></h1>
     <p id="partnerhinweis" class="hinweis" hidden></p>
@@ -215,6 +223,13 @@
     <ul id="unterlagenliste" class="abschnitte"></ul>
   </div>
 
+  <div id="als-app" class="als-app">
+    <h2>Als App aufs Handy</h2>
+    <p class="klein">Legen Sie diese Seite als Symbol auf Ihren Startbildschirm – dann ist Ihr Fall immer nur einen Tipp entfernt.</p>
+    <button type="button" class="neben" id="installieren" hidden>Auf den Startbildschirm legen</button>
+    <p id="anleitung-ios" class="klein" hidden>iPhone: unten auf <strong>Teilen</strong> (Quadrat mit Pfeil) tippen, dann <strong>„Zum Home-Bildschirm“</strong>. Öffnen Sie danach einmal Ihren persönlichen Link (unten) im neuen Symbol.</p>
+    <p id="anleitung-android" class="klein" hidden>Android: oben rechts auf <strong>⋮</strong> tippen, dann <strong>„Zum Startbildschirm hinzufügen“</strong> oder <strong>„App installieren“</strong>.</p>
+  </div>
   <h2>Diese Seite wiederfinden</h2>
   <p class="klein">Ihr Zugang ist auf diesem Gerät gespeichert. Auf einem anderen Gerät oder nach einem Gerätewechsel öffnen Sie Ihren Fall mit Ihrem persönlichen Link. Bewahren Sie ihn auf wie ein Passwort – wer ihn hat, sieht Ihre Angaben.</p>
   <button type="button" class="neben" id="link-sichern">Persönlichen Link kopieren</button>

@@ -63,6 +63,7 @@ _PNG = b"\x89PNG\r\n\x1a\n"
 SITZUNG_DAUER = timedelta(hours=8)
 # So lange kann der Kunde den Code vom Tresen auf seinem Gerät einlösen.
 UEBERGABE_DAUER = timedelta(hours=72)
+NEUER_ZUGANG_DAUER = timedelta(days=7)
 # So lange kann ein Partner eine versehentlich eingereichte Unterlage selbst zurücknehmen.
 ENTFERNEN_FRIST = timedelta(hours=24)
 
@@ -604,9 +605,14 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             raise HTTPException(401, "Bitte anmelden.")
         return konto
 
-    def uebergabe(aufnahme: Aufnahme, request: Request) -> dict[str, str] | None:
-        """Link und QR-Code für den Kunden - ``None``, wenn er schon übernommen hat."""
-        code = speicher.uebergabe_anlegen(aufnahme.kennung, jetzt() + UEBERGABE_DAUER)
+    def uebergabe(aufnahme: Aufnahme, request: Request, trotzdem: bool = False) -> dict[str, str] | None:
+        """Link und QR-Code für den Kunden - ``None``, wenn er schon übernommen hat.
+
+        ``trotzdem``: Die Kanzlei gibt einem Mandanten, der seinen Zugang
+        verloren hat, einen neuen. Er gilt eine Woche und nur einmal.
+        """
+        code = speicher.uebergabe_anlegen(aufnahme.kennung, jetzt() + (NEUER_ZUGANG_DAUER if trotzdem else UEBERGABE_DAUER),
+                                          trotzdem=trotzdem)
         if code is None:
             return None
         # Der Code steht hinter dem #: Dieser Teil der Adresse wird nicht an den
@@ -782,6 +788,15 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 "einwilligung_partner": aufnahme.einwilligung_partner
                                         and aufnahme.einwilligung_widerrufen_am is None,
                 "checkliste": checkliste(aufnahme), "anforderung": anforderung(aufnahme)}
+
+    @app.post("/api/kanzlei/eingaenge/{fall}/zugang")
+    async def neuer_zugang(fall: str, request: Request) -> dict[str, str]:
+        """Neuer Link für einen Mandanten, der seinen verloren hat. Der alte erlischt beim Einlösen."""
+        aufnahme = eingang_von(fall, request)
+        neu = uebergabe(aufnahme, request, trotzdem=True)
+        if neu is None:
+            raise HTTPException(409, "Das hat nicht geklappt. Bitte noch einmal versuchen.")
+        return {**neu, "gueltig_bis": (jetzt() + NEUER_ZUGANG_DAUER).isoformat(timespec="minutes")}
 
     @app.put("/api/kanzlei/eingaenge/{fall}/anforderung")
     async def anfordern(fall: str, request: Request) -> dict[str, Any]:

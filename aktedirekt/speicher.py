@@ -232,18 +232,20 @@ class Speicher:
                         json.dumps(angaben, ensure_ascii=False)))
         return Aufnahme(kennung=kennung, angelegt_am=jetzt, partner=partner, vom_partner=angaben)
 
-    def uebergabe_anlegen(self, kennung: str, laeuft_ab: datetime) -> str | None:
+    def uebergabe_anlegen(self, kennung: str, laeuft_ab: datetime, trotzdem: bool = False) -> str | None:
         """Ein neuer Übergabecode; frühere werden ungültig.
 
         ``None``, wenn der Kunde die Aufnahme schon auf sein Gerät genommen hat:
-        Danach gibt es für den Partner keinen Weg mehr hinein.
+        Danach gibt es für den Partner keinen Weg mehr hinein. ``trotzdem``: für
+        die Kanzlei, wenn der Mandant seinen Zugang verloren hat - Einlösen
+        ersetzt dann den alten Zugang.
         """
         code = secrets.token_urlsafe(24)
         with closing(self._db()) as db, db:
-            if db.execute("SELECT 1 FROM uebergabe WHERE aufnahme = ? AND eingeloest_am IS NOT NULL",
-                          (kennung,)).fetchone():
+            if not trotzdem and db.execute("SELECT 1 FROM uebergabe WHERE aufnahme = ? AND eingeloest_am IS NOT NULL",
+                                           (kennung,)).fetchone():
                 return None
-            db.execute("DELETE FROM uebergabe WHERE aufnahme = ?", (kennung,))
+            db.execute("DELETE FROM uebergabe WHERE aufnahme = ? AND eingeloest_am IS NULL", (kennung,))
             db.execute("INSERT INTO uebergabe VALUES (?,?,?,NULL)",
                        (_pruefsumme(code), kennung, laeuft_ab.isoformat()))
         return code
