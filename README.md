@@ -170,8 +170,11 @@ das Portal nicht ab; es fragt nur, ob es ein Gutachten gibt.
   eine Quelle (`?quelle=website`), die Kanzlei sieht sie bei jedem Eingang.
 * In der Fallliste der Werkstatt: ein Aushang (PDF) für den Tresen mit dem
   QR-Code zu ihrem Kundenlink.
-* Der Unfall beginnt immer im Bildfragebogen (`/dialog`); `?formular=1` zeigt
-  die bisherigen Formularseiten.
+* Unfall und Kündigung beginnen im Bildfragebogen (`/dialog`); `?formular=1`
+  zeigt die bisherigen Formularseiten. Die Fragen der Kündigung kommen aus dem
+  Fragebogen in `aufnahme.py` (eine Frage je Bildschirm, Kontaktdaten und
+  Arbeitgeber gesammelt); der Hinweis zur Klagefrist erscheint im Gespräch, das
+  Kündigungsschreiben wird gleich nach den ersten vier Fragen fotografiert.
 
 ## Statusseite des Mandanten
 

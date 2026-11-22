@@ -660,7 +660,8 @@ $("#los").addEventListener("click", async () => {
     }
     const offen = SEITEN.slice(1, -2).find((s) => s !== "fotos" && !zustand.angaben[s]);
     // Der Unfall beginnt im Bildfragebogen; sind Unfall, Fahrzeug und Gegenseite schon da, geht es hier weiter.
-    if (zustand.art === "unfall" && ["unfall", "fahrzeug", "gegner"].includes(offen) && !NUR_FORMULAR) {
+    const im_dialog = zustand.art === "unfall" ? ["unfall", "fahrzeug", "gegner"] : (zustand.ablauf || []);
+    if (im_dialog.includes(offen) && !NUR_FORMULAR) {
       location.href = "/dialog";
       return;
     }

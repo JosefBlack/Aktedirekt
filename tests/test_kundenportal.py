@@ -333,3 +333,11 @@ def test_herkunft_aus_dem_link_und_bausteine_fuer_die_website(ablage):
     qr = client.get("/einbinden/qr.svg?ziel=kuendigung&quelle=flyer")
     assert qr.status_code == 200 and qr.headers["content-type"].startswith("image/svg+xml") and b"<svg" in qr.content and b"xmlns" in qr.content
     assert client.get("/einbinden/qr.svg?ziel=x&quelle=flyer").status_code == 400
+
+
+def test_bildfragebogen_kuendigung_bekommt_pflichtangaben_vom_server(ablage):
+    client = TestClient(app_bauen(ablage.speicher, jetzt=lambda: JETZT))
+    zustand = client.post("/api/aufnahme", json={"art": "kuendigung"}).json()
+    felder = {f["name"]: f for a in zustand["schritt_felder"] for f in a["felder"]}
+    assert felder["erhalten_am"]["pflicht"] is True and felder["arbeitsort"]["pflicht"] is False
+    assert felder["rechtsschutz_versicherer"]["zeige_wenn"] == ["rechtsschutz", "ja"]

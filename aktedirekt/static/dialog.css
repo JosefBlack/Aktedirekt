@@ -73,3 +73,7 @@ canvas.skizze { display: block; width: 100%; aspect-ratio: 3 / 2; border: 2px so
 .chip i.punkt-0 { background: #2f6fb0; }
 .chip i.punkt-1 { background: #e8a33d; }
 .chip i.punkt-2 { background: #1d2733; }
+
+.chat .blase.hinweis { max-width: 100%; border-left: 5px solid var(--akzent); font-size: 15px; }
+.chat .blase.hinweis.warnung { border-left-color: var(--fehler); font-weight: 600; }
+.eingabe label .fehler, .frage label .fehler { display: block; font-weight: 400; }

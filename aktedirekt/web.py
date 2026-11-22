@@ -88,7 +88,7 @@ def _text(name: str) -> str:
 
 def _feld(f: Feld) -> dict[str, Any]:
     return {"name": f.name, "art": f.art, "bezeichnung": f.bezeichnung, "hinweis": f.hinweis,
-            "laenge": f.laenge, "auswahl": list(f.auswahl),
+            "laenge": f.laenge, "auswahl": list(f.auswahl), "pflicht": f.pflicht,
             "zeige_wenn": list(f.zeige_wenn) if f.zeige_wenn else None}
 
 

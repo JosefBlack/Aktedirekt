@@ -79,6 +79,10 @@ const STELLEN = [["vorne_links", "vorne links"], ["vorne", "vorne"], ["vorne_rec
   ["links", "linke Seite"], ["dach", "Dach"], ["rechts", "rechte Seite"],
   ["hinten_links", "hinten links"], ["hinten", "hinten"], ["hinten_rechts", "hinten rechts"]];
 
+const ABSCHNITTE = { unfall: "Der Unfall", fahrzeug: "Ihr Fahrzeug", gegner: "Die Gegenseite" };
+let ART = "unfall";
+let hinweise = [];           // Hinweise des Servers, etwa zur Klagefrist
+
 const FRAGEN = [
   // Unfall
   { id: "datum", schritt: "unfall", feld: "unfalldatum", art: "datum", frage: "Wann war der Unfall?" },
@@ -131,7 +135,7 @@ function kopf_setzen(f, rueckwaerts) {
   $("#zaehler").textContent = nr ? `${nr} von ${liste.length}` : "";
   $("#fortschritt").style.width = (100 * (nr - 1) / liste.length) + "%";
   $("#zurueck").hidden = verlauf.length < 2;
-  $("#titel").textContent = { unfall: "Der Unfall", fahrzeug: "Ihr Fahrzeug", gegner: "Die Gegenseite" }[f.schritt];
+  $("#titel").textContent = ABSCHNITTE[f.schritt] || "";
 }
 
 // Variante "Gespräch": dieselben Fragen als Sprechblasen; das Beantwortete bleibt stehen.
@@ -139,7 +143,7 @@ function kopf_setzen(f, rueckwaerts) {
 const CHAT = new URLSearchParams(location.search).get("stil") !== "karten";
 if (CHAT) document.body.classList.add("chat");
 
-const ABSCHNITTE = { unfall: "Der Unfall", fahrzeug: "Ihr Fahrzeug", gegner: "Die Gegenseite" };
+
 
 function frage_text(f) { return f.art === "rolle" ? ROLLEN[antworten.unfallart][0] : f.frage; }
 
@@ -157,6 +161,8 @@ function antwort_text(f) {
   if (f.art === "unfallart") return (ARTEN.find((a) => a.wert === w) || {}).titel || w;
   if (f.art === "rolle") return (ROLLEN[antworten.unfallart][1].find(([x]) => x === w) || [, w])[1];
   if (f.art === "wahl") return (f.wahl.find(([x]) => x === w) || [, w])[1];
+  if (f.art === "gruppe") return f.felder.map((g) => antworten[g.name]).filter(Boolean).join(", ") || "–";
+  if (f.art === "text" && f.typ === "date") return datum_lesbar(w);
   if (f.art === "fotos") return w === "1" ? "1 Foto" : w + " Fotos";
   if (f.art === "skizze") return "Skizze gezeichnet ✓";
   if (f.art === "auto") return STELLEN.filter(([x]) => w.split(",").includes(x)).map(([, t]) => t).join(", ");
@@ -176,7 +182,9 @@ function chat_zeigen(f, rueckwaerts) {
   const buehne = $("#buehne");
   buehne.textContent = "";
   const gespraech = knoten("div", { class: "gespraech" });
-  if (verlauf.length <= 1) gespraech.append(blase("bot", "Guten Tag! Ich stelle Ihnen ein paar kurze Fragen zu Ihrem Unfall. Was Sie nicht wissen, lassen Sie einfach aus – Sie können alles später nachreichen."));
+  if (verlauf.length <= 1) gespraech.append(blase("bot", ART === "kuendigung"
+    ? "Guten Tag! Ich stelle Ihnen ein paar Fragen zu Ihrer Kündigung. Wegen der kurzen Frist zählt jeder Tag – was Sie nicht wissen, lassen Sie einfach aus und reichen es später nach."
+    : "Guten Tag! Ich stelle Ihnen ein paar kurze Fragen zu Ihrem Unfall. Was Sie nicht wissen, lassen Sie einfach aus – Sie können alles später nachreichen."));
   // Ältere Antworten eingeklappt, damit nicht endlos gescrollt werden muss.
   const bisher = verlauf.slice(0, -1).map((id) => FRAGEN.find((x) => x.id === id)).filter(Boolean);
   const sichtbar_ab = Math.max(0, bisher.length - 3);
@@ -203,6 +211,7 @@ function chat_zeigen(f, rueckwaerts) {
   });
   if (f.schritt !== abschnitt) gespraech.append(knoten("p", { class: "abschnitt" }, ABSCHNITTE[f.schritt]));
   const eingabe = knoten("div", { class: "eingabe" });
+  for (const h of hinweise) gespraech.append(blase("bot hinweis " + (h.art || ""), h.text));
   const frage = blase("bot aktuell", frage_text(f), f.unter);
   const punkte = knoten("div", { class: "blase bot tippt" });
   punkte.append(knoten("span"), knoten("span"), knoten("span"));
@@ -421,8 +430,30 @@ const BAU = {
     karte.append(feld);
     knopf_weiter(karte, f, () => feld.value);
   },
+  gruppe(karte, f) {
+    const felder = [];
+    for (const g of f.felder) {
+      const marke = knoten("label", {}, g.bezeichnung + (g.pflicht ? "" : " "));
+      if (!g.pflicht && g.hinweis) marke.append(knoten("span", { class: "frei" }, g.hinweis));
+      const feld = knoten("input", { type: EINGABE[g.art] || "text", maxlength: String(g.laenge || 200), autocomplete: AUTO[g.name] || "off" });
+      feld.value = antworten[g.name] || "";
+      marke.append(feld);
+      if (fehler_vom_server[g.name]) marke.append(knoten("span", { class: "fehler" }, fehler_vom_server[g.name]));
+      karte.append(marke);
+      felder.push([g, feld]);
+    }
+    const k = knoten("button", { type: "button", class: "haupt" }, "Weiter");
+    k.addEventListener("click", () => {
+      const fehlt = felder.find(([g, feld]) => g.pflicht && !feld.value.trim());
+      if (fehlt) { melden("Bitte ausfüllen: " + fehlt[0].bezeichnung); fehlt[1].focus(); return; }
+      for (const [g, feld] of felder) { antworten[g.name] = feld.value.trim(); delete fehler_vom_server[g.name]; }
+      weiter(f);
+    });
+    karte.append(k);
+  },
   text(karte, f) {
-    const feld = knoten("input", { type: "text", maxlength: "200", autocomplete: "off" });
+    const feld = knoten("input", { type: f.typ || "text", maxlength: String(f.laenge || 200), autocomplete: "off" });
+    if (f.typ === "date") feld.max = heute();
     feld.value = antworten[f.feld] || "";
     karte.append(feld);
     feld.addEventListener("keydown", (e) => { if (e.key === "Enter") $("button.haupt", karte).click(); });
@@ -555,6 +586,50 @@ const BAU = {
   },
 };
 
+// ---- Kündigung: Fragen aus dem Fragebogen der Kanzlei ----------------------
+
+const EINGABE = { telefon: "tel", email: "email", plz: "text", zahl: "text", betrag: "text", datum_frei: "date", datum_kommend: "date" };
+const AUTO = { vorname: "given-name", nachname: "family-name", strasse: "street-address", plz: "postal-code",
+  ort: "address-level2", telefon: "tel", email: "email" };
+const WORTE = { ja: "Ja", nein: "Nein", unbekannt: "Weiß ich nicht", schriftlich: "Schriftlich", muendlich: "Mündlich",
+  beides: "Beides", nicht_relevant: "Trifft nicht zu" };
+// Diese Felder stehen zusammen auf einem Bildschirm - eine Frage je Feld wäre hier zu kleinteilig.
+const GRUPPEN = { kperson: ["vorname", "nachname", "strasse", "plz", "ort", "telefon", "email", "geburtsdatum"],
+  arbeitgeber: ["arbeitgeber_name", "arbeitgeber_anschrift", "arbeitgeber_telefon", "arbeitsort"] };
+const GRUPPEN_FRAGE = { kperson: "Wie erreichen wir Sie?", arbeitgeber: "Wer ist Ihr Arbeitgeber?" };
+
+function kuendigung_fragen(abschnitte) {
+  const neu = [];
+  for (const a of abschnitte) {
+    ABSCHNITTE[a.abschnitt] = a.titel;
+    const gruppe = GRUPPEN[a.abschnitt] || [];
+    if (gruppe.length) {
+      neu.push({ id: a.abschnitt + "-gruppe", schritt: a.abschnitt, feld: "_" + a.abschnitt, art: "gruppe",
+        frage: GRUPPEN_FRAGE[a.abschnitt] || a.titel, felder: a.felder.filter((g) => gruppe.includes(g.name)) });
+    }
+    for (const g of a.felder) {
+      if (gruppe.includes(g.name)) continue;
+      const f = { id: g.name, schritt: a.abschnitt, feld: g.name, frage: g.bezeichnung, unter: g.hinweis || "" };
+      if (g.zeige_wenn) f.wenn = () => antworten[g.zeige_wenn[0]] === g.zeige_wenn[1];
+      if (g.art === "ja_nein") f.art = "janein";
+      else if (g.art === "auswahl") { f.art = "wahl"; f.wahl = g.auswahl.map((w) => [w, WORTE[w] || w]); }
+      else if (g.art === "datum") f.art = "datum";
+      else if (g.art === "lang") { f.art = "lang"; f.laenge = g.laenge; }
+      else { f.art = "text"; f.typ = EINGABE[g.art] || "text"; f.laenge = g.laenge; }
+      if (!g.pflicht && f.art !== "janein" && f.art !== "wahl") f.spaeter = g.art.startsWith("datum") ? "Weiß ich nicht" : "Überspringen";
+      if (!g.pflicht && (f.art === "janein" || f.art === "wahl") && a.abschnitt === "besonderes") f.spaeter = "Möchte ich nicht sagen";
+      neu.push(f);
+    }
+    if (a.abschnitt === "vorpruefung") {
+      ABSCHNITTE._schreiben = "Das Kündigungsschreiben";
+      neu.push({ id: "kschreiben", schritt: "_schreiben", feld: "_kschreiben", art: "fotos", lokal: true, unterlage: "kuendigung",
+        frage: "Fotografieren Sie das Kündigungsschreiben", unter: "Alle Seiten – und den Briefumschlag, falls Sie ihn noch haben. Daraus lesen wir die Daten und Fristen ab.",
+        spaeter: "Habe ich gerade nicht zur Hand" });
+    }
+  }
+  FRAGEN.splice(0, FRAGEN.length, ...neu);
+}
+
 // ---- Ablauf ---------------------------------------------------------------
 
 function entwurf_merken() {
@@ -581,14 +656,18 @@ async function speichern(schritt) {
   const daten = {};
   for (const f of FRAGEN) {
     if (f.schritt !== schritt || f.lokal) continue;
-    daten[f.feld] = (!f.wenn || f.wenn()) ? (antworten[f.feld] || "") : "";
+    const an = !f.wenn || f.wenn();
+    if (f.art === "gruppe") for (const g of f.felder) daten[g.name] = an ? (antworten[g.name] || "") : "";
+    else daten[f.feld] = an ? (antworten[f.feld] || "") : "";
   }
+  if (!Object.keys(daten).length) return true;        // etwa nur Fotos: nichts zu speichern
   try {
     const antwort = await aufruf("PUT", "/api/aufnahme/schritt/" + schritt, daten);
     const fehler = antwort.fehler || {};
+    if (antwort.hinweise) hinweise = antwort.hinweise;
     if (Object.keys(fehler).length) {
       fehler_vom_server = fehler;
-      const erste = sichtbar().find((f) => fehler[f.feld]);
+      const erste = sichtbar().find((f) => fehler[f.feld] || (f.felder || []).some((g) => fehler[g.name]));
       if (erste) { verlauf.push(erste.id); zeigen(erste, true); }
       else melden(Object.values(fehler)[0]);
       return false;
@@ -606,10 +685,12 @@ function geschafft() {
     const gespraech = $(".gespraech", buehne);
     const letzte = FRAGEN.find((x) => x.id === verlauf[verlauf.length - 1]);
     if (gespraech && letzte) gespraech.append(blase("ich", antwort_text(letzte)),
-      blase("bot", "Vielen Dank – der schwierigste Teil ist geschafft! Jetzt noch Ihre Kontaktdaten und die Unterschrift. Weitere Unterlagen wie Fahrzeugschein oder Rechnungen laden Sie hoch, sobald wir Ihren Fall geprüft haben."));
+      blase("bot", ART === "kuendigung"
+        ? "Vielen Dank – fast geschafft! Jetzt nur noch die Vollmacht und Ihre Unterschrift. Arbeitsvertrag und Lohnabrechnungen laden Sie hoch, sobald wir Ihren Fall geprüft haben."
+        : "Vielen Dank – der schwierigste Teil ist geschafft! Jetzt noch Ihre Kontaktdaten und die Unterschrift. Weitere Unterlagen wie Fahrzeugschein oder Rechnungen laden Sie hoch, sobald wir Ihren Fall geprüft haben."));
     const eingabe = $(".eingabe", buehne);
     eingabe.textContent = "";
-    const k = knoten("button", { type: "button", class: "haupt" }, "Weiter zu Kontaktdaten und Unterschrift");
+    const k = knoten("button", { type: "button", class: "haupt" }, ART === "kuendigung" ? "Weiter zur Unterschrift" : "Weiter zu Kontaktdaten und Unterschrift");
     k.addEventListener("click", () => { location.href = "/#weiter"; });
     eingabe.append(k);
     window.scrollTo(0, document.body.scrollHeight);
@@ -620,7 +701,7 @@ function geschafft() {
   karte.append(knoten("div", { class: "haken-gross" }, "✓"),
     knoten("h1", {}, "Geschafft – der schwierigste Teil ist erledigt"),
     knoten("p", { class: "unter" }, "Jetzt noch Ihre Kontaktdaten und die Unterschrift. Weitere Unterlagen laden Sie hoch, sobald wir Ihren Fall geprüft haben."));
-  const k = knoten("button", { type: "button", class: "haupt" }, "Weiter zu Kontaktdaten und Unterschrift");
+  const k = knoten("button", { type: "button", class: "haupt" }, ART === "kuendigung" ? "Weiter zur Unterschrift" : "Weiter zu Kontaktdaten und Unterschrift");
   k.addEventListener("click", () => { location.href = "/#weiter"; });
   karte.append(k);
   buehne.append(karte);
@@ -644,12 +725,19 @@ $("#zurueck").addEventListener("click", () => {
     if (!zustand) {
       const einladung = new URLSearchParams(location.search).get("p") || "";
       const quelle = new URLSearchParams(location.search).get("quelle") || "";
-      zustand = await aufruf("POST", "/api/aufnahme", { einladung, art: "unfall", quelle });
+      const art = new URLSearchParams(location.search).get("f") === "kuendigung" ? "kuendigung" : "unfall";
+      zustand = await aufruf("POST", "/api/aufnahme", { einladung, art, quelle });
       zugang = zustand.zugang;
       try { localStorage.setItem(MERKER, zugang); } catch (e) { /* privates Fenster */ }
     }
   } catch (e) { melden(e.message); return; }
-  if (zustand.abgeschlossen || zustand.art !== "unfall") { location.href = "/"; return; }
+  if (zustand.abgeschlossen || !["unfall", "kuendigung"].includes(zustand.art)) { location.href = "/"; return; }
+  ART = zustand.art;
+  hinweise = zustand.hinweise || [];
+  if (ART === "kuendigung") {
+    kuendigung_fragen(zustand.schritt_felder || []);
+    document.title = "Kündigung prüfen lassen";
+  }
   // Was schon da ist (auch vom Tresen der Werkstatt), steht als Antwort bereit.
   for (const quelle of [zustand.vorbelegt || {}, zustand.angaben || {}]) {
     for (const werte of Object.values(quelle)) Object.assign(antworten, werte);
