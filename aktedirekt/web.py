@@ -994,6 +994,11 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     async def start() -> FileResponse:
         return FileResponse(str(statisch.joinpath("index.html")))
 
+    @app.get("/dialog")
+    async def dialogseite() -> FileResponse:
+        """Der Bildfragebogen (Prototyp) - eine Frage je Bildschirm, für den Unfall."""
+        return FileResponse(str(statisch.joinpath("dialog.html")))
+
     @app.get("/kanzlei")
     async def kanzleiseite() -> FileResponse:
         return FileResponse(str(statisch.joinpath("kanzlei.html")))

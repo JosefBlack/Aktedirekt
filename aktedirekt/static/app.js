@@ -781,6 +781,12 @@ wieder.addEventListener("submit", async (e) => {
       uebernehmen();
       if (zustand.abgeschlossen) return fertig();
       if (Object.keys(zustand.angaben).length) $("#los").textContent = "Weitermachen";
+      // Vom Bildfragebogen: gleich beim nächsten offenen Schritt weiter.
+      if (location.hash === "#weiter") {
+        history.replaceState(null, "", location.pathname);
+        const offen = SEITEN.slice(1, -2).find((s) => s !== "fotos" && !zustand.angaben[s]);
+        return zeigen(offen === "person" && SEITEN.includes("fotos") ? "fotos" : (offen || "abschluss"));
+      }
     } catch (fehler) {
       if (fehler.status === 401) { zugang = ""; try { localStorage.removeItem(MERKER); } catch (e) { /* egal */ } }
       else melden(fehler.message);

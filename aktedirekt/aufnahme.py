@@ -19,7 +19,7 @@ from typing import Any
 @dataclass(frozen=True)
 class Feld:
     name: str
-    # text | lang | datum | datum_frei | datum_kommend | zeit | ja_nein | auswahl | email | telefon | plz |
+    # text | lang | datum | datum_frei | datum_kommend | zeit | ja_nein | auswahl | mehrfach | email | telefon | plz |
     # kennzeichen | iban | zahl | betrag | jahr
     art: str
     pflicht: bool = False
@@ -34,9 +34,26 @@ class Feld:
     zeige_wenn: tuple[str, str] | None = None
 
 
+# Die Unfallarten des Bildfragebogens und die Rolle des Mandanten darin. Die
+# Schlüssel stehen in den Angaben; was die Kanzlei liest, steht in LESBAR.
+UNFALLARTEN = ("auffahren", "vorfahrt", "spurwechsel", "abbiegen", "parken", "geparkt", "sonstiges")
+ROLLEN = ("gegner", "ich", "beide", "unklar")
+SCHADENSTELLEN = ("vorne_links", "vorne", "vorne_rechts", "links", "dach", "rechts",
+                  "hinten_links", "hinten", "hinten_rechts")
+LESBAR = {
+    "auffahren": "Auffahrunfall", "vorfahrt": "Vorfahrt", "spurwechsel": "Spurwechsel", "abbiegen": "Abbiegen",
+    "parken": "Ein- oder Ausparken", "geparkt": "Geparktes Fahrzeug angefahren", "sonstiges": "Sonstiges",
+    "gegner": "die Gegenseite", "ich": "der Mandant", "beide": "beide", "unklar": "unklar",
+    "vorne_links": "vorne links", "vorne": "vorne", "vorne_rechts": "vorne rechts", "links": "linke Seite",
+    "dach": "Dach", "rechts": "rechte Seite", "hinten_links": "hinten links", "hinten": "hinten",
+    "hinten_rechts": "hinten rechts", "finanziert": "finanziert", "geleast": "geleast",
+}
+
 SCHRITTE: dict[str, tuple[Feld, ...]] = {
     "unfall": (
         Feld("unfalldatum", "datum", pflicht=True),
+        Feld("unfallart", "auswahl", auswahl=UNFALLARTEN),
+        Feld("verursacher", "auswahl", auswahl=ROLLEN),
         Feld("unfallzeit", "zeit"),
         Feld("unfallort", "text", pflicht=True, laenge=200),
         Feld("hergang", "lang", pflicht=True, laenge=4000),
@@ -48,6 +65,7 @@ SCHRITTE: dict[str, tuple[Feld, ...]] = {
     "fahrzeug": (
         Feld("kennzeichen", "kennzeichen", pflicht=True),
         Feld("modell", "text"),
+        Feld("schadenstellen", "mehrfach", laenge=200, auswahl=SCHADENSTELLEN),
         Feld("halter_selbst", "ja_nein", pflicht=True),
         Feld("halter_name", "text", pflicht_wenn=("halter_selbst", "nein")),
         Feld("finanzierung", "auswahl", pflicht=True, auswahl=("nein", "finanziert", "geleast")),
@@ -179,7 +197,8 @@ ANFORDERUNG = "#anforderung"
 UNFALL_TITEL = {"unfall": "Der Unfall", "fahrzeug": "Fahrzeug des Mandanten",
                 "gegner": "Gegenseite", "person": "Mandant"}
 UNFALL_BEZEICHNUNGEN = {
-    "unfalldatum": "Unfalltag", "unfallzeit": "Unfallzeit", "unfallort": "Unfallort", "hergang": "Hergang",
+    "unfalldatum": "Unfalltag", "unfallart": "Unfallart", "verursacher": "Verursacht nach Angabe des Mandanten durch",
+    "schadenstellen": "Beschädigt", "unfallzeit": "Unfallzeit", "unfallort": "Unfallort", "hergang": "Hergang",
     "polizei": "Polizei vor Ort", "polizei_az": "Aktenzeichen der Polizei", "verletzt": "Verletzte",
     "zeugen": "Zeugen", "kennzeichen": "Kennzeichen", "modell": "Hersteller und Modell",
     "halter_selbst": "Mandant ist Halter", "halter_name": "Halter", "finanzierung": "Finanziert oder geleast",
@@ -424,6 +443,9 @@ def _pruefe(feld: Feld, wert: str, heute: date) -> str:
     elif feld.art == "auswahl":
         if wert not in feld.auswahl:
             return "Bitte eine der Möglichkeiten wählen."
+    elif feld.art == "mehrfach":
+        if not all(teil in feld.auswahl for teil in wert.split(",")):
+            return "Bitte eine der Möglichkeiten wählen."
     elif feld.art == "email":
         if not _EMAIL.match(wert):
             return "Bitte die E-Mail-Adresse prüfen."
@@ -469,6 +491,8 @@ def felder_pruefen(felder: tuple[Feld, ...], eingabe: Any,
             wert = wert.replace(" ", "").replace("€", "")
             if re.fullmatch(r"[0-9]{1,3}(\.[0-9]{3})+(,[0-9]{1,2})?", wert):
                 wert = wert.replace(".", "")
+        elif feld.art == "mehrfach":
+            wert = ",".join(t.strip() for t in wert.split(",") if t.strip())
         elif feld.art != "lang":
             wert = " ".join(wert.split())
         sauber[feld.name] = wert
@@ -550,7 +574,9 @@ class Aufnahme:
                     return date.fromisoformat(wert).strftime("%d.%m.%Y")
                 except ValueError:
                     return wert
-            return wert.replace("_", " ") if f.art == "auswahl" else wert
+            if f.art == "mehrfach":
+                return ", ".join(LESBAR.get(t, t) for t in wert.split(","))
+            return LESBAR.get(wert, wert.replace("_", " ")) if f.art == "auswahl" else wert
 
         art = self.fallart
         teile: list[dict[str, Any]] = []

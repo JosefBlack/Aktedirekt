@@ -1,0 +1,33 @@
+/* Bildfragebogen: eine Frage je Bildschirm, große Flächen zum Antippen. */
+.buehne { min-height: 60vh; }
+.frage { animation: herein .22s ease-out; }
+.frage.zurueck-an { animation: zurueck-herein .22s ease-out; }
+@keyframes herein { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes zurueck-herein { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .frage, .frage.zurueck-an { animation: none; } }
+.frage h1 { font-size: 25px; margin-bottom: 8px; }
+.frage .unter { color: var(--leise); margin: 0 0 18px; font-size: 16px; }
+.kacheln { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.kachel { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 8px 12px;
+  background: var(--flaeche); border: 2px solid var(--rand); border-radius: 14px; font: inherit; color: var(--schrift);
+  cursor: pointer; text-align: center; min-height: 64px; justify-content: center; }
+.kachel img { width: 100%; max-width: 132px; aspect-ratio: 1; border-radius: 10px; }
+.kachel span { font-weight: 600; font-size: 15px; line-height: 1.25; }
+.kachel.gewaehlt { border-color: var(--marke); box-shadow: 0 0 0 3px color-mix(in srgb, var(--marke) 25%, transparent); }
+.kachel.breit { grid-column: 1 / -1; flex-direction: row; justify-content: flex-start; padding: 16px; text-align: left; }
+.legende { display: flex; gap: 16px; font-size: 14px; color: var(--leise); margin: 0 0 12px; }
+.legende i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.schnell { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px; }
+.spaeter { display: block; width: 100%; margin-top: 14px; min-height: 48px; border: 0; background: none;
+  color: var(--leise); font: inherit; text-decoration: underline; cursor: pointer; }
+.auto { display: block; width: 100%; max-width: 190px; margin: 0 auto; touch-action: manipulation; }
+.auto .zone { fill: transparent; stroke: transparent; cursor: pointer; }
+.auto .zone.an { fill: rgba(232, 74, 61, .45); }
+.auto .zone:focus { outline: none; }
+.auto .zone:focus-visible { stroke: var(--akzent); stroke-width: 3; }
+.gewaehlt-text { text-align: center; min-height: 24px; font-weight: 600; margin: 8px 0 0; }
+.geschafft { text-align: center; }
+.geschafft .haken-gross { font-size: 64px; line-height: 1; color: var(--gut); margin: 24px 0 8px; }
+.legende i.ich { background: #2f6fb0; }
+.legende i.andere { background: #e8a33d; }
+.kennzeichen-feld { text-transform: uppercase; font-size: 22px; letter-spacing: 1px; text-align: center; }

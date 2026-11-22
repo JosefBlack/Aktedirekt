@@ -258,3 +258,23 @@ def test_marke_der_kanzlei_und_sofortbeginn_fuer_die_kanzlei(ablage):
     assert "NICHT verlangt" in gemeldet[0] and "03.12.2026" in gemeldet[0]
     eingang = client.get("/api/kanzlei/eingaenge", headers=kanzlei(client)).json()["eingaenge"][0]
     assert eingang["sofort"] is False and eingang["widerrufsfrist_bis"] == "2026-12-03"
+
+
+def test_bildfragebogen_unfallart_rolle_und_schadenstellen(mandant):
+    client, kopf, ablage = mandant
+    assert client.get("/dialog").status_code == 200 and "dialog.js" in client.get("/dialog").text
+    unfall = {**ANGABEN["unfall"], "unfallart": "auffahren", "verursacher": "gegner"}
+    assert client.put("/api/aufnahme/schritt/unfall", json=unfall, headers=kopf).json()["fehler"] == {}
+    falsch = client.put("/api/aufnahme/schritt/unfall", json={**unfall, "unfallart": "flugzeug"}, headers=kopf).json()
+    assert "unfallart" in falsch["fehler"]
+    fahrzeug = {**ANGABEN["fahrzeug"], "schadenstellen": "hinten, hinten_links"}
+    antwort = client.put("/api/aufnahme/schritt/fahrzeug", json=fahrzeug, headers=kopf).json()
+    assert antwort["fehler"] == {} and antwort["angaben"]["schadenstellen"] == "hinten,hinten_links"
+    assert "schadenstellen" in client.put("/api/aufnahme/schritt/fahrzeug", headers=kopf,
+                                          json={**fahrzeug, "schadenstellen": "hinten,motor"}).json()["fehler"]
+    client.put("/api/aufnahme/schritt/unfall", json=unfall, headers=kopf)
+    client.put("/api/aufnahme/schritt/fahrzeug", json=fahrzeug, headers=kopf)
+    aufnahme = ablage.speicher.laden(kopf["Authorization"][7:])
+    zeilen = {b: w for t in aufnahme.fuer_die_akte() for b, w in t["zeilen"]}
+    assert zeilen["Unfallart"] == "Auffahrunfall" and zeilen["Beschädigt"] == "hinten, hinten links"
+    assert "Gegenseite" in zeilen["Verursacht nach Angabe des Mandanten durch"]
