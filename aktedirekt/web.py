@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 
 from aktedirekt import akte_pdf, dateien, erklaerungen, totp, zeit
 from aktedirekt.abgleich import ENTWURF_FRIST, alte_entwuerfe, als_fall, entwuerfe_loeschen, lead_anlegen
-from aktedirekt.aufnahme import (ANFORDERUNG, ERG, FALLARTEN, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
+from aktedirekt.aufnahme import (ANFORDERUNG, ERG, FALLARTEN, FREIGABE, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
                                  kurzrubrum, unterlage_zu)
 from aktedirekt.jurnodes import JurNodes
 from aktedirekt.partner import FEHLVERSUCHE, SPERRE, Partnerliste
@@ -64,6 +64,8 @@ _PNG = b"\x89PNG\r\n\x1a\n"
 SITZUNG_DAUER = timedelta(hours=8)
 # So lange kann der Kunde den Code vom Tresen auf seinem Gerät einlösen.
 UEBERGABE_DAUER = timedelta(hours=72)
+# Vor der Prüfung durch die Kanzlei höchstens so viele Dateien des Mandanten.
+MAX_VORAB = 15
 WIEDERFINDEN_DAUER = timedelta(hours=24)
 # Je E-Mail-Adresse höchstens so viele Links zum Wiederfinden, dann eine Stunde Pause.
 WIEDERFINDEN_HOECHSTENS = 3
@@ -212,6 +214,12 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         return {"punkte": [titel[p] for p in punkte if p in titel], "schluessel": punkte,
                 "text": a.get("text", ""), "am": a.get("am", "")}
 
+    def freigegeben(aufnahme: Aufnahme) -> bool:
+        """Darf der Mandant alle Unterlagen hochladen? Erst nach der Prüfung durch die Kanzlei:
+        ausdrücklich freigegeben, Unterlagen angefordert oder das Mandat angenommen."""
+        return bool((aufnahme.angaben.get(FREIGABE) or {}).get("am") or anforderung(aufnahme)
+                    or aufnahme.sachstand not in ("", "aufgenommen", "nicht_uebernommen"))
+
     def checkliste(aufnahme: Aufnahme) -> list[dict[str, Any]]:
         """Die Unterlagen, die die Kanzlei braucht, und wie viele dazu schon da sind.
 
@@ -229,7 +237,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 if seit and d.hochgeladen_am and d.hochgeladen_am.isoformat() >= seit:
                     neu.add(u.schluessel)
         return [{"schluessel": u.schluessel, "titel": u.titel, "hinweis": u.hinweis, "wichtig": u.wichtig,
-                 "anzahl": anzahl.get(u.schluessel, 0), "angefordert": u.schluessel in gefragt,
+                 "vorab": u.vorab, "anzahl": anzahl.get(u.schluessel, 0), "angefordert": u.schluessel in gefragt,
                  "nachgereicht": u.schluessel in neu} for u in aufnahme.fallart.unterlagen]
 
     def zustand(aufnahme: Aufnahme) -> dict[str, Any]:
@@ -242,6 +250,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "ablauf": list(art.schritte),
             "empfohlen": [u.titel for u in art.unterlagen if u.schluessel != "sonstiges"],
             "unterlagen": checkliste(aufnahme),
+            "freigegeben": freigegeben(aufnahme),
             "hinweise": hinweise(aufnahme),
             "angaben": {s: a for s, a in aufnahme.angaben.items() if not s.startswith((ERG, "#"))},
             "anforderung": anforderung(aufnahme),
@@ -372,10 +381,16 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             raise HTTPException(409, f"Es sind höchstens {grenze(von)} Dateien möglich.")
         anzeige = "".join(z for z in name if z.isprintable() and z not in "/\\")[:80] or "Datei"
         unterlage = daten.get("unterlage", "")
-        if unterlage:
-            passend = [u for u in aufnahme.fallart.unterlagen if u.schluessel == unterlage]
-            if not passend:
-                raise HTTPException(400, "Diese Art von Unterlage gibt es nicht.")
+        passend = [u for u in aufnahme.fallart.unterlagen if u.schluessel == unterlage]
+        if unterlage and not passend:
+            raise HTTPException(400, "Diese Art von Unterlage gibt es nicht.")
+        if not von and not freigegeben(aufnahme):
+            # Erste Stufe: nur Fotos vom Schaden und vom Unfall, Skizze und das Nötigste.
+            if not passend or not passend[0].vorab:
+                raise HTTPException(403, "Diese Unterlagen können Sie hochladen, sobald wir Ihren Fall geprüft haben.")
+            if len(eigene(aufnahme, von)) >= MAX_VORAB:
+                raise HTTPException(409, f"Vor unserer Prüfung sind höchstens {MAX_VORAB} Dateien möglich.")
+        if passend:
             anzeige = passend[0].kurz + " - " + anzeige
         kennung, adresse = speicher.upload_vorbereiten(aufnahme.kennung, anzeige, groesse, jetzt(), von)
         return {"kennung": kennung, "adresse": adresse or f"{wohin}/{kennung}/inhalt"}
@@ -839,6 +854,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 "sachstand": stufen.bezeichnung(aufnahme.sachstand),
                 # "unbekannt" heißt: gemeldet, aber noch nicht bestätigt gefunden.
                 "in_jurnodes": aufnahme.lead_kennung not in ("", "unbekannt"),
+                "freigegeben": freigegeben(aufnahme),
                 "nachrichten": [d.hochgeladen_am.isoformat(timespec="minutes") for d in speicher.dateien(aufnahme.kennung)
                                 if d.von == NACHRICHT and d.hochgeladen_am]}
 
@@ -881,6 +897,20 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         if neu is None:
             raise HTTPException(409, "Das hat nicht geklappt. Bitte noch einmal versuchen.")
         return {**neu, "gueltig_bis": (jetzt() + NEUER_ZUGANG_DAUER).isoformat(timespec="minutes")}
+
+    @app.put("/api/kanzlei/eingaenge/{fall}/freigabe")
+    async def freigeben(fall: str, request: Request) -> dict[str, Any]:
+        """Die Kanzlei hat den Eingang geprüft: Der Mandant darf jetzt alle Unterlagen hochladen."""
+        aufnahme = eingang_von(fall, request)
+        if not freigegeben(aufnahme):
+            speicher.schritt_speichern(aufnahme.kennung, FREIGABE, {"am": jetzt().isoformat(timespec="seconds")})
+            if post is not None and mail_von(aufnahme):
+                try:
+                    post.senden(mail_von(aufnahme), mails["freigabe_betreff"], mails["freigabe_text"].format(
+                        portal=portal_adresse(request), telefon=unter, kanzlei=marke.get("name", "")))
+                except Exception:
+                    pass
+        return {"freigegeben": True}
 
     @app.put("/api/kanzlei/eingaenge/{fall}/anforderung")
     async def anfordern(fall: str, request: Request) -> dict[str, Any]:

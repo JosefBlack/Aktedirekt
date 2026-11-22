@@ -45,3 +45,4 @@
 .neuer-zugang input { margin-top: 12px; }
 .neuer-zugang .qr { width: 180px; height: 180px; display: block; margin-top: 8px; background: #fff; }
 .eingang .warnung-sofort { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--fehler); }
+.eingang .warnung-pruefung { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--akzent); }

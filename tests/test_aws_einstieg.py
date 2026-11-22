@@ -49,7 +49,7 @@ def test_seite_und_aufnahme_ueber_api_gateway(einstieg):
     assert antwort["statusCode"] == 200 and daten["partner"] == "Autohaus Beispiel"
     kopf = {"authorization": "Bearer " + daten["zugang"]}
     ziel = json.loads(modul.handler(ereignis("POST", "/api/aufnahme/dateien",
-                                             '{"name": "a.jpg", "groesse": 5}', kopf), None)["body"])
+                                             '{"name": "a.jpg", "groesse": 5, "unterlage": "schaden"}', kopf), None)["body"])
     assert ziel["adresse"].startswith(f"https://{BUCKET}.s3.{REGION}.amazonaws.com/eingang/")
     assert "content-length" in ziel["adresse"].lower()  # die Größe ist mit unterschrieben
 

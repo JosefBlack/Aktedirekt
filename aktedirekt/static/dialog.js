@@ -88,6 +88,10 @@ const FRAGEN = [
   { id: "rolle", schritt: "unfall", feld: "verursacher", art: "rolle", wenn: () => !!ROLLEN[antworten.unfallart] },
   { id: "hergang", schritt: "unfall", feld: "hergang", art: "lang", frage: "Erzählen Sie kurz, wie es dazu kam",
     unter: "Ein paar Sätze in Ihren eigenen Worten genügen. Wir haben schon einen Anfang vorbereitet." },
+  { id: "skizze", schritt: "unfall", feld: "_skizze", art: "skizze", lokal: true, frage: "Zeichnen Sie eine kleine Skizze",
+    unter: "Mit dem Finger: wo die Fahrzeuge waren und wie sie gefahren sind. Grob genügt völlig.", spaeter: "Lieber später – oder auf Papier und dann fotografieren" },
+  { id: "unfallfotos", schritt: "unfall", feld: "_unfallfotos", art: "fotos", lokal: true, unterlage: "unfallort",
+    frage: "Haben Sie Fotos vom Unfallort?", unter: "Zum Beispiel die Endstellung der Fahrzeuge, Spuren, Schilder oder Ampeln.", spaeter: "Habe ich nicht" },
   { id: "polizei", schritt: "unfall", feld: "polizei", art: "janein", frage: "War die Polizei vor Ort?" },
   { id: "polizei_az", schritt: "unfall", feld: "polizei_az", art: "text", frage: "Haben Sie ein Aktenzeichen der Polizei?",
     unter: "Steht auf dem Zettel, den die Polizei Ihnen gegeben hat.", spaeter: "Habe ich nicht", wenn: () => antworten.polizei === "ja" },
@@ -97,8 +101,12 @@ const FRAGEN = [
     spaeter: "Reiche ich später nach", wenn: () => antworten._zeugen === "ja" },
   // Fahrzeug
   { id: "kennzeichen", schritt: "fahrzeug", feld: "kennzeichen", art: "kennzeichen", frage: "Welches Kennzeichen hat Ihr Fahrzeug?" },
-  { id: "modell", schritt: "fahrzeug", feld: "modell", art: "text", frage: "Welche Marke und welches Modell?", unter: "Zum Beispiel „VW Golf“.", spaeter: "Überspringen" },
-  { id: "stellen", schritt: "fahrzeug", feld: "schadenstellen", art: "auto", frage: "Wo ist Ihr Fahrzeug beschädigt?", unter: "Tippen Sie auf die Stellen – auch mehrere.", spaeter: "Weiß ich nicht genau" },
+  { id: "stellen", schritt: "fahrzeug", feld: "schadenstellen", art: "auto", frage: "Wo ist Ihr Fahrzeug beschädigt?", unter: "Tippen Sie auf die Stellen – auch mehrere. Dann sagen wir Ihnen, was Sie fotografieren sollen.", spaeter: "Weiß ich nicht genau" },
+  { id: "schadenfotos", schritt: "fahrzeug", feld: "_schadenfotos", art: "fotos", lokal: true, unterlage: "schaden", mindestens: 1,
+    frage: "Fotografieren Sie jetzt den Schaden", spaeter: "Das Fahrzeug ist gerade nicht bei mir – ich reiche die Fotos nach" },
+  { id: "gutachten", schritt: "fahrzeug", feld: "gutachten", art: "wahl", frage: "Gibt es schon ein Gutachten?",
+    unter: "Alles zum Schaden selbst – Reparaturkosten, Wert, Ausstattung – steht dann im Gutachten. Das müssen Sie uns nicht noch einmal sagen.",
+    wahl: [["ja", "Ja, das Gutachten liegt vor"], ["beauftragt", "Ein Gutachter ist beauftragt"], ["nein", "Nein, noch nicht"]], spaeter: "Weiß ich nicht" },
   { id: "halter", schritt: "fahrzeug", feld: "halter_selbst", art: "janein", frage: "Ist das Fahrzeug auf Sie zugelassen?", unter: "So steht es im Fahrzeugschein." },
   { id: "halter_name", schritt: "fahrzeug", feld: "halter_name", art: "text", frage: "Auf wen ist es zugelassen?", wenn: () => antworten.halter_selbst === "nein" },
   { id: "finanzierung", schritt: "fahrzeug", feld: "finanzierung", art: "wahl", frage: "Ist das Fahrzeug finanziert oder geleast?",
@@ -109,6 +117,8 @@ const FRAGEN = [
   { id: "gegner_kz", schritt: "gegner", feld: "gegner_kennzeichen", art: "kennzeichen", frage: "Wie lautet das Kennzeichen des anderen?", wenn: () => antworten.gegner_bekannt === "ja" },
   { id: "gegner_vers", schritt: "gegner", feld: "gegner_versicherung", art: "text", frage: "Wissen Sie, wo der andere versichert ist?",
     unter: "Falls Sie Daten ausgetauscht haben. Sonst finden wir es heraus.", spaeter: "Weiß ich nicht", wenn: () => antworten.gegner_bekannt === "ja" },
+  { id: "gegnerfotos", schritt: "gegner", feld: "_gegnerfotos", art: "fotos", lokal: true, unterlage: "gegner",
+    frage: "Haben Sie ein Foto vom Kennzeichen oder vom Unfallbericht?", unter: "Auch ausgetauschte Zettel mit Namen und Versicherung helfen.", spaeter: "Habe ich nicht" },
 ];
 
 // ---- Anzeige --------------------------------------------------------------
@@ -147,6 +157,8 @@ function antwort_text(f) {
   if (f.art === "unfallart") return (ARTEN.find((a) => a.wert === w) || {}).titel || w;
   if (f.art === "rolle") return (ROLLEN[antworten.unfallart][1].find(([x]) => x === w) || [, w])[1];
   if (f.art === "wahl") return (f.wahl.find(([x]) => x === w) || [, w])[1];
+  if (f.art === "fotos") return w === "1" ? "1 Foto" : w + " Fotos";
+  if (f.art === "skizze") return "Skizze gezeichnet ✓";
   if (f.art === "auto") return STELLEN.filter(([x]) => w.split(",").includes(x)).map(([, t]) => t).join(", ");
   return w;
 }
@@ -200,7 +212,7 @@ function chat_zeigen(f, rueckwaerts) {
   if (fehler) eingabe.append(knoten("p", { class: "fehler" }, fehler));
   if (f.spaeter) {
     const spaeter = knoten("button", { type: "button", class: "spaeter" }, f.spaeter);
-    spaeter.addEventListener("click", () => { antworten[f.feld] = ""; weiter(f); });
+    spaeter.addEventListener("click", () => { if (!(f.art === "fotos" && geladen[f.unterlage])) antworten[f.feld] = ""; weiter(f); });
     eingabe.append(spaeter);
   }
   kopf_setzen(f, rueckwaerts);
@@ -237,7 +249,7 @@ function zeigen(f, rueckwaerts = false) {
   if (fehler) karte.append(knoten("p", { class: "fehler" }, fehler));
   if (f.spaeter) {
     const spaeter = knoten("button", { type: "button", class: "spaeter" }, f.spaeter);
-    spaeter.addEventListener("click", () => { antworten[f.feld] = ""; weiter(f); });
+    spaeter.addEventListener("click", () => { if (!(f.art === "fotos" && geladen[f.unterlage])) antworten[f.feld] = ""; weiter(f); });
     karte.append(spaeter);
   }
   buehne.append(karte);
@@ -260,7 +272,134 @@ function knopf_weiter(karte, f, lesen, pruefen) {
   return k;
 }
 
+// Drei Schritte wie auf der gewohnten Seite: ankündigen, abliefern, prüfen lassen.
+const geladen = {};          // Art der Unterlage -> Anzahl hochgeladener Dateien
+async function datei_hochladen(inhalt, name, unterlage) {
+  if (inhalt.size > 15 * 1024 * 1024) throw new Error("„" + name + "“ ist zu groß (höchstens 15 MB).");
+  const ziel = await aufruf("POST", "/api/aufnahme/dateien", { name, groesse: inhalt.size, unterlage });
+  const hier = ziel.adresse.startsWith("/");
+  let antwort;
+  try {
+    antwort = await fetch(ziel.adresse, { method: "PUT", body: inhalt, headers: hier ? { Authorization: "Bearer " + zugang } : {} });
+  } catch (e) { throw new Error("Keine Verbindung. Bitte noch einmal versuchen."); }
+  if (!antwort.ok) throw new Error("Das Hochladen hat nicht geklappt. Bitte noch einmal versuchen.");
+  await aufruf("POST", "/api/aufnahme/dateien/" + ziel.kennung + "/fertig");
+  geladen[unterlage] = (geladen[unterlage] || 0) + 1;
+}
+
+// Vorlagen für die Skizze: Straße, Kreuzung, Parkplatz - gezeichnet in 600 x 400.
+const VORLAGEN = {
+  strasse: (c) => { c.fillStyle = "#d5dbe1"; c.fillRect(230, 0, 140, 400); c.setLineDash([18, 16]); c.strokeStyle = "#fff"; c.lineWidth = 4;
+    c.beginPath(); c.moveTo(300, 0); c.lineTo(300, 400); c.stroke(); c.setLineDash([]); },
+  kreuzung: (c) => { c.fillStyle = "#d5dbe1"; c.fillRect(240, 0, 120, 400); c.fillRect(0, 140, 600, 120); c.setLineDash([16, 14]);
+    c.strokeStyle = "#fff"; c.lineWidth = 4; c.beginPath(); c.moveTo(300, 0); c.lineTo(300, 130); c.moveTo(300, 270); c.lineTo(300, 400);
+    c.moveTo(0, 200); c.lineTo(230, 200); c.moveTo(370, 200); c.lineTo(600, 200); c.stroke(); c.setLineDash([]); },
+  parkplatz: (c) => { c.fillStyle = "#d5dbe1"; c.fillRect(0, 0, 600, 400); c.strokeStyle = "#fff"; c.lineWidth = 4; c.beginPath();
+    for (const x of [100, 200, 300, 400, 500]) { c.moveTo(x, 0); c.lineTo(x, 110); c.moveTo(x, 290); c.lineTo(x, 400); }
+    c.moveTo(0, 110); c.lineTo(600, 110); c.moveTo(0, 290); c.lineTo(600, 290); c.stroke(); },
+};
+const STIFTE = [["#2f6fb0", "Ihr Fahrzeug"], ["#e8a33d", "das andere"], ["#1d2733", "Linie"]];
+
 const BAU = {
+  fotos(karte, f) {
+    if (f.unterlage === "schaden") {
+      const stellen = STELLEN.filter(([w]) => (antworten.schadenstellen || "").split(",").includes(w)).map(([, t]) => t);
+      const liste = knoten("ul", { class: "tipps" });
+      for (const t of ["einmal das ganze Fahrzeug aus etwa drei Metern",
+        ...(stellen.length ? stellen.map((x) => "die beschädigte Stelle (" + x + ") aus der Nähe") : ["jede beschädigte Stelle aus der Nähe"]),
+        "das Kennzeichen, damit man das Fahrzeug erkennt"]) liste.append(knoten("li", {}, t));
+      karte.append(knoten("p", { class: "unter" }, "Bitte fotografieren Sie:"), liste);
+    }
+    const stand = knoten("p", { class: "gewaehlt-text" });
+    const zeigen_stand = () => {
+      const n = geladen[f.unterlage] || 0;
+      stand.textContent = n ? `✓ ${n} ${n === 1 ? "Foto" : "Fotos"} hochgeladen` : "Noch keine Fotos";
+    };
+    const reihe = knoten("div", { class: "kacheln" });
+    for (const [text, kamera] of [["📷 Foto aufnehmen", true], ["Aus der Galerie", false]]) {
+      const marke = knoten("label", { class: "kachel" });
+      marke.append(knoten("span", {}, text));
+      const feld = knoten("input", { type: "file", accept: kamera ? "image/*" : "image/*,application/pdf", hidden: "" });
+      if (kamera) feld.setAttribute("capture", "environment"); else feld.multiple = true;
+      feld.addEventListener("change", async () => {
+        const dateien = Array.from(feld.files);
+        feld.value = "";
+        melden("");
+        for (const [i, d] of dateien.entries()) {
+          stand.textContent = `Lade ${i + 1} von ${dateien.length} hoch …`;
+          try { await datei_hochladen(d, d.name || "foto.jpg", f.unterlage); }
+          catch (e) { melden(e.message); }
+        }
+        zeigen_stand();
+      });
+      marke.append(feld);
+      reihe.append(marke);
+    }
+    karte.append(reihe, stand);
+    zeigen_stand();
+    knopf_weiter(karte, f, () => String(geladen[f.unterlage] || 0),
+      (w) => (f.mindestens && Number(w) < f.mindestens) ? "Bitte mindestens ein Foto – oder unten „ich reiche die Fotos nach“ wählen." : "");
+  },
+  skizze(karte, f) {
+    const vorlage_wahl = { vorfahrt: "kreuzung", abbiegen: "kreuzung", parken: "parkplatz" }[antworten.unfallart] || "strasse";
+    let vorlage = vorlage_wahl, farbe = STIFTE[0][0];
+    const striche = [];
+    const leinwand = knoten("canvas", { class: "skizze", width: "600", height: "400", "aria-label": "Zeichenfläche für die Skizze" });
+    const c = leinwand.getContext("2d");
+    const malen = () => {
+      c.fillStyle = "#fff"; c.fillRect(0, 0, 600, 400);
+      VORLAGEN[vorlage](c);
+      c.lineCap = "round"; c.lineJoin = "round"; c.lineWidth = 7;
+      for (const s of striche) {
+        c.strokeStyle = s.farbe; c.beginPath();
+        s.punkte.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+        if (s.punkte.length === 1) c.lineTo(s.punkte[0][0] + 0.1, s.punkte[0][1]);
+        c.stroke();
+      }
+    };
+    const ort = (e) => { const r = leinwand.getBoundingClientRect(); return [(e.clientX - r.left) * 600 / r.width, (e.clientY - r.top) * 400 / r.height]; };
+    let aktiv = null;
+    leinwand.addEventListener("pointerdown", (e) => { leinwand.setPointerCapture(e.pointerId); aktiv = { farbe, punkte: [ort(e)] }; striche.push(aktiv); malen(); });
+    leinwand.addEventListener("pointermove", (e) => { if (aktiv) { aktiv.punkte.push(ort(e)); malen(); } });
+    for (const ende of ["pointerup", "pointercancel"]) leinwand.addEventListener(ende, () => { aktiv = null; });
+    const vorlagen = knoten("div", { class: "werkzeug" });
+    for (const [name, text] of [["strasse", "Straße"], ["kreuzung", "Kreuzung"], ["parkplatz", "Parkplatz"]]) {
+      const k = knoten("button", { type: "button", class: "chip" + (name === vorlage ? " an" : "") }, text);
+      k.addEventListener("click", () => { vorlage = name; for (const x of vorlagen.children) x.classList.toggle("an", x === k); malen(); });
+      vorlagen.append(k);
+    }
+    const stifte = knoten("div", { class: "werkzeug" });
+    for (const [wert, text] of STIFTE) {
+      const k = knoten("button", { type: "button", class: "chip stift" + (wert === farbe ? " an" : "") });
+      k.append(knoten("i", { class: "punkt-" + STIFTE.findIndex(([w]) => w === wert) }), text);
+      k.addEventListener("click", () => { farbe = wert; for (const x of stifte.children) x.classList.toggle("an", x === k); });
+      stifte.append(k);
+    }
+    const zurueck = knoten("button", { type: "button", class: "chip" }, "↶ Rückgängig");
+    zurueck.addEventListener("click", () => { striche.pop(); malen(); });
+    stifte.append(zurueck);
+    karte.append(vorlagen, leinwand, stifte);
+    if (antworten._skizze) karte.append(knoten("p", { class: "gewaehlt-text" }, "✓ Ihre Skizze ist gespeichert. Sie können eine weitere zeichnen."));
+    malen();
+    const k = knoten("button", { type: "button", class: "haupt" }, "Skizze speichern und weiter");
+    k.addEventListener("click", async () => {
+      if (!striche.length) {
+        if (antworten._skizze) return weiter(f);
+        melden("Bitte zeichnen Sie etwas – oder wählen Sie unten „Lieber später“.");
+        return;
+      }
+      k.disabled = true;
+      try {
+        const bild = await new Promise((fertig) => leinwand.toBlob(fertig, "image/png"));
+        await datei_hochladen(bild, "Unfallskizze.png", "skizze");
+        antworten._skizze = "1";
+        weiter(f);
+      } catch (e) { melden(e.message); }
+      k.disabled = false;
+    });
+    karte.append(k);
+  },
+
   datum(karte, f) {
     const schnell = knoten("div", { class: "schnell" });
     for (const [text, tage] of [["Heute", 0], ["Gestern", 1]]) {
@@ -467,10 +606,10 @@ function geschafft() {
     const gespraech = $(".gespraech", buehne);
     const letzte = FRAGEN.find((x) => x.id === verlauf[verlauf.length - 1]);
     if (gespraech && letzte) gespraech.append(blase("ich", antwort_text(letzte)),
-      blase("bot", "Vielen Dank – der schwierigste Teil ist geschafft! Jetzt noch Fotos (falls zur Hand), Ihre Kontaktdaten und die Unterschrift."));
+      blase("bot", "Vielen Dank – der schwierigste Teil ist geschafft! Jetzt noch Ihre Kontaktdaten und die Unterschrift. Weitere Unterlagen wie Fahrzeugschein oder Rechnungen laden Sie hoch, sobald wir Ihren Fall geprüft haben."));
     const eingabe = $(".eingabe", buehne);
     eingabe.textContent = "";
-    const k = knoten("button", { type: "button", class: "haupt" }, "Weiter zu den Fotos");
+    const k = knoten("button", { type: "button", class: "haupt" }, "Weiter zu Kontaktdaten und Unterschrift");
     k.addEventListener("click", () => { location.href = "/#weiter"; });
     eingabe.append(k);
     window.scrollTo(0, document.body.scrollHeight);
@@ -480,8 +619,8 @@ function geschafft() {
   const karte = knoten("section", { class: "frage geschafft" });
   karte.append(knoten("div", { class: "haken-gross" }, "✓"),
     knoten("h1", {}, "Geschafft – der schwierigste Teil ist erledigt"),
-    knoten("p", { class: "unter" }, "Jetzt noch Fotos (falls zur Hand), Ihre Kontaktdaten und die Unterschrift. Was fehlt, können Sie jederzeit nachreichen."));
-  const k = knoten("button", { type: "button", class: "haupt" }, "Weiter zu den Fotos");
+    knoten("p", { class: "unter" }, "Jetzt noch Ihre Kontaktdaten und die Unterschrift. Weitere Unterlagen laden Sie hoch, sobald wir Ihren Fall geprüft haben."));
+  const k = knoten("button", { type: "button", class: "haupt" }, "Weiter zu Kontaktdaten und Unterschrift");
   k.addEventListener("click", () => { location.href = "/#weiter"; });
   karte.append(k);
   buehne.append(karte);
@@ -515,6 +654,8 @@ $("#zurueck").addEventListener("click", () => {
     for (const werte of Object.values(quelle)) Object.assign(antworten, werte);
   }
   if (antworten.zeugen) antworten._zeugen = "ja";
+  for (const u of zustand.unterlagen || []) geladen[u.schluessel] = u.anzahl;
+  if (geladen.skizze) antworten._skizze = "1";
   if (antworten.hergang) antworten._hergang_eigen = "1";
   try { Object.assign(antworten, JSON.parse(localStorage.getItem(ENTWURF + ":" + zugang.slice(0, 12)) || "{}")); } catch (e) { /* egal */ }
   verlauf = [FRAGEN[0].id];

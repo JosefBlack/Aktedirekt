@@ -151,6 +151,18 @@ Datenschutzerklärung stehen in `aktedirekt/texte/marke.json` (neutral). Die
 Fassung der Kanzlei liegt beim Bau unter `kanzlei-texte/marke.json`, ein Logo als
 `kanzlei-texte/logo.svg`, `logo.png` oder `logo.jpg` - beides nicht im Repository.
 
+## Zwei Stufen bei den Unterlagen
+
+Vor der Prüfung durch die Kanzlei nimmt das Portal vom Mandanten nur das
+Nötigste an: Fotos vom Schaden und vom Unfallort, die Unfallskizze und
+Unterlagen der Gegenseite (höchstens 15 Dateien; bei der Kündigung das
+Kündigungsschreiben). Alles Weitere - Fahrzeugschein, Rechnungen, Post von
+Versicherungen - geht erst nach der Freigabe: per Knopf in der Ansicht der
+Kanzlei, mit einer Anforderung von Unterlagen oder automatisch mit der Annahme
+des Leads in jur|nodes. Werkstatt und Sachverständiger sind davon nicht
+betroffen. Was das Gutachten enthält (Fahrzeugdaten, Reparaturkosten), fragt
+das Portal nicht ab; es fragt nur, ob es ein Gutachten gibt.
+
 ## Statusseite des Mandanten
 
 Nach dem Abschicken ist die Startseite des Mandanten seine Statusseite. Sie soll

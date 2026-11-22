@@ -329,7 +329,12 @@ function checkliste_zeigen() {
     // Nach dem Abschicken zuerst, was noch fehlt; der Rest liegt eine Ebene tiefer.
     const kurz = ziel.id === "checkliste2";
     let weitere = null;
-    for (const u of zustand.unterlagen || []) {
+    // Vor der Prüfung durch die Kanzlei nur das Nötigste; der Rest kommt nach der Freigabe.
+    let erlaubt = (zustand.unterlagen || []).filter((u) => zustand.freigegeben || u.vorab);
+    // Nach dem Abschicken steht oben, was noch fehlt.
+    if (ziel.id === "checkliste2") erlaubt = [...erlaubt.filter(ist_offen), ...erlaubt.filter((u) => !ist_offen(u))];
+    const spaeter = (zustand.unterlagen || []).filter((u) => !zustand.freigegeben && !u.vorab);
+    for (const u of erlaubt) {
       if (kurz && !ist_offen(u) && !weitere) {
         weitere = knoten("details", { class: "weitere" });
         weitere.append(knoten("summary", {}, "Weitere Unterlagen nachreichen"), knoten("ul", { class: "checkliste" }));
@@ -349,6 +354,12 @@ function checkliste_zeigen() {
       li.append(knoepfe);
       (weitere && !ist_offen(u) ? $("ul", weitere) : ziel).append(li);
     }
+    if (spaeter.length) {
+      const li = knoten("li", { class: "huelle" });
+      li.append(knoten("p", { class: "klein gesperrt" }, "Sobald wir Ihren Fall geprüft haben – meist innerhalb eines Werktags –, "
+        + "können Sie hier außerdem hochladen: " + spaeter.map((u) => u.titel).join(", ") + "."));
+      ziel.append(li);
+    }
   }
   const anf = zustand.anforderung;
   $("#anforderung").hidden = !anf;
@@ -361,7 +372,7 @@ function checkliste_zeigen() {
     $("#anforderung-text").textContent = anf.text || "";
     $("#anforderung-text").hidden = !anf.text;
   }
-  const offen = (zustand.unterlagen || []).filter(ist_offen).map((u) => u.titel);
+  const offen = (zustand.unterlagen || []).filter((u) => (zustand.freigegeben || u.vorab) && ist_offen(u)).map((u) => u.titel);
   $("#offen").hidden = !offen.length || !!anf;
   $("#offen").textContent = offen.length ? "Noch offen: " + offen.join(", ") + "." : "";
 }
@@ -785,7 +796,7 @@ wieder.addEventListener("submit", async (e) => {
       if (location.hash === "#weiter") {
         history.replaceState(null, "", location.pathname);
         const offen = SEITEN.slice(1, -2).find((s) => s !== "fotos" && !zustand.angaben[s]);
-        return zeigen(offen === "person" && SEITEN.includes("fotos") ? "fotos" : (offen || "abschluss"));
+        return zeigen(offen || "abschluss");
       }
     } catch (fehler) {
       if (fehler.status === 401) { zugang = ""; try { localStorage.removeItem(MERKER); } catch (e) { /* egal */ } }

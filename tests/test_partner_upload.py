@@ -80,7 +80,7 @@ def test_mandant_kann_die_ankuendigung_des_partners_nicht_uebernehmen_und_umgeke
     vom_partner = client.post(basis, headers=kopf, json={"name": "a.pdf", "groesse": len(PDF)}).json()
     ablage.abliefern(client, kopf, vom_partner["adresse"], PDF)
     assert client.post(f"/api/aufnahme/dateien/{vom_partner['kennung']}/fertig", headers=mandant).status_code == 404
-    vom_mandanten = client.post("/api/aufnahme/dateien", headers=mandant, json={"name": "b.pdf", "groesse": len(PDF)}).json()
+    vom_mandanten = client.post("/api/aufnahme/dateien", headers=mandant, json={"name": "b.pdf", "groesse": len(PDF), "unterlage": "schaden"}).json()
     ablage.abliefern(client, mandant, vom_mandanten["adresse"], PDF)
     assert client.post(f"{basis}/{vom_mandanten['kennung']}/fertig", headers=kopf).status_code == 404
     assert client.post(f"{basis}/{vom_partner['kennung']}/fertig", headers=kopf).status_code == 200

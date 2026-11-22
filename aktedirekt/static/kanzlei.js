@@ -82,6 +82,7 @@ async function liste_laden() {
     stand.append(teil("span", "seit", "eingegangen " + zeitpunkt(e.eingegangen_am)));
     li.append(stand);
     li.append(teil("span", "kfz", e.art + (e.vermittler ? " · über " + e.vermittler : "") + (e.in_jurnodes ? " · in jur|nodes" : " · noch nicht in jur|nodes")));
+    if (e.freigegeben === false) li.append(teil("span", "warnung-pruefung", "Wartet auf Ihre Prüfung – Unterlagen noch nicht freigegeben"));
     if (e.sofort === false) li.append(teil("span", "warnung-sofort", "Sofortiger Beginn nicht verlangt – Widerrufsfrist bis " + datum(e.widerrufsfrist_bis)));
     const n = (e.nachrichten || []).length;
     if (n) li.append(teil("span", "nachricht", (n === 1 ? "1 Nachricht" : n + " Nachrichten") + " des Mandanten, zuletzt " + zeitpunkt(e.nachrichten[n - 1])));
@@ -168,6 +169,30 @@ function zugang_bauen(fall) {
   return kasten;
 }
 
+// Vorprüfung: Erst nach der Freigabe darf der Mandant alle Unterlagen hochladen.
+function freigabe_bauen(fall, e) {
+  const kasten = teil("div", "anfordern nicht-drucken");
+  kasten.append(teil("h2", "", "Prüfung und Freigabe"));
+  if (e.freigegeben) {
+    kasten.append(teil("p", "klein", "Freigegeben: Der Mandant kann alle Unterlagen hochladen."));
+    return kasten;
+  }
+  kasten.append(teil("p", "klein", "Bisher darf der Mandant nur Fotos vom Schaden und vom Unfall, die Skizze und Unterlagen der Gegenseite hochladen. "
+    + "Nach Ihrer Prüfung geben Sie alle Unterlagen frei; er bekommt dann – falls E-Mails eingerichtet sind – eine Nachricht. "
+    + "Mit der Annahme des Leads in jur|nodes geschieht das ebenfalls."));
+  const knopf = teil("button", "schlicht rand", "Geprüft – Unterlagen freigeben");
+  knopf.type = "button";
+  knopf.addEventListener("click", async () => {
+    knopf.disabled = true;
+    try {
+      await aufruf("PUT", "/api/kanzlei/eingaenge/" + fall + "/freigabe");
+      kasten.replaceWith(freigabe_bauen(fall, { ...e, freigegeben: true }));
+    } catch (fehler) { gescheitert(fehler); knopf.disabled = false; }
+  });
+  kasten.append(knopf);
+  return kasten;
+}
+
 // Unterlagen beim Mandanten anfordern: Er sieht die Punkte oben auf seiner Seite.
 function anforderung_bauen(fall, e) {
   const kasten = teil("div", "anfordern nicht-drucken");
@@ -244,6 +269,7 @@ async function eingang_laden(fall) {
     blatt.append(anlagen);
   } else blatt.append(teil("p", "leer", "keine"));
 
+  blatt.append(freigabe_bauen(fall, e));
   blatt.append(anforderung_bauen(fall, e));
   blatt.append(zugang_bauen(fall));
 

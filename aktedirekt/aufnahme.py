@@ -47,6 +47,7 @@ LESBAR = {
     "vorne_links": "vorne links", "vorne": "vorne", "vorne_rechts": "vorne rechts", "links": "linke Seite",
     "dach": "Dach", "rechts": "rechte Seite", "hinten_links": "hinten links", "hinten": "hinten",
     "hinten_rechts": "hinten rechts", "finanziert": "finanziert", "geleast": "geleast",
+    "beauftragt": "beauftragt, liegt noch nicht vor",
 }
 
 SCHRITTE: dict[str, tuple[Feld, ...]] = {
@@ -66,6 +67,7 @@ SCHRITTE: dict[str, tuple[Feld, ...]] = {
         Feld("kennzeichen", "kennzeichen", pflicht=True),
         Feld("modell", "text"),
         Feld("schadenstellen", "mehrfach", laenge=200, auswahl=SCHADENSTELLEN),
+        Feld("gutachten", "auswahl", auswahl=("ja", "beauftragt", "nein")),
         Feld("halter_selbst", "ja_nein", pflicht=True),
         Feld("halter_name", "text", pflicht_wenn=("halter_selbst", "nein")),
         Feld("finanzierung", "auswahl", pflicht=True, auswahl=("nein", "finanziert", "geleast")),
@@ -134,21 +136,13 @@ ERGAENZUNGEN: dict[str, Abschnitt] = {
              bezeichnung="Geburtsdatum des Fahrers"),
         Feld("fahrer_email", "email", zeige_wenn=("fahrer_selbst", "nein"), bezeichnung="E-Mail des Fahrers"),
     )),
-    "fahrzeug": Abschnitt("Ihr Fahrzeug im Einzelnen",
-                          "Das meiste steht im Fahrzeugschein. Haben Sie ihn fotografiert, genügt, was Sie auswendig wissen.", (
-        Feld("fahrzeugart", "text", laenge=60, bezeichnung="Fahrzeugart", hinweis="Pkw, Motorrad, Transporter …"),
-        Feld("baujahr", "jahr", bezeichnung="Baujahr"),
-        Feld("erstzulassung", "datum_frei", bezeichnung="Erstzulassung"),
-        Feld("kilometerstand", "zahl", bezeichnung="Kilometerstand"),
-        Feld("scheckheft", "ja_nein", bezeichnung="Scheckheft gepflegt?"),
-        Feld("eigentuemer", "text", bezeichnung="Eigentümer oder Leasinggeber", hinweis="falls nicht Sie selbst"),
-    )),
-    "schaden": Abschnitt("Der Schaden", "", (
-        Feld("beschaedigt", "lang", laenge=1000, bezeichnung="Was wurde beschädigt?",
-             hinweis="auch Gegenstände im Fahrzeug, Kleidung, Helm"),
-        Feld("reparaturkosten", "betrag", bezeichnung="Voraussichtliche Reparaturkosten in Euro", hinweis="falls bekannt"),
-        Feld("besichtigungsort", "text", laenge=200, bezeichnung="Wo kann das Fahrzeug besichtigt werden?"),
+    "schaden": Abschnitt("Gutachten und weitere Schäden",
+                         "Alles zum Fahrzeugschaden selbst steht im Gutachten – hier nur, was darüber hinaus wichtig ist.", (
+        Feld("besichtigungsort", "text", laenge=200, bezeichnung="Wo kann das Fahrzeug besichtigt werden?",
+             hinweis="nur nötig, wenn noch kein Gutachten beauftragt ist"),
         Feld("besichtigungstelefon", "telefon", bezeichnung="Telefon für die Besichtigung"),
+        Feld("weitere_schaeden", "lang", laenge=1000, bezeichnung="Was wurde außer dem Fahrzeug beschädigt?",
+             hinweis="Kleidung, Helm, Handy, Kindersitz, Ladung …"),
     )),
     "verletzung": Abschnitt("Ihre Verletzungen", "Für Schmerzensgeld, Verdienstausfall und Haushaltsführungsschaden. "
                             "Atteste und Arztberichte laden Sie bitte unter „Unterlagen nachreichen“ hoch.", (
@@ -191,6 +185,8 @@ ERGAENZUNGEN: dict[str, Abschnitt] = {
 ERG = "erg_"
 # Was die Kanzlei beim Mandanten anfordert (Punkte der Checkliste und ein Satz dazu).
 ANFORDERUNG = "#anforderung"
+# Dass die Kanzlei den Eingang geprüft und alle Unterlagen freigegeben hat.
+FREIGABE = "#freigabe"
 
 # Wie die Felder der Unfallaufnahme in der Ansicht der Kanzlei heißen. Auf dem
 # Handy stehen diese Fragen fest in der Seite; hier nur die Kurzform für die Akte.
@@ -198,7 +194,7 @@ UNFALL_TITEL = {"unfall": "Der Unfall", "fahrzeug": "Fahrzeug des Mandanten",
                 "gegner": "Gegenseite", "person": "Mandant"}
 UNFALL_BEZEICHNUNGEN = {
     "unfalldatum": "Unfalltag", "unfallart": "Unfallart", "verursacher": "Verursacht nach Angabe des Mandanten durch",
-    "schadenstellen": "Beschädigt", "unfallzeit": "Unfallzeit", "unfallort": "Unfallort", "hergang": "Hergang",
+    "schadenstellen": "Beschädigt", "gutachten": "Gutachten", "unfallzeit": "Unfallzeit", "unfallort": "Unfallort", "hergang": "Hergang",
     "polizei": "Polizei vor Ort", "polizei_az": "Aktenzeichen der Polizei", "verletzt": "Verletzte",
     "zeugen": "Zeugen", "kennzeichen": "Kennzeichen", "modell": "Hersteller und Modell",
     "halter_selbst": "Mandant ist Halter", "halter_name": "Halter", "finanzierung": "Finanziert oder geleast",
@@ -302,17 +298,21 @@ class Unterlage:
     kurz: str                          # Vorsatz im Dateinamen, so sieht es die Kanzlei
     hinweis: str = ""
     wichtig: bool = False              # fehlt es, steht es als "noch offen" da
+    # Schon vor der Prüfung durch die Kanzlei erlaubt (erste Stufe). Alles andere
+    # erst nach ihrer Freigabe - Schutz gegen Missbrauch des offenen Zugangs.
+    vorab: bool = False
 
 
 U_UNFALL: tuple[Unterlage, ...] = (
     Unterlage("schaden", "Fotos vom Schaden", "Schadenfoto",
-              "Rundum aus etwa drei Metern, dann jede beschädigte Stelle nah. Auch Innenraum und Gegenstände.", True),
+              "Rundum aus etwa drei Metern, dann jede beschädigte Stelle nah. Auch Innenraum und Gegenstände.", True, True),
+    Unterlage("skizze", "Unfallskizze", "Skizze", "Gezeichnet oder als Foto einer Skizze auf Papier.", False, True),
     Unterlage("fahrzeugschein", "Fahrzeugschein", "Fahrzeugschein",
               "Zulassungsbescheinigung Teil I – Vorder- und Rückseite.", True),
     Unterlage("unfallort", "Fotos vom Unfallort", "Unfallort",
-              "Endstellung der Fahrzeuge, Spuren, Schilder und Ampeln – falls vorhanden."),
+              "Endstellung der Fahrzeuge, Spuren, Schilder und Ampeln – falls vorhanden.", False, True),
     Unterlage("gegner", "Kennzeichen und Unterlagen der Gegenseite", "Gegenseite",
-              "Foto vom Kennzeichen, ausgetauschte Daten, Europäischer Unfallbericht."),
+              "Foto vom Kennzeichen, ausgetauschte Daten, Europäischer Unfallbericht.", False, True),
     Unterlage("polizei", "Schreiben der Polizei", "Polizei",
               "Unfallmitteilung, Aktenzeichen, Anhörungsbogen."),
     Unterlage("gutachten", "Gutachten oder Kostenvoranschlag", "Gutachten",
@@ -327,7 +327,7 @@ U_UNFALL: tuple[Unterlage, ...] = (
 )
 U_KUENDIGUNG: tuple[Unterlage, ...] = (
     Unterlage("kuendigung", "Kündigungsschreiben", "Kuendigung",
-              "Alle Seiten – und den Briefumschlag, falls Sie ihn noch haben.", True),
+              "Alle Seiten – und den Briefumschlag, falls Sie ihn noch haben.", True, True),
     Unterlage("vertrag", "Arbeitsvertrag", "Arbeitsvertrag", "Mit allen Nachträgen und Änderungen.", True),
     Unterlage("lohn", "Lohnabrechnungen", "Lohnabrechnung", "Die letzten drei Monate.", True),
     Unterlage("abmahnung", "Abmahnungen", "Abmahnung", "Falls Sie welche erhalten haben."),

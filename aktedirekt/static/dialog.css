@@ -58,3 +58,18 @@
 .chat .frueher[open] summary { margin-bottom: 4px; }
 .chat .eingabe { border-top: 0; padding-top: 4px; }
 .chat .eingabe button.haupt { margin-top: 14px; }
+
+/* Fotos und Skizze */
+.tipps { margin: 0 0 14px; padding-left: 22px; }
+.tipps li { margin: 4px 0; }
+label.kachel { margin-top: 0; min-height: 72px; }
+canvas.skizze { display: block; width: 100%; aspect-ratio: 3 / 2; border: 2px solid var(--rand); border-radius: 12px;
+  background: #fff; touch-action: none; margin: 10px 0; }
+.werkzeug { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { min-height: 40px; padding: 0 12px; border-radius: 20px; border: 1.5px solid var(--rand); background: var(--flaeche);
+  color: var(--schrift); font: inherit; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.chip.an { border-color: var(--marke); background: color-mix(in srgb, var(--marke) 12%, var(--flaeche)); font-weight: 600; }
+.chip i { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+.chip i.punkt-0 { background: #2f6fb0; }
+.chip i.punkt-1 { background: #e8a33d; }
+.chip i.punkt-2 { background: #1d2733; }

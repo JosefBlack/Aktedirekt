@@ -38,17 +38,16 @@ def test_fahrer_nur_noetig_wenn_nicht_selbst_gefahren():
 
 @pytest.mark.parametrize("eingabe,erwartet", [("1250", "1250"), ("1.250,50", "1250,50"), ("1250,5 €", "1250,5")])
 def test_betrag_wird_bereinigt(eingabe, erwartet):
-    sauber, fehler = pruefe("schaden", {"reparaturkosten": eingabe})
-    assert fehler == {} and sauber["reparaturkosten"] == erwartet
+    sauber, fehler = pruefe("versicherungen", {"vollkasko_sb": eingabe})
+    assert fehler == {} and sauber["vollkasko_sb"] == erwartet
 
 
 def test_unsinn_wird_abgewiesen():
-    assert "reparaturkosten" in pruefe("schaden", {"reparaturkosten": "viel"})[1]
-    assert "baujahr" in pruefe("fahrzeug", {"baujahr": "2099"})[1]
-    assert "kilometerstand" in pruefe("fahrzeug", {"kilometerstand": "-5"})[1]
+    assert "vollkasko_sb" in pruefe("versicherungen", {"vollkasko_sb": "viel"})[1]
+    assert "besichtigungstelefon" in pruefe("schaden", {"besichtigungstelefon": "abc"})[1]
     assert "geburtsdatum" in pruefe("person", {"geburtsdatum": "2030-01-01"})[1]
     assert pruefe("person", {"geburtsdatum": "1961-05-04"})[1] == {}      # älter als zehn Jahre ist hier richtig
-    assert pruefe("fahrzeug", {"kilometerstand": "123.456"})[0]["kilometerstand"] == "123456"
+    assert pruefe("versicherungen", {"vollkasko_sb": "1.000"})[0]["vollkasko_sb"] == "1000"
 
 
 def test_jedes_feld_hat_eine_bezeichnung_und_einen_eindeutigen_namen():
@@ -74,13 +73,13 @@ def test_ergaenzen_speichert_abschnittsweise(umgebung):
     antwort = client.put("/api/aufnahme/ergaenzung/bank", headers=kopf,
                          json={"iban": "de89 3704 0044 0532 0130 00", "admin": "1"})
     assert antwort.status_code == 200 and antwort.json()["ergaenzungen"]["bank"]["iban"] == "DE89370400440532013000"
-    assert client.put("/api/aufnahme/ergaenzung/fahrzeug", headers=kopf, json={"baujahr": "2019"}).status_code == 200
+    assert client.put("/api/aufnahme/ergaenzung/schaden", headers=kopf, json={"weitere_schaeden": "Helm"}).status_code == 200
     assert client.put("/api/aufnahme/ergaenzung/bank", headers=kopf, json={"iban": "DE00"}).status_code == 422
     assert client.put("/api/aufnahme/ergaenzung/geheim", headers=kopf, json={}).status_code == 404
 
     nachher = client.get("/api/aufnahme", headers=kopf).json()
     assert nachher["ergaenzungen"]["bank"] == {"iban": "DE89370400440532013000", "kontoinhaber": "", "bic": ""}
-    assert nachher["ergaenzungen"]["fahrzeug"]["baujahr"] == "2019"
+    assert nachher["ergaenzungen"]["schaden"]["weitere_schaeden"] == "Helm"
     # Die erste Stufe bleibt, wie sie unterschrieben wurde, und gilt weiter als vollständig.
     assert nachher["angaben"] == vorher["angaben"] and not any(s.startswith("erg_") for s in nachher["angaben"])
     assert speicher.laden(zugang).fehlende_schritte() == []

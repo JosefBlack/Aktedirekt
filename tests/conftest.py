@@ -61,6 +61,13 @@ def ablage(request, tmp_path, monkeypatch):
 
 def hochladen(client, kopf, ablage, name: str, inhalt: bytes, angekuendigt: int | None = None, unterlage: str = ""):
     """Ankündigen, abliefern, prüfen lassen - gibt die letzte Antwort zurück."""
+    if not unterlage:
+        # Ohne Art der Unterlage geht es erst nach der Freigabe durch die Kanzlei - für die
+        # Prüfungen, die das nicht betrifft, gilt der Fall als freigegeben.
+        from aktedirekt.aufnahme import FREIGABE
+        aufnahme = ablage.speicher.laden(kopf.get("Authorization", "")[7:])
+        if aufnahme is not None and not aufnahme.angaben.get(FREIGABE):
+            ablage.speicher.schritt_speichern(aufnahme.kennung, FREIGABE, {"am": "2000-01-01T00:00:00"})
     ziel = client.post("/api/aufnahme/dateien", headers=kopf,
                        json={"name": name, "groesse": len(inhalt) if angekuendigt is None else angekuendigt,
                              **({"unterlage": unterlage} if unterlage else {})})

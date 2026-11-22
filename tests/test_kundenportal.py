@@ -37,14 +37,21 @@ def test_checkliste_zaehlt_hochgeladenes_je_punkt(mandant):
     zustand = client.get("/api/aufnahme", headers=kopf).json()
     assert punkt(zustand, "fahrzeugschein") == {"schluessel": "fahrzeugschein", "titel": "Fahrzeugschein",
                                                 "hinweis": "Zulassungsbescheinigung Teil I – Vorder- und Rückseite.",
-                                                "wichtig": True, "anzahl": 0, "angefordert": False,
+                                                "wichtig": True, "vorab": False, "anzahl": 0, "angefordert": False,
                                                 "nachgereicht": False}
+    # Vor der Prüfung durch die Kanzlei: nur Fotos vom Schaden, Unfallort, Skizze, Gegenseite.
+    assert hochladen(client, kopf, ablage, "IMG_0.jpg", JPG, unterlage="fahrzeugschein").status_code == 403
+    assert hochladen(client, kopf, ablage, "IMG_S.jpg", JPG, unterlage="schaden").status_code == 200
+    assert client.get("/api/aufnahme", headers=kopf).json()["freigegeben"] is False
+    from aktedirekt.aufnahme import FREIGABE
+    ablage.speicher.schritt_speichern(ablage.speicher.laden(kopf["Authorization"][7:]).kennung, FREIGABE, {"am": "2026-11-19T10:00:00"})
     assert hochladen(client, kopf, ablage, "IMG_1.jpg", JPG, unterlage="fahrzeugschein").json()["name"] == "Fahrzeugschein - IMG_1.jpg"
     hochladen(client, kopf, ablage, "IMG_2.jpg", JPG, unterlage="fahrzeugschein")
     hochladen(client, kopf, ablage, "IMG_3.jpg", JPG)
     zustand = client.get("/api/aufnahme", headers=kopf).json()
-    assert punkt(zustand, "fahrzeugschein")["anzahl"] == 2 and punkt(zustand, "schaden")["anzahl"] == 0
-    assert {d["name"] for d in zustand["dateien"]} == {"Fahrzeugschein - IMG_1.jpg", "Fahrzeugschein - IMG_2.jpg", "IMG_3.jpg"}
+    assert punkt(zustand, "fahrzeugschein")["anzahl"] == 2 and punkt(zustand, "schaden")["anzahl"] == 1
+    assert {d["name"] for d in zustand["dateien"]} == {"Schadenfoto - IMG_S.jpg", "Fahrzeugschein - IMG_1.jpg",
+                                                      "Fahrzeugschein - IMG_2.jpg", "IMG_3.jpg"}
 
 
 def test_unbekannte_art_von_unterlage_wird_abgewiesen(mandant):
@@ -132,7 +139,7 @@ def test_kanzlei_fordert_unterlagen_an_und_sieht_was_nachkommt(ablage):
     uhr = {"jetzt": JETZT}
     client = TestClient(app_bauen(ablage.speicher, partner=Partnerliste(list(KONTEN)), jetzt=lambda: uhr["jetzt"]))
     kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
-    hochladen(client, kopf, ablage, "alt.jpg", JPG, unterlage="fahrzeugschein")
+    hochladen(client, kopf, ablage, "alt.jpg", JPG, unterlage="schaden")
     abschicken(client, kopf)
     fall = zustand_kennung(ablage, kopf)
     k = kanzlei(client)
@@ -151,7 +158,7 @@ def test_kanzlei_fordert_unterlagen_an_und_sieht_was_nachkommt(ablage):
     zustand = client.get("/api/aufnahme", headers=kopf).json()
     assert punkt(zustand, "fahrzeugschein")["nachgereicht"] and not punkt(zustand, "rechnungen")["nachgereicht"]
     eingang = client.get(f"/api/kanzlei/eingaenge/{fall}", headers=k).json()
-    assert punkt(eingang["checkliste"] and {"unterlagen": eingang["checkliste"]}, "fahrzeugschein")["anzahl"] == 2
+    assert punkt({"unterlagen": eingang["checkliste"]}, "fahrzeugschein")["anzahl"] == 1
     # Zurücknehmen
     assert client.put(pfad, json={"punkte": [], "text": ""}, headers=k).json()["anforderung"] is None
     assert client.get("/api/aufnahme", headers=kopf).json()["anforderung"] is None
@@ -278,3 +285,34 @@ def test_bildfragebogen_unfallart_rolle_und_schadenstellen(mandant):
     zeilen = {b: w for t in aufnahme.fuer_die_akte() for b, w in t["zeilen"]}
     assert zeilen["Unfallart"] == "Auffahrunfall" and zeilen["Beschädigt"] == "hinten, hinten links"
     assert "Gegenseite" in zeilen["Verursacht nach Angabe des Mandanten durch"]
+
+
+def test_vorpruefung_durch_die_kanzlei_vor_den_unterlagen(ablage):
+    from aktedirekt.partner import Partnerliste
+    from aktedirekt.post import Postfach
+    from tests.test_kuendigung import KONTEN, kanzlei
+    post = Postfach()
+    client = TestClient(app_bauen(ablage.speicher, partner=Partnerliste(list(KONTEN)), post=post, jetzt=lambda: JETZT))
+    kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
+    assert hochladen(client, kopf, ablage, "skizze.png", b"\x89PNG\r\n\x1a\n" + b"0" * 100, unterlage="skizze").status_code == 200
+    abschicken(client, kopf)
+    assert hochladen(client, kopf, ablage, "rechnung.pdf", b"%PDF-1.4", unterlage="rechnungen").status_code == 403
+    k = kanzlei(client)
+    fall = zustand_kennung(ablage, kopf)
+    eingang = client.get("/api/kanzlei/eingaenge", headers=k).json()["eingaenge"][0]
+    assert eingang["freigegeben"] is False
+    post.gesendet.clear()
+    assert client.put(f"/api/kanzlei/eingaenge/{fall}/freigabe", headers=k).json() == {"freigegeben": True}
+    assert len(post.gesendet) == 1 and "Unterlagen" in post.gesendet[0]["betreff"]
+    assert client.get("/api/aufnahme", headers=kopf).json()["freigegeben"] is True
+    assert hochladen(client, kopf, ablage, "rechnung.pdf", b"%PDF-1.4", unterlage="rechnungen").status_code == 200
+    # Ein zweites Freigeben schickt keine zweite E-Mail.
+    client.put(f"/api/kanzlei/eingaenge/{fall}/freigabe", headers=k)
+    assert len(post.gesendet) == 1
+
+
+def test_freigabe_auch_mit_der_annahme_des_mandats(mandant):
+    client, kopf, ablage = mandant
+    abschicken(client, kopf)
+    ablage.speicher.sachstand_setzen(zustand_kennung(ablage, kopf), "angenommen", date(2026, 11, 20))
+    assert client.get("/api/aufnahme", headers=kopf).json()["freigegeben"] is True

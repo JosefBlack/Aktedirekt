@@ -229,7 +229,7 @@ def test_fremde_datei_laesst_sich_nicht_uebernehmen(umgebung):
     client, ablage = umgebung[0], umgebung[3]
     kopf_a, _ = beginnen(client)
     kopf_b, _ = beginnen(client)
-    ziel = client.post("/api/aufnahme/dateien", headers=kopf_a, json={"name": "a.jpg", "groesse": 5}).json()
+    ziel = client.post("/api/aufnahme/dateien", headers=kopf_a, json={"name": "a.jpg", "groesse": 5, "unterlage": "schaden"}).json()
     ablage.abliefern(client, kopf_a, ziel["adresse"], b"\xff\xd8\xff\xe0x")
     assert client.post(f"/api/aufnahme/dateien/{ziel['kennung']}/fertig", headers=kopf_b).status_code == 404
     assert client.post(f"/api/aufnahme/dateien/{ziel['kennung']}/fertig", headers=kopf_a).status_code == 200
@@ -238,7 +238,7 @@ def test_fremde_datei_laesst_sich_nicht_uebernehmen(umgebung):
 def test_angekuendigt_aber_nicht_abgeliefert(umgebung):
     client = umgebung[0]
     kopf, _ = beginnen(client)
-    ziel = client.post("/api/aufnahme/dateien", headers=kopf, json={"name": "a.jpg", "groesse": 5}).json()
+    ziel = client.post("/api/aufnahme/dateien", headers=kopf, json={"name": "a.jpg", "groesse": 5, "unterlage": "schaden"}).json()
     assert client.post(f"/api/aufnahme/dateien/{ziel['kennung']}/fertig", headers=kopf).status_code == 404
 
 
