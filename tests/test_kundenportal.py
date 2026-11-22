@@ -316,3 +316,20 @@ def test_freigabe_auch_mit_der_annahme_des_mandats(mandant):
     abschicken(client, kopf)
     ablage.speicher.sachstand_setzen(zustand_kennung(ablage, kopf), "angenommen", date(2026, 11, 20))
     assert client.get("/api/aufnahme", headers=kopf).json()["freigegeben"] is True
+
+
+def test_herkunft_aus_dem_link_und_bausteine_fuer_die_website(ablage):
+    from aktedirekt.partner import Partnerliste
+    from tests.test_kuendigung import KONTEN, kanzlei
+    client = TestClient(app_bauen(ablage.speicher, partner=Partnerliste(list(KONTEN)), basis_url="https://portal.example",
+                                  jetzt=lambda: JETZT))
+    kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall", "quelle": "website"}).json()["zugang"]}
+    abschicken(client, kopf)
+    anders = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall", "quelle": "<b>x"}).json()["zugang"]}
+    abschicken(client, anders)
+    quellen = sorted(e["quelle"] for e in client.get("/api/kanzlei/eingaenge", headers=kanzlei(client)).json()["eingaenge"])
+    assert quellen == ["", "website"]                        # Unsinn wird nicht übernommen
+    assert "einbinden.js" in client.get("/einbinden").text
+    qr = client.get("/einbinden/qr.svg?ziel=kuendigung&quelle=flyer")
+    assert qr.status_code == 200 and qr.headers["content-type"].startswith("image/svg+xml") and b"<svg" in qr.content and b"xmlns" in qr.content
+    assert client.get("/einbinden/qr.svg?ziel=x&quelle=flyer").status_code == 400

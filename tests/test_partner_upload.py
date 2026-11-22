@@ -144,3 +144,11 @@ def test_werkstatt_ordnet_ihre_unterlage_der_checkliste_zu(umgebung):
     assert antwort.json()["name"] == "Gutachten - kva.pdf"
     zustand = einloesen(client, fall["link"]).json()
     assert next(u for u in zustand["unterlagen"] if u["schluessel"] == "gutachten")["anzahl"] == 1
+
+
+def test_aushang_fuer_den_tresen(umgebung):
+    client, _, _, _ = umgebung
+    assert client.get("/api/partner/aushang.pdf").status_code == 401
+    antwort = client.get("/api/partner/aushang.pdf", headers=anmelden(client))
+    assert antwort.status_code == 200 and antwort.headers["content-type"] == "application/pdf"
+    assert antwort.content.startswith(b"%PDF") and b"Unfall gehabt?" in antwort.content and b" re" in antwort.content

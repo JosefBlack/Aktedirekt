@@ -187,6 +187,8 @@ ERG = "erg_"
 ANFORDERUNG = "#anforderung"
 # Dass die Kanzlei den Eingang geprüft und alle Unterlagen freigegeben hat.
 FREIGABE = "#freigabe"
+# Woher der Mandant kam (Website, Flyer, Google …) - aus dem Link, nie aus seinen Angaben.
+QUELLE = "#quelle"
 
 # Wie die Felder der Unfallaufnahme in der Ansicht der Kanzlei heißen. Auf dem
 # Handy stehen diese Fragen fest in der Seite; hier nur die Kurzform für die Akte.

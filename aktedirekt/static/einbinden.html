@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Für Ihre Website</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="einbinden.css">
+<link rel="stylesheet" href="marke.css">
+</head>
+<body>
+<header>
+  <div id="markenleiste" class="markenleiste" hidden></div>
+  <div class="kopf"><span id="titel">Bausteine für Website und Flyer</span></div>
+</header>
+<main>
+  <p>Kopieren Sie diese Bausteine in Ihre Website oder geben Sie sie Ihrem Webdesigner. Jeder Link trägt eine
+     <strong>Quelle</strong> (etwa „website“ oder „flyer“) – bei jedem Eingang sehen Sie dann in Ihrer Liste, woher er kam.</p>
+  <label>Quelle für die Links unten
+    <input type="text" id="quelle" value="website" maxlength="30" autocomplete="off"></label>
+  <p class="klein">Kleinbuchstaben, Ziffern und Bindestrich, zum Beispiel website, startseite, google, flyer, visitenkarte.</p>
+
+  <section class="baustein">
+    <h2>Knopf „Unfall melden“</h2>
+    <div class="vorschau" id="vorschau-unfall"></div>
+    <textarea class="code" id="code-unfall" readonly></textarea>
+    <div class="zeile2"><button type="button" class="neben" data-kopiere="code-unfall">Code kopieren</button></div>
+  </section>
+
+  <section class="baustein">
+    <h2>Knopf „Kündigung erhalten“</h2>
+    <div class="vorschau" id="vorschau-kuendigung"></div>
+    <textarea class="code" id="code-kuendigung" readonly></textarea>
+    <div class="zeile2"><button type="button" class="neben" data-kopiere="code-kuendigung">Code kopieren</button></div>
+  </section>
+
+  <section class="baustein">
+    <h2>Einfache Links</h2>
+    <p class="klein">Für Texte, E-Mail-Signaturen oder Ihr Google-Unternehmensprofil.</p>
+    <textarea class="code" id="code-links" readonly></textarea>
+    <div class="zeile2"><button type="button" class="neben" data-kopiere="code-links">Links kopieren</button></div>
+  </section>
+
+  <section class="baustein">
+    <h2>Textvorschlag für Ihre Website</h2>
+    <textarea class="code" id="code-text" readonly>Unfall gehabt? Melden Sie ihn bei uns online – in etwa fünf Minuten, direkt am Handy. Fotos, Skizze und Angaben nehmen wir sofort auf; was Ihnen gerade fehlt, reichen Sie einfach später nach. Haben Sie den Unfall nicht verschuldet, muss in der Regel die gegnerische Versicherung auch unsere Kosten tragen. Den Stand Ihres Falls sehen Sie jederzeit online.</textarea>
+    <div class="zeile2"><button type="button" class="neben" data-kopiere="code-text">Text kopieren</button></div>
+  </section>
+
+  <section class="baustein">
+    <h2>QR-Codes für Flyer, Aushang und Visitenkarte</h2>
+    <p class="klein">Rechtsklick (am Handy: lange drücken) und speichern – als SVG lassen sie sich beliebig groß drucken. Die Quelle oben gilt auch hier.</p>
+    <div class="qr">
+      <figure><img id="qr-unfall" alt="QR-Code Unfall melden"><figcaption><a id="qr-unfall-link" download>Unfall melden (SVG)</a></figcaption></figure>
+      <figure><img id="qr-kuendigung" alt="QR-Code Kündigung"><figcaption><a id="qr-kuendigung-link" download>Kündigung (SVG)</a></figcaption></figure>
+    </div>
+  </section>
+</main>
+<footer id="fuss" class="fuss" hidden></footer>
+<script src="marke.js"></script>
+<script src="einbinden.js"></script>
+</body>
+</html>

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
 import os
 import re
@@ -33,7 +34,7 @@ from fastapi.staticfiles import StaticFiles
 
 from aktedirekt import akte_pdf, dateien, erklaerungen, totp, zeit
 from aktedirekt.abgleich import ENTWURF_FRIST, alte_entwuerfe, als_fall, entwuerfe_loeschen, lead_anlegen
-from aktedirekt.aufnahme import (ANFORDERUNG, ERG, FALLARTEN, FREIGABE, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
+from aktedirekt.aufnahme import (ANFORDERUNG, ERG, FALLARTEN, FREIGABE, QUELLE, TRESEN, Abschnitt, Aufnahme, Feld, felder_pruefen,
                                  kurzrubrum, unterlage_zu)
 from aktedirekt.jurnodes import JurNodes
 from aktedirekt.partner import FEHLVERSUCHE, SPERRE, Partnerliste
@@ -302,6 +303,10 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         if konto is not None or art not in FALLARTEN:
             art = "unfall"
         aufnahme, zugang = speicher.anlegen(jetzt(), partner=konto.kennung if konto else "", art=art)
+        quelle = daten.get("quelle", "") if isinstance(daten, dict) else ""
+        if isinstance(quelle, str) and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,29}", quelle):
+            speicher.schritt_speichern(aufnahme.kennung, QUELLE, {"quelle": quelle})
+            aufnahme = speicher.nach_kennung(aufnahme.kennung) or aufnahme
         return JSONResponse({"zugang": zugang, **zustand(aufnahme)})
 
     @app.post("/api/aufnahme/uebernahme")
@@ -713,6 +718,22 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         link = (basis_url or str(request.base_url)).rstrip("/") + "/#u=" + code
         return {"link": link, "qr": segno.make(link, error="m").svg_data_uri(scale=6, border=2)}
 
+    @app.get("/api/partner/aushang.pdf")
+    async def aushang(request: Request) -> Response:
+        """Ein Aushang für den Tresen mit dem QR-Code zum Kundenlink dieses Partners."""
+        konto = konto_von(request)
+        if not konto.einladung:
+            raise HTTPException(404, "Für diesen Zugang gibt es keinen Kundenlink.")
+        link = portal_adresse(request) + "?p=" + konto.einladung + "&quelle=aushang"
+        matrix = [list(reihe) for reihe in segno.make(link, error="m").matrix]
+        pdf = akte_pdf.aushang(marke.get("name", ""), marke.get("unterzeile", ""), "Unfall gehabt?",
+                               "Melden Sie ihn hier – in etwa fünf Minuten, direkt am Handy.",
+                               ["Fotos und Skizze gleich mit dabei", "Was fehlt, reichen Sie einfach später nach",
+                                "Den Stand Ihres Falls sehen Sie jederzeit online"],
+                               matrix, konto.name, portal_adresse(request).replace("https://", "").rstrip("/"))
+        return Response(pdf, media_type="application/pdf",
+                        headers={"Content-Disposition": 'attachment; filename="Aushang Unfall melden.pdf"'})
+
     @app.post("/api/partner/faelle")
     async def am_tresen(request: Request) -> JSONResponse:
         konto = konto_von(request)
@@ -855,6 +876,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 # "unbekannt" heißt: gemeldet, aber noch nicht bestätigt gefunden.
                 "in_jurnodes": aufnahme.lead_kennung not in ("", "unbekannt"),
                 "freigegeben": freigegeben(aufnahme),
+                "quelle": (aufnahme.angaben.get(QUELLE) or {}).get("quelle", ""),
                 "nachrichten": [d.hochgeladen_am.isoformat(timespec="minutes") for d in speicher.dateien(aufnahme.kennung)
                                 if d.von == NACHRICHT and d.hochgeladen_am]}
 
@@ -1023,6 +1045,22 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     @app.get("/")
     async def start() -> FileResponse:
         return FileResponse(str(statisch.joinpath("index.html")))
+
+    @app.get("/einbinden")
+    async def einbinden() -> FileResponse:
+        """Bausteine für die Website der Kanzlei und für Flyer - Knöpfe, Links, QR-Codes."""
+        return FileResponse(str(statisch.joinpath("einbinden.html")))
+
+    @app.get("/einbinden/qr.svg")
+    async def einbinden_qr(request: Request, ziel: str = "unfall", quelle: str = "flyer") -> Response:
+        if ziel not in FALLARTEN or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,29}", quelle):
+            raise HTTPException(400, "Unbekanntes Ziel.")
+        adresse = portal_adresse(request) + ("?" if ziel == "unfall" else f"?f={ziel}&") + f"quelle={quelle}"
+        puffer = io.BytesIO()
+        segno.make(adresse, error="m").save(puffer, kind="svg", scale=8, border=2)
+        svg = puffer.getvalue()
+        return Response(svg, media_type="image/svg+xml",
+                        headers={"Content-Disposition": f'inline; filename="qr-{ziel}-{quelle}.svg"'})
 
     @app.get("/dialog")
     async def dialogseite() -> FileResponse:

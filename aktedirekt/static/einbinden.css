@@ -1,0 +1,12 @@
+main { max-width: 760px; }
+.baustein { background: var(--flaeche); border: 1px solid var(--rand); border-radius: 12px; padding: 16px; margin-top: 18px; }
+.baustein h2 { margin-top: 0; }
+.vorschau { padding: 18px; border: 1px dashed var(--rand); border-radius: 10px; background: #fff; margin: 10px 0; }
+textarea.code { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; min-height: 96px; }
+.qr { display: flex; gap: 24px; flex-wrap: wrap; }
+.qr figure { margin: 0; text-align: center; }
+.qr img { width: 180px; height: 180px; background: #fff; border: 1px solid var(--rand); border-radius: 8px; }
+.zeile2 { display: flex; gap: 10px; flex-wrap: wrap; }
+.zeile2 button { width: auto; padding: 0 16px; }
+.vorschau-knopf { display: inline-block; padding: 14px 22px; border-radius: 10px; background: var(--marke); color: var(--marke-schrift);
+  font-weight: 600; text-decoration: none; }

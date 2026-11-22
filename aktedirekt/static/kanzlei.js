@@ -82,6 +82,7 @@ async function liste_laden() {
     stand.append(teil("span", "seit", "eingegangen " + zeitpunkt(e.eingegangen_am)));
     li.append(stand);
     li.append(teil("span", "kfz", e.art + (e.vermittler ? " · über " + e.vermittler : "") + (e.in_jurnodes ? " · in jur|nodes" : " · noch nicht in jur|nodes")));
+    if (e.quelle) li.append(teil("span", "quelle", "Gekommen über: " + e.quelle));
     if (e.freigegeben === false) li.append(teil("span", "warnung-pruefung", "Wartet auf Ihre Prüfung – Unterlagen noch nicht freigegeben"));
     if (e.sofort === false) li.append(teil("span", "warnung-sofort", "Sofortiger Beginn nicht verlangt – Widerrufsfrist bis " + datum(e.widerrufsfrist_bis)));
     const n = (e.nachrichten || []).length;

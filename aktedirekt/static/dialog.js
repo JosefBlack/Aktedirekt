@@ -643,7 +643,8 @@ $("#zurueck").addEventListener("click", () => {
     }
     if (!zustand) {
       const einladung = new URLSearchParams(location.search).get("p") || "";
-      zustand = await aufruf("POST", "/api/aufnahme", { einladung, art: "unfall" });
+      const quelle = new URLSearchParams(location.search).get("quelle") || "";
+      zustand = await aufruf("POST", "/api/aufnahme", { einladung, art: "unfall", quelle });
       zugang = zustand.zugang;
       try { localStorage.setItem(MERKER, zugang); } catch (e) { /* privates Fenster */ }
     }

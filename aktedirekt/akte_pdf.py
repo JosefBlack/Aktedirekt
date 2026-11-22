@@ -96,3 +96,62 @@ def erzeugen(titel: str, kopfzeilen: list[str], teile: list[dict], anlagen: list
     pdf += b"".join(b"%010d 00000 n \n" % s for s in stellen)
     pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(gegenstaende) + 1, verzeichnis)
     return bytes(pdf)
+
+
+def _fertig(seite: bytes) -> bytes:
+    """Ein einseitiges PDF aus einem Inhaltsstrom (Schriften F1 normal, F2 fett)."""
+    gegenstaende = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Count 1 /Kids [5 0 R] >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Contents 6 0 R "
+        b"/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> >>" % (BREITE, HOEHE),
+        b"<< /Length %d >>\nstream\n%s\nendstream" % (len(seite), seite),
+    ]
+    pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    stellen = []
+    for nummer, gegenstand in enumerate(gegenstaende, 1):
+        stellen.append(len(pdf))
+        pdf += b"%d 0 obj\n%s\nendobj\n" % (nummer, gegenstand)
+    verzeichnis = len(pdf)
+    pdf += b"xref\n0 %d\n0000000000 65535 f \n" % (len(gegenstaende) + 1)
+    pdf += b"".join(b"%010d 00000 n \n" % s for s in stellen)
+    pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(gegenstaende) + 1, verzeichnis)
+    return bytes(pdf)
+
+
+def _mittig(text: str, groesse: int, y: float, fett: bool = False, farbe: str = "0.09 0.2 0.3") -> bytes:
+    """Eine Zeile, waagerecht mittig (Breite geschätzt: Helvetica etwa halb so breit wie hoch)."""
+    breite = len(text) * groesse * (0.56 if fett else 0.5)
+    return b"%s rg BT /F%d %d Tf %.1f %.1f Td (%s) Tj ET" % (
+        farbe.encode(), 2 if fett else 1, groesse, max(RAND / 2, (BREITE - breite) / 2), y, _kodiert(text))
+
+
+def aushang(kanzlei: str, unterzeile: str, titel: str, untertitel: str, punkte: list[str],
+            qr: list[list[int]], partner: str, adresse: str) -> bytes:
+    """Ein A4-Aushang für den Tresen der Werkstatt: große Überschrift, QR-Code, drei Punkte."""
+    teile: list[bytes] = []
+    y = HOEHE - 70
+    teile.append(_mittig(kanzlei, 15, y, True))
+    if unterzeile:
+        teile.append(_mittig(unterzeile, 11, y - 18, False, "0.36 0.41 0.46"))
+    teile.append(_mittig(titel, 44, HOEHE - 180, True))
+    for i, z in enumerate(_umbrechen(untertitel, 26)[:2]):
+        teile.append(_mittig(z, 18, HOEHE - 220 - i * 24, False, "0.2 0.24 0.3"))
+    # QR-Code als Vektorgrafik: je dunklem Modul ein Rechteck.
+    groesse = 250
+    modul = groesse / max(1, len(qr))
+    x0, y0 = (BREITE - groesse) / 2, HOEHE - 290 - groesse
+    rechtecke = [b"%.2f %.2f %.2f %.2f re" % (x0 + x * modul, y0 + (len(qr) - 1 - zy) * modul, modul + 0.05, modul + 0.05)
+                 for zy, reihe in enumerate(qr) for x, an in enumerate(reihe) if an]
+    teile.append(b"0 0 0 rg " + b" ".join(rechtecke) + b" f")
+    teile.append(_mittig("Mit der Handykamera scannen", 13, y0 - 26, True))
+    y = y0 - 70
+    for p in punkte:
+        teile.append(_mittig("\u2713  " + p if False else "-  " + p, 14, y, False, "0.15 0.2 0.25"))
+        y -= 24
+    if partner:
+        teile.append(_mittig("In Zusammenarbeit mit " + partner, 11, 80, False, "0.36 0.41 0.46"))
+    teile.append(_mittig(adresse, 9, 62, False, "0.5 0.55 0.6"))
+    return _fertig(b"\n".join(teile))

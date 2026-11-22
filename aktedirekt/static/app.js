@@ -17,6 +17,8 @@ const START = {
 const WORTE = { ja: "Ja", nein: "Nein", unbekannt: "Weiß nicht", schriftlich: "Schriftlich",
   muendlich: "Mündlich", beides: "Beides", nicht_relevant: "Trifft nicht zu" };
 const MERKER = "aktedirekt-zugang";
+// ?formular=1: die bisherigen Formularseiten statt des Bildfragebogens (zum Vergleich und als Ausweg).
+const NUR_FORMULAR = new URLSearchParams(location.search).get("formular") === "1";
 
 let zugang = "";
 let zustand = null;
@@ -650,12 +652,18 @@ $("#los").addEventListener("click", async () => {
   try {
     if (!zustand) {
       const einladung = new URLSearchParams(location.search).get("p") || "";
-      zustand = await aufruf("POST", "/api/aufnahme", { einladung, art: gewaehlt || "unfall" });
+      const quelle = new URLSearchParams(location.search).get("quelle") || "";
+      zustand = await aufruf("POST", "/api/aufnahme", { einladung, art: gewaehlt || "unfall", quelle });
       zugang = zustand.zugang;
       try { localStorage.setItem(MERKER, zugang); } catch (e) { /* privates Fenster */ }
       uebernehmen();
     }
     const offen = SEITEN.slice(1, -2).find((s) => s !== "fotos" && !zustand.angaben[s]);
+    // Der Unfall beginnt im Bildfragebogen; sind Unfall, Fahrzeug und Gegenseite schon da, geht es hier weiter.
+    if (zustand.art === "unfall" && ["unfall", "fahrzeug", "gegner"].includes(offen) && !NUR_FORMULAR) {
+      location.href = "/dialog";
+      return;
+    }
     zeigen(offen || "abschluss");
   } catch (fehler) { melden(fehler.message); }
   $("#los").disabled = false;

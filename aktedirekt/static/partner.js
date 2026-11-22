@@ -288,3 +288,17 @@ $("#kopieren").addEventListener("click", async () => {
   try { await laden(); }
   catch (fehler) { abgemeldet(fehler.status === 401 ? "Bitte erneut anmelden." : fehler.message); }
 })();
+
+// Aushang für den Tresen: PDF mit QR-Code zum Kundenlink.
+$("#aushang").addEventListener("click", async () => {
+  try {
+    const antwort = await fetch("/api/partner/aushang.pdf", { headers: { Authorization: "Bearer " + sitzung } });
+    if (antwort.status === 401) return abgemeldet("Bitte erneut anmelden.");
+    if (!antwort.ok) throw new Error("Das hat nicht geklappt.");
+    const verweis = document.createElement("a");
+    verweis.href = URL.createObjectURL(await antwort.blob());
+    verweis.download = "Aushang Unfall melden.pdf";
+    verweis.click();
+    setTimeout(() => URL.revokeObjectURL(verweis.href), 60000);
+  } catch (fehler) { melden(fehler.message); }
+});

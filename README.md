@@ -163,6 +163,16 @@ des Leads in jur|nodes. Werkstatt und Sachverständiger sind davon nicht
 betroffen. Was das Gutachten enthält (Fahrzeugdaten, Reparaturkosten), fragt
 das Portal nicht ab; es fragt nur, ob es ein Gutachten gibt.
 
+## Website, Flyer und Werkstatt-Tresen
+
+* `/einbinden`: Knöpfe und Links zum Einbauen in die Website der Kanzlei, ein
+  Textvorschlag und QR-Codes (SVG) für Flyer und Visitenkarten. Jeder Link trägt
+  eine Quelle (`?quelle=website`), die Kanzlei sieht sie bei jedem Eingang.
+* In der Fallliste der Werkstatt: ein Aushang (PDF) für den Tresen mit dem
+  QR-Code zu ihrem Kundenlink.
+* Der Unfall beginnt immer im Bildfragebogen (`/dialog`); `?formular=1` zeigt
+  die bisherigen Formularseiten.
+
 ## Statusseite des Mandanten
 
 Nach dem Abschicken ist die Startseite des Mandanten seine Statusseite. Sie soll
