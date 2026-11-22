@@ -125,8 +125,11 @@ function kopf_setzen(f, rueckwaerts) {
 }
 
 // Variante "Gespräch": dieselben Fragen als Sprechblasen; das Beantwortete bleibt stehen.
-const CHAT = new URLSearchParams(location.search).get("stil") === "chat";
+// Grundform ist das Gespräch mit großen Bildkacheln; ?stil=karten zeigt die reine Kartenform.
+const CHAT = new URLSearchParams(location.search).get("stil") !== "karten";
 if (CHAT) document.body.classList.add("chat");
+
+const ABSCHNITTE = { unfall: "Der Unfall", fahrzeug: "Ihr Fahrzeug", gegner: "Die Gegenseite" };
 
 function frage_text(f) { return f.art === "rolle" ? ROLLEN[antworten.unfallart][0] : f.frage; }
 
@@ -162,20 +165,33 @@ function chat_zeigen(f, rueckwaerts) {
   buehne.textContent = "";
   const gespraech = knoten("div", { class: "gespraech" });
   if (verlauf.length <= 1) gespraech.append(blase("bot", "Guten Tag! Ich stelle Ihnen ein paar kurze Fragen zu Ihrem Unfall. Was Sie nicht wissen, lassen Sie einfach aus – Sie können alles später nachreichen."));
-  for (const id of verlauf.slice(0, -1)) {
-    const g = FRAGEN.find((x) => x.id === id);
-    if (!g) continue;
-    const frage = blase("bot", frage_text(g));
+  // Ältere Antworten eingeklappt, damit nicht endlos gescrollt werden muss.
+  const bisher = verlauf.slice(0, -1).map((id) => FRAGEN.find((x) => x.id === id)).filter(Boolean);
+  const sichtbar_ab = Math.max(0, bisher.length - 3);
+  let ablage = null;
+  if (sichtbar_ab > 0) {
+    ablage = knoten("details", { class: "frueher" });
+    ablage.append(knoten("summary", {}, `Ihre bisherigen Antworten (${sichtbar_ab}) – antippen zum Ansehen oder Ändern`));
+    gespraech.append(ablage);
+  }
+  let abschnitt = bisher.length ? null : f.schritt;
+  bisher.forEach((g, i) => {
+    const ziel = i < sichtbar_ab ? ablage : gespraech;
+    if (g.schritt !== abschnitt) {
+      ziel.append(knoten("p", { class: "abschnitt" }, ABSCHNITTE[g.schritt]));
+      abschnitt = g.schritt;
+    }
     const antwort = blase("ich", antwort_text(g));
     antwort.title = "Antippen zum Ändern";
     antwort.addEventListener("click", () => {
-      verlauf = verlauf.slice(0, verlauf.indexOf(id) + 1);
+      verlauf = verlauf.slice(0, verlauf.indexOf(g.id) + 1);
       chat_zeigen(g, true);
     });
-    gespraech.append(frage, antwort);
-  }
+    ziel.append(blase("bot alt", frage_text(g)), antwort);
+  });
+  if (f.schritt !== abschnitt) gespraech.append(knoten("p", { class: "abschnitt" }, ABSCHNITTE[f.schritt]));
   const eingabe = knoten("div", { class: "eingabe" });
-  const frage = blase("bot", frage_text(f), f.unter);
+  const frage = blase("bot aktuell", frage_text(f), f.unter);
   const punkte = knoten("div", { class: "blase bot tippt" });
   punkte.append(knoten("span"), knoten("span"), knoten("span"));
   buehne.append(gespraech, eingabe);
@@ -193,7 +209,9 @@ function chat_zeigen(f, rueckwaerts) {
     gespraech.append(frage);
     eingabe.hidden = false;
     eingabe.classList.add("herein");
-    window.scrollTo(0, document.body.scrollHeight);
+    // Die neue Frage oben ins Bild - unter der festen Kopfzeile, nicht ganz nach unten.
+    const kopf = document.querySelector("header").offsetHeight;
+    window.scrollTo(0, Math.max(0, frage.getBoundingClientRect().top + window.scrollY - kopf - 12));
   };
   clearTimeout(tippt);
   if (rueckwaerts || window.matchMedia("(prefers-reduced-motion: reduce)").matches) fertig();
