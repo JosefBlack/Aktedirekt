@@ -82,6 +82,7 @@ async function liste_laden() {
     stand.append(teil("span", "seit", "eingegangen " + zeitpunkt(e.eingegangen_am)));
     li.append(stand);
     li.append(teil("span", "kfz", e.art + (e.vermittler ? " · über " + e.vermittler : "") + (e.in_jurnodes ? " · in jur|nodes" : " · noch nicht in jur|nodes")));
+    if (e.sofort === false) li.append(teil("span", "warnung-sofort", "Sofortiger Beginn nicht verlangt – Widerrufsfrist bis " + datum(e.widerrufsfrist_bis)));
     const n = (e.nachrichten || []).length;
     if (n) li.append(teil("span", "nachricht", (n === 1 ? "1 Nachricht" : n + " Nachrichten") + " des Mandanten, zuletzt " + zeitpunkt(e.nachrichten[n - 1])));
     const oeffnen = () => eingang_laden(e.fall).catch(gescheitert);
@@ -218,6 +219,7 @@ async function eingang_laden(fall) {
   if (marke) blatt.append(marke);
 
   const kopf = [["Stand", e.sachstand], ["In jur|nodes angelegt", e.in_jurnodes ? "ja" : "nein"]];
+  kopf.push(["Sofortiger Beginn verlangt", e.sofort ? "ja" : "nein – vor dem " + datum(e.widerrufsfrist_bis) + " nur mit Zustimmung tätig werden"]);
   if (e.klagefrist) kopf.unshift(["Klagefrist spätestens", datum(e.klagefrist) + " (drei Wochen ab dem vom Mandanten genannten Zugang; nicht geprüft)"]);
   if (e.vermittler) kopf.push(["Auskunft an " + e.vermittler, e.einwilligung_partner ? "eingewilligt" : "nicht eingewilligt oder widerrufen"]);
   blatt.append(teil("h2", "", "Übersicht"), zeilen(kopf));

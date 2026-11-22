@@ -144,6 +144,13 @@ Wunsch einen neuen Link an die Adresse aus seiner Aufnahme. In keiner E-Mail
 stehen Angaben zum Fall. Die Texte stehen in `aktedirekt/texte/mail.json`
 (Entwurf).
 
+## Erscheinungsbild der Kanzlei
+
+Name, Unterzeile, Farben, Logo sowie die Adressen von Impressum und
+Datenschutzerklärung stehen in `aktedirekt/texte/marke.json` (neutral). Die
+Fassung der Kanzlei liegt beim Bau unter `kanzlei-texte/marke.json`, ein Logo als
+`kanzlei-texte/logo.svg`, `logo.png` oder `logo.jpg` - beides nicht im Repository.
+
 ## Statusseite des Mandanten
 
 Nach dem Abschicken ist die Startseite des Mandanten seine Statusseite. Sie soll

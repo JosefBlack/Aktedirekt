@@ -188,7 +188,8 @@ def test_eingangsbestaetigung_per_email_mit_den_erklaerungen(ablage):
     assert len(post.gesendet) == 1
     m = post.gesendet[0]
     assert m["an"] == "erika@example.org" and "https://portal.example/" in m["text"] and "unter 040 1" in m["text"]
-    assert [a[0] for a in m["anlagen"]] == ["Auftrag und Vollmacht.pdf", "Widerrufsrecht.pdf", "Datenverarbeitung.pdf"]
+    assert [a[0] for a in m["anlagen"]] == ["Auftrag und Vollmacht.pdf", "Widerrufsrecht.pdf",
+                                             "Sofortiger Beginn unserer Tätigkeit.pdf", "Datenverarbeitung.pdf"]
     assert all(a[1].startswith(b"%PDF") for a in m["anlagen"])
     # Keine Angaben zum Fall in der E-Mail.
     assert "Auffahrunfall" not in m["text"] and "B-XY" not in m["text"]
@@ -238,3 +239,22 @@ def test_email_ist_richtig_aufgebaut():
     m = message_from_bytes(roh, policy=policy.default)
     assert m["From"] == "Kanzlei Beispiel <portal@kanzlei.example>" and m.is_multipart()
     assert [t.get_filename() for t in m.iter_attachments()] == ["Widerrufsrecht.pdf"]
+
+
+def test_marke_der_kanzlei_und_sofortbeginn_fuer_die_kanzlei(ablage):
+    from aktedirekt.partner import Partnerliste
+    from tests.test_kuendigung import KONTEN, kanzlei
+    gemeldet = []
+    client = TestClient(app_bauen(ablage.speicher, partner=Partnerliste(list(KONTEN)), jetzt=lambda: JETZT,
+                                  eingang_melden=lambda b, t: gemeldet.append(t)))
+    marke = client.get("/marke.json").json()
+    assert set(marke) == {"name", "unterzeile", "logo", "impressum", "datenschutz", "telefon"}
+    assert "--marke" in client.get("/marke.css").text
+    assert client.get("/manifest.webmanifest").json()["start_url"] == "/"
+    start = client.get("/api/start").json()
+    assert any("nachreichen" in v for v in start["start"]["unfall"]["versprechen"])
+    kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
+    abschicken(client, kopf)                               # ohne den Haken für den sofortigen Beginn
+    assert "NICHT verlangt" in gemeldet[0] and "03.12.2026" in gemeldet[0]
+    eingang = client.get("/api/kanzlei/eingaenge", headers=kanzlei(client)).json()["eingaenge"][0]
+    assert eingang["sofort"] is False and eingang["widerrufsfrist_bis"] == "2026-12-03"

@@ -36,7 +36,7 @@ def test_reihenfolge_und_pflicht():
         liste = erklaerungen.liste(art)
         assert [(e.name, e.pflicht) for e in liste] == [("vollmacht", True), ("widerruf", True),
                                                         ("widerruf_sofort", False), ("datenschutz", True)]
-        assert all(e.haken for e in liste) and liste[2].text == ""
+        assert all(e.haken for e in liste) and liste[2].text and liste[2].wichtig
     assert erklaerungen.liste("unfall")[0].text != erklaerungen.liste("kuendigung")[0].text
 
 
@@ -44,7 +44,8 @@ def test_seite_bekommt_alle_erklaerungen(umgebung):
     client, _ = umgebung
     _, daten = bereit(client)
     assert [e["name"] for e in daten["erklaerungen"]] == ["vollmacht", "widerruf", "widerruf_sofort", "datenschutz"]
-    assert [e["titel"] for e in daten["erklaerungen"]] == ["Auftrag und Vollmacht", "Widerrufsrecht", "", "Datenverarbeitung"]
+    assert [e["titel"] for e in daten["erklaerungen"]] == ["Auftrag und Vollmacht", "Widerrufsrecht", "Sofortiger Beginn unserer Tätigkeit",
+                                                              "Datenverarbeitung"]
 
 
 @pytest.mark.parametrize("fehlt", ["vollmacht", "widerruf", "datenschutz"])
@@ -89,9 +90,12 @@ def test_unterlagen_als_pdf_fuer_den_mandanten(umgebung):
         assert "attachment" in antwort.headers["content-disposition"]
         text = "\n".join(s.extract_text() for s in PdfReader(io.BytesIO(antwort.content)).pages)
         assert wort in text and "Anlagen" not in text
-    assert client.get("/api/aufnahme/unterlagen/widerruf_sofort", headers=kopf).status_code == 404   # hat keinen eigenen Text
+    assert client.get("/api/aufnahme/unterlagen/widerruf_sofort", headers=kopf).status_code == 200
     assert client.get("/api/aufnahme/unterlagen/geheim", headers=kopf).status_code == 404
     assert client.get("/api/aufnahme/unterlagen/vollmacht").status_code == 401
+
+
+SOFORT = erklaerungen.liste("unfall")[2].haken
 
 
 def test_kanzlei_und_akte_sehen_was_erklaert_wurde(umgebung):
@@ -107,7 +111,7 @@ def test_kanzlei_und_akte_sehen_was_erklaert_wurde(umgebung):
     assert teil["zeilen"] == [
         ["Ich erteile den Auftrag und die Vollmacht.", "ja"],
         ["Ich habe die Widerrufsbelehrung erhalten.", "ja"],
-        ["Ich verlange ausdrücklich, dass die Kanzlei schon vor Ablauf der Widerrufsfrist tätig wird.", "nein"],
+        [SOFORT, "nein"],
         ["Ich habe die Hinweise zur Datenverarbeitung zur Kenntnis genommen.", "ja"]]
     blatt = blatt_fuer_die_akte(speicher.laden(daten["zugang"]), speicher, KONTEN, Stufen.laden())
     text = "\n".join(s.extract_text() for s in PdfReader(io.BytesIO(blatt)).pages)

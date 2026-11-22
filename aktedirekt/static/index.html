@@ -9,9 +9,11 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="marke.css">
 </head>
 <body>
 <header>
+  <div id="markenleiste" class="markenleiste" hidden></div>
   <div class="kopf">
     <button type="button" id="zurueck" class="zurueck" aria-label="Zurück" hidden>‹</button>
     <span id="titel">Aktedirekt</span>
@@ -54,8 +56,9 @@
   <div id="start-inhalt" hidden>
     <h1 id="start-titel"></h1>
     <p id="partnerhinweis" class="hinweis" hidden></p>
-    <p id="start-dauer"></p>
-    <ul id="start-bereit"></ul>
+    <ul id="start-versprechen" class="versprechen"></ul>
+    <p id="start-dauer" class="klein">Hilfreich, falls zur Hand:</p>
+    <ul id="start-bereit" class="klein"></ul>
     <p class="klein">Ihre Angaben werden nach jedem Schritt gespeichert. Sie können unterbrechen und auf diesem Gerät später weitermachen.</p>
     <button type="button" class="haupt" id="los">Los geht’s</button>
   </div>
@@ -139,6 +142,7 @@
 <section data-seite="fotos" hidden>
   <h1>Fotos und Unterlagen</h1>
   <p>Fotografieren Sie, was Sie zur Hand haben – je Punkt einfach auf „Foto“ tippen. Was fehlt, können Sie später nachreichen.</p>
+  <p class="hinweis ermutigung" data-nachreichen="fotos"></p>
   <ul id="checkliste" class="checkliste"></ul>
   <p id="ladestand" class="klein" hidden></p>
   <details class="liste-hochgeladen"><summary id="dateizahl">Hochgeladen</summary><ul id="dateiliste" class="dateien"></ul></details>
@@ -174,6 +178,7 @@
 <form data-seite="abschluss" novalidate hidden>
   <h1>Auftrag und Unterschrift</h1>
   <p class="fehler" data-fehler="_"></p>
+  <p class="hinweis ermutigung" data-nachreichen="abschluss"></p>
   <div id="erklaerungen"></div>
   <div id="block-partner" hidden>
     <div class="text" id="text-partner"></div>
@@ -255,6 +260,8 @@
   <button type="submit" class="haupt">Speichern</button>
 </form>
 </main>
+<footer id="fuss" class="fuss" hidden></footer>
+<script src="marke.js"></script>
 <script src="app.js"></script>
 <script src="ergaenzung.js"></script>
 </body>

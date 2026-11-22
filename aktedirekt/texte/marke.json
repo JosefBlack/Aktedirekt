@@ -1,0 +1,13 @@
+{
+  "_hinweis": [
+    "Das Erscheinungsbild des Portals. Diese Fassung ist neutral; die der Kanzlei liegt beim Bau",
+    "unter kanzlei-texte/marke.json (nicht im Repository), ein Logo als kanzlei-texte/logo.svg, logo.png oder logo.jpg.",
+    "farbe: Hauptfarbe (Kopfzeile, Knöpfe), akzent: Hervorhebungen. impressum/datenschutz: Adressen der Seiten der Kanzlei."
+  ],
+  "name": "Ihre Kanzlei",
+  "unterzeile": "Rechtsanwälte",
+  "farbe": "#17324d",
+  "akzent": "#e8a33d",
+  "impressum": "",
+  "datenschutz": ""
+}

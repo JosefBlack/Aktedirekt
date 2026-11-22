@@ -4,17 +4,38 @@
     "ENTWURF: Überschriften und Sätze neben den Kästchen bitte durch die Kanzlei prüfen.",
     "'text' nennt die Datei mit dem Wortlaut (leer: kein eigener Text, nur das Kästchen).",
     "'vollmacht' gibt es je Fallart: vollmacht.txt und vollmacht_kuendigung.txt.",
-    "'pflicht': Ohne dieses Kästchen lässt sich nicht abschicken."
+    "'pflicht': Ohne dieses Kästchen lässt sich nicht abschicken.",
+    "'wichtig': hervorgehoben; fehlt der Haken, fragt die Seite vor dem Abschicken einmal nach."
   ],
   "erklaerungen": [
-    {"name": "vollmacht", "titel": "Auftrag und Vollmacht", "text": "vollmacht",
-     "haken": "Ich erteile den Auftrag und die Vollmacht.", "pflicht": true},
-    {"name": "widerruf", "titel": "Widerrufsrecht", "text": "widerruf",
-     "haken": "Ich habe die Widerrufsbelehrung erhalten.", "pflicht": true},
-    {"name": "widerruf_sofort", "titel": "", "text": "",
-     "haken": "Ich verlange ausdrücklich, dass die Kanzlei schon vor Ablauf der Widerrufsfrist tätig wird.",
-     "pflicht": false},
-    {"name": "datenschutz", "titel": "Datenverarbeitung", "text": "datenschutz",
-     "haken": "Ich habe die Hinweise zur Datenverarbeitung zur Kenntnis genommen.", "pflicht": true}
+    {
+      "name": "vollmacht",
+      "titel": "Auftrag und Vollmacht",
+      "text": "vollmacht",
+      "haken": "Ich erteile den Auftrag und die Vollmacht.",
+      "pflicht": true
+    },
+    {
+      "name": "widerruf",
+      "titel": "Widerrufsrecht",
+      "text": "widerruf",
+      "haken": "Ich habe die Widerrufsbelehrung erhalten.",
+      "pflicht": true
+    },
+    {
+      "name": "widerruf_sofort",
+      "titel": "Sofortiger Beginn unserer Tätigkeit",
+      "text": "widerruf_sofort",
+      "haken": "Ich verlange ausdrücklich, dass die Kanzlei sofort – vor Ablauf der Widerrufsfrist – mit ihrer Tätigkeit beginnt. Mir ist bekannt, dass ich bei einem Widerruf für die bis dahin erbrachten Leistungen Wertersatz schulde und mein Widerrufsrecht erlischt, wenn die Leistung vollständig erbracht ist.",
+      "pflicht": false,
+      "wichtig": true
+    },
+    {
+      "name": "datenschutz",
+      "titel": "Datenverarbeitung",
+      "text": "datenschutz",
+      "haken": "Ich habe die Hinweise zur Datenverarbeitung zur Kenntnis genommen.",
+      "pflicht": true
+    }
   ]
 }

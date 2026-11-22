@@ -20,6 +20,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import time
 from datetime import datetime, timedelta
 from importlib import resources
@@ -108,6 +109,9 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     anruf = f": {telefon}" if telefon else ""
     portal = json.loads(_text("portal.json"))
     mails = json.loads(_text("mail.json"))
+    marke = {k: v for k, v in json.loads(_text("marke.json")).items() if not k.startswith("_")}
+    logo = next((n for n in ("logo.svg", "logo.png", "logo.jpg")
+                 if resources.files("aktedirekt").joinpath("texte", n).is_file()), "")
     unter = f" unter {telefon}" if telefon else ""
 
     def portaltext(text: str) -> str:
@@ -262,7 +266,8 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "einwilligung_partner": aufnahme.einwilligung_partner
                                     and aufnahme.einwilligung_widerrufen_am is None,
             # Was vor der Unterschrift zu erklären ist - Vollmacht, Widerrufsrecht, Datenverarbeitung.
-            "erklaerungen": [{"name": e.name, "titel": e.titel, "text": e.text, "haken": e.haken, "pflicht": e.pflicht}
+            "erklaerungen": [{"name": e.name, "titel": e.titel, "text": e.text, "haken": e.haken, "pflicht": e.pflicht,
+                              "wichtig": e.wichtig}
                              for e in erklaerungen.liste(art.name)],
             "texte": {
                 "einwilligung_partner": texte["einwilligung_partner"].replace("{partner}", name) if name else "",
@@ -273,6 +278,9 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     async def start_angaben() -> dict[str, Any]:
         """Was die Startseite braucht, bevor es eine Aufnahme gibt."""
         return {"fallarten": [{"name": a.name, "titel": a.titel} for a in FALLARTEN.values()],
+                "start": {art: {**t, "versprechen": [portaltext(v) for v in t["versprechen"]]}
+                          for art, t in portal["start"].items()},
+                "nachreichen": portal["nachreichen"],
                 "anderes_anliegen": wortlaut["anderes_anliegen"].format(telefon=anruf)}
 
     @app.post("/api/aufnahme")
@@ -480,7 +488,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 anlagen = [(e.titel + ".pdf", akte_pdf.erzeugen(e.titel, [], [{"titel": "", "zeilen": [["", e.text]]}], None),
                             "application/pdf") for e in erklaerungen.liste(fertig.art) if e.text]
                 post.senden(mail_von(fertig), mails["eingang_betreff"], mails["eingang_text"].format(
-                    name=fertig.name(), portal=portal_adresse(request), telefon=unter), anlagen)
+                    name=fertig.name(), portal=portal_adresse(request), telefon=unter, kanzlei=marke.get("name", "")), anlagen)
             except Exception:
                 pass                                   # gespeichert ist es; die E-Mail darf das nicht gefährden
         if eingang_melden is not None:
@@ -492,6 +500,9 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 betreff += f" - Klagefrist bis {frist.strftime('%d.%m.%Y')}"
                 zeilen.append(f"Klagefrist nach Angabe des Mandanten spätestens: {frist.strftime('%d.%m.%Y')} "
                               "(drei Wochen ab Zugang, ohne Prüfung durch die Kanzlei)")
+            if not abgegeben.get("widerruf_sofort", True):
+                zeilen.append("Sofortiger Beginn NICHT verlangt: vor Ablauf der Widerrufsfrist ("
+                              + (zeitpunkt.date() + timedelta(days=14)).strftime("%d.%m.%Y") + ") nicht tätig werden.")
             zeilen.append("Einzelheiten nach Anmeldung: " + (basis_url or str(request.base_url)).rstrip("/") + "/kanzlei")
             try:
                 eingang_melden(betreff, "\n".join(zeilen))
@@ -546,7 +557,8 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 links.append(f"{a.fallart.titel} vom {a.abgeschlossen_am:%d.%m.%Y}:\n{portal_adresse(request)}#u={code}")
         try:
             post.senden(adresse, mails["wiederfinden_betreff"], mails["wiederfinden_text"].format(
-                links="\n\n".join(links), stunden=int(WIEDERFINDEN_DAUER.total_seconds() // 3600), telefon=unter))
+                links="\n\n".join(links), stunden=int(WIEDERFINDEN_DAUER.total_seconds() // 3600), telefon=unter,
+                kanzlei=marke.get("name", "")))
         except Exception:
             pass
         return antwort
@@ -808,6 +820,9 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             raise HTTPException(403, "Dieser Bereich ist der Kanzlei vorbehalten.")
         return konto.kennung
 
+    def sofort_verlangt(aufnahme: Aufnahme) -> bool:
+        return bool((speicher.nachweis(aufnahme.kennung) or {}).get("erklaerungen", {}).get("widerruf_sofort"))
+
     def kopfdaten(aufnahme: Aufnahme) -> dict[str, Any]:
         konto = partnerliste.konto(aufnahme.partner)
         frist = aufnahme.klagefrist()
@@ -818,6 +833,9 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 "tage_bis_frist": (frist - jetzt().date()).days if frist else None,
                 "vermittler": konto.name if konto else "",
                 "kurzrubrum": kurzrubrum(aufnahme),
+                # Ohne Verlangen des sofortigen Beginns erst nach Ablauf der Widerrufsfrist tätig werden.
+                "sofort": sofort_verlangt(aufnahme),
+                "widerrufsfrist_bis": (aufnahme.abgeschlossen_am.date() + timedelta(days=14)).isoformat(),
                 "sachstand": stufen.bezeichnung(aufnahme.sachstand),
                 # "unbekannt" heißt: gemeldet, aber noch nicht bestätigt gefunden.
                 "in_jurnodes": aufnahme.lead_kennung not in ("", "unbekannt"),
@@ -934,6 +952,43 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         return Response(inhalt, media_type=arten.get(eintrag.art, "application/octet-stream"))
 
     statisch = resources.files("aktedirekt").joinpath("static")
+
+    # ---- Erscheinungsbild der Kanzlei -------------------------------------
+
+    _farbe = re.compile(r"#[0-9a-fA-F]{6}")
+
+    @app.get("/marke.json")
+    async def marke_angaben() -> dict[str, Any]:
+        return {"name": marke.get("name", ""), "unterzeile": marke.get("unterzeile", ""), "logo": bool(logo),
+                "impressum": marke.get("impressum", ""), "datenschutz": marke.get("datenschutz", ""),
+                "telefon": telefon or ""}
+
+    @app.get("/marke.css")
+    async def marke_farben() -> Response:
+        farbe = marke.get("farbe", "") if _farbe.fullmatch(marke.get("farbe", "")) else ""
+        akzent = marke.get("akzent", "") if _farbe.fullmatch(marke.get("akzent", "")) else ""
+        regeln = (f"--marke: {farbe}; --marke-schrift: #fff;" if farbe else "") + (f" --akzent: {akzent};" if akzent else "")
+        # Die Hauptfarbe nur im hellen Modus; im dunklen bleibt die lesbare helle Fassung.
+        css = (f"@media (prefers-color-scheme: light) {{ :root {{ {regeln} }} }}\n"
+               f":root {{ {'--akzent: ' + akzent + ';' if akzent else ''} }}\n")
+        return Response(css, media_type="text/css", headers={"Cache-Control": "max-age=300"})
+
+    @app.get("/marke/logo")
+    async def marke_logo() -> Response:
+        if not logo:
+            raise HTTPException(404, "Kein Logo.")
+        art = {"svg": "image/svg+xml", "png": "image/png", "jpg": "image/jpeg"}[logo.rsplit(".", 1)[1]]
+        inhalt = resources.files("aktedirekt").joinpath("texte", logo).read_bytes()
+        return Response(inhalt, media_type=art, headers={"Cache-Control": "max-age=300"})
+
+    @app.get("/manifest.webmanifest")
+    async def manifest() -> Response:
+        name = marke.get("name", "") or "Aktedirekt"
+        daten = {"name": name, "short_name": name[:12], "start_url": "/", "display": "standalone",
+                 "background_color": "#f4f5f7", "theme_color": marke.get("farbe", "#17324d"), "lang": "de",
+                 "icons": [{"src": "marke/logo" if logo and logo.endswith(".png") else "icon.svg",
+                            "sizes": "any", "type": "image/png" if logo and logo.endswith(".png") else "image/svg+xml"}]}
+        return Response(json.dumps(daten, ensure_ascii=False), media_type="application/manifest+json")
 
     @app.get("/")
     async def start() -> FileResponse:

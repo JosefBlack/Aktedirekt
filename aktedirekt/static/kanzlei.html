@@ -10,9 +10,11 @@
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="partner.css">
 <link rel="stylesheet" href="kanzlei.css">
+<link rel="stylesheet" href="marke.css">
 </head>
 <body class="partner kanzlei">
 <header>
+  <div id="markenleiste" class="markenleiste" hidden></div>
   <div class="kopf">
     <button type="button" id="zurueck" class="zurueck" aria-label="Zur Liste" hidden>‹</button>
     <span id="titel">Eingänge</span>
@@ -78,6 +80,8 @@
   </div>
 </section>
 </main>
+<footer id="fuss" class="fuss" hidden></footer>
+<script src="marke.js"></script>
 <script src="anmeldung.js"></script>
 <script src="kanzlei.js"></script>
 </body>

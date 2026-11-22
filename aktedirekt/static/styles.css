@@ -141,3 +141,21 @@ form[data-seite="abschluss"] h2 { margin-top: 30px; }
 .anforderung p { margin: 6px 0 0; }
 #link-fehler:empty { display: none; }
 #ohne-zugang a { color: var(--marke); }
+.markenleiste { display: flex; align-items: center; gap: 10px; max-width: 560px; margin: 0 auto; padding: 8px 16px 0; }
+.markenleiste .logo { max-height: 34px; max-width: 160px; object-fit: contain; }
+.markenleiste .kanzlei { display: flex; flex-direction: column; line-height: 1.2; }
+.markenleiste .kanzlei strong { font-size: 15px; color: var(--marke); }
+.markenleiste .kanzlei span { font-size: 12px; color: var(--leise); }
+.fuss { max-width: 560px; margin: 0 auto; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); font-size: 13px; color: var(--leise); }
+.fuss a { color: var(--leise); }
+.versprechen { list-style: none; padding: 0; margin: 8px 0 18px; }
+.versprechen li { position: relative; padding: 6px 0 6px 32px; }
+.versprechen li::before { content: "✓"; position: absolute; left: 4px; top: 5px; font-weight: 700; color: var(--gut); font-size: 18px; }
+.ermutigung { font-size: 15px; border-left-color: var(--gut); }
+.wichtig-block { background: var(--flaeche); border: 2px solid var(--akzent); border-radius: 12px; padding: 4px 14px 14px; margin-top: 26px; }
+.wichtig-block h2 { margin-top: 12px; }
+.wichtig-block .text { margin-top: 8px; border: 0; padding: 0; background: none; }
+.haken.gross { font-weight: 600; }
+.nachfrage { margin-top: 12px; padding: 12px; border-radius: 10px; background: var(--grund); }
+.nachfrage p { margin: 0 0 4px; font-weight: 600; }
+.nachfrage button.haupt { margin-top: 12px; }

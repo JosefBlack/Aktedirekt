@@ -410,8 +410,14 @@ for (const ende of ["pointerup", "pointercancel"]) {
 $("#loeschen").addEventListener("click", () => flaeche.leeren());
 
 const abschluss = $('form[data-seite="abschluss"]');
+let nachgefragt = false;
 abschluss.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const offen = (zustand.erklaerungen || []).find((x) => x.wichtig && !$('[name="' + x.name + '"]', abschluss).checked);
+  if (offen && !nachgefragt) {
+    const frage = $("#block-" + offen.name + " .nachfrage");
+    if (frage) { frage.hidden = false; frage.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+  }
   sperren(abschluss, true);
   try {
     const antwort = await aufruf("POST", "/api/aufnahme/abschluss", {
@@ -442,17 +448,31 @@ function erklaerungen_bauen() {
   const ziel = $("#erklaerungen");
   ziel.textContent = "";
   for (const e of zustand.erklaerungen || []) {
-    if (e.titel) ziel.append(knoten("h2", {}, e.titel));
+    const huelle = e.wichtig ? knoten("div", { class: "wichtig-block", id: "block-" + e.name }) : null;
+    if (huelle) { ziel.append(huelle); }
+    const z = huelle || ziel;
+    if (e.titel) z.append(knoten("h2", {}, e.titel));
     if (e.text) {
-      ziel.append(knoten("div", { class: "text lang", tabindex: "0" }, e.text));
+      z.append(knoten("div", { class: "text " + (e.wichtig ? "" : "lang"), tabindex: "0" }, e.text));
       const pdf = knoten("button", { type: "button", class: "verweis" }, e.titel + " als PDF speichern");
       pdf.addEventListener("click", () => unterlage_speichern(e).catch((fehler) => melden(fehler.message)));
-      ziel.append(pdf);
+      z.append(pdf);
     }
-    const marke = knoten("label", { class: "haken" });
+    const marke = knoten("label", { class: "haken" + (e.wichtig ? " gross" : "") });
     marke.append(knoten("input", { type: "checkbox", name: e.name }), knoten("span", {}, e.haken + (e.pflicht ? "" : " ")));
-    if (!e.pflicht) marke.lastChild.append(knoten("span", { class: "frei" }, "freiwillig"));
-    ziel.append(marke, knoten("p", { class: "fehler", "data-fehler": e.name }));
+    if (!e.pflicht && !e.wichtig) marke.lastChild.append(knoten("span", { class: "frei" }, "freiwillig"));
+    z.append(marke, knoten("p", { class: "fehler", "data-fehler": e.name }));
+    if (e.wichtig) {
+      // Fehlt der Haken, fragt die Seite vor dem Abschicken einmal nach.
+      const frage = knoten("div", { class: "nachfrage", hidden: "" });
+      frage.append(knoten("p", {}, "Ohne diese Zustimmung dürfen wir erst nach Ablauf der Widerrufsfrist von 14 Tagen für Sie tätig werden – Fristen und Ansprüche können dann gefährdet sein."));
+      const ja = knoten("button", { type: "button", class: "haupt" }, "Zustimmen und abschicken");
+      const nein = knoten("button", { type: "button", class: "neben" }, "Ohne Zustimmung abschicken");
+      ja.addEventListener("click", () => { $('[name="' + e.name + '"]', abschluss).checked = true; nachgefragt = true; abschluss.requestSubmit(); });
+      nein.addEventListener("click", () => { nachgefragt = true; abschluss.requestSubmit(); });
+      frage.append(ja, nein);
+      z.append(frage);
+    }
   }
 }
 
@@ -571,13 +591,26 @@ function fertig() {
   zeigen("fertig");
 }
 
+// Texte der Startseite und die Hinweise zum Nachreichen kommen vom Server
+// (Fassung der Kanzlei); bis sie da sind, gelten die hier hinterlegten.
+let START_TEXTE = null;
+const START_GELADEN = fetch("/api/start").then((a) => a.ok ? a.json() : null).then((d) => {
+  if (!d) return;
+  START_TEXTE = d.start || null;
+  for (const p of $$("[data-nachreichen]")) p.textContent = (d.nachreichen || {})[p.dataset.nachreichen] || "";
+  if (d.anderes_anliegen) $("#anderes").textContent = d.anderes_anliegen;
+  if (gewaehlt) start_zeigen(gewaehlt);
+}).catch(() => {});
+
 function start_zeigen(art) {
-  const s = START[art];
+  const s = (START_TEXTE && START_TEXTE[art]) || START[art];
   $("#wahl").hidden = !!art;
   $("#start-inhalt").hidden = !art;
   if (!s) return;
   $("#start-titel").textContent = s.titel;
-  $("#start-dauer").textContent = s.dauer + " Halten Sie, wenn möglich, bereit:";
+  const versprechen = $("#start-versprechen");
+  versprechen.textContent = "";
+  for (const punkt of s.versprechen || [s.dauer]) versprechen.append(knoten("li", {}, punkt));
   const liste = $("#start-bereit");
   liste.textContent = "";
   for (const punkt of s.bereit) liste.append(knoten("li", {}, punkt));

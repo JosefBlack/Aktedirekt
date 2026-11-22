@@ -20,6 +20,8 @@ class Erklaerung:
     text: str
     haken: str
     pflicht: bool
+    # Hervorgehoben; ohne Haken fragt die Seite vor dem Abschicken einmal nach.
+    wichtig: bool = False
 
     @property
     def pruefsumme(self) -> str:
@@ -39,7 +41,7 @@ def liste(art: str) -> list[Erklaerung]:
         if datei == "vollmacht" and art == "kuendigung":
             datei = "vollmacht_kuendigung"
         ergebnis.append(Erklaerung(e["name"], e["titel"], _lesen(datei + ".txt") if datei else "",
-                                   e["haken"], bool(e["pflicht"])))
+                                   e["haken"], bool(e["pflicht"]), bool(e.get("wichtig", False))))
     return ergebnis
 
 
