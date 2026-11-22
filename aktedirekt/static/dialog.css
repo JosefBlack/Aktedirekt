@@ -31,3 +31,21 @@
 .legende i.ich { background: #2f6fb0; }
 .legende i.andere { background: #e8a33d; }
 .kennzeichen-feld { text-transform: uppercase; font-size: 22px; letter-spacing: 1px; text-align: center; }
+
+/* Variante Gespräch */
+.chat .gespraech { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
+.chat .blase { max-width: 85%; padding: 10px 14px; border-radius: 18px; font-size: 16px; line-height: 1.4; animation: herein .2s ease-out; }
+.chat .blase p { margin: 0; }
+.chat .blase p.klein { margin-top: 4px; font-size: 14px; }
+.chat .blase.bot { align-self: flex-start; background: var(--flaeche); border: 1px solid var(--rand); border-bottom-left-radius: 6px; }
+.chat .blase.ich { align-self: flex-end; background: var(--marke); color: var(--marke-schrift); border-bottom-right-radius: 6px; cursor: pointer; }
+.chat .blase.tippt { display: flex; gap: 5px; padding: 14px 16px; }
+.chat .blase.tippt span { width: 7px; height: 7px; border-radius: 50%; background: var(--leise); animation: tippen 1s infinite ease-in-out; }
+.chat .blase.tippt span:nth-child(2) { animation-delay: .15s; }
+.chat .blase.tippt span:nth-child(3) { animation-delay: .3s; }
+@keyframes tippen { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+.chat .eingabe { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--rand); }
+.chat .eingabe.herein { animation: herein .2s ease-out; }
+.chat .eingabe .kacheln { gap: 8px; }
+.chat .eingabe .kachel img { max-width: 96px; }
+.chat .eingabe button.haupt { margin-top: 14px; }

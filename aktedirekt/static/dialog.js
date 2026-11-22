@@ -124,7 +124,89 @@ function kopf_setzen(f, rueckwaerts) {
   $("#titel").textContent = { unfall: "Der Unfall", fahrzeug: "Ihr Fahrzeug", gegner: "Die Gegenseite" }[f.schritt];
 }
 
+// Variante "Gespräch": dieselben Fragen als Sprechblasen; das Beantwortete bleibt stehen.
+const CHAT = new URLSearchParams(location.search).get("stil") === "chat";
+if (CHAT) document.body.classList.add("chat");
+
+function frage_text(f) { return f.art === "rolle" ? ROLLEN[antworten.unfallart][0] : f.frage; }
+
+function datum_lesbar(iso) {
+  const [j, m, t] = (iso || "").split("-");
+  return t ? `${t}.${m}.${j}` : iso;
+}
+
+function antwort_text(f) {
+  const w = antworten[f.feld] || "";
+  if (!w) return f.spaeter || "–";
+  if (f.art === "datum") return w === heute() ? "Heute" : w === heute(1) ? "Gestern" : datum_lesbar(w);
+  if (f.art === "zeit") return w + " Uhr";
+  if (f.art === "janein") return w === "ja" ? "Ja" : "Nein";
+  if (f.art === "unfallart") return (ARTEN.find((a) => a.wert === w) || {}).titel || w;
+  if (f.art === "rolle") return (ROLLEN[antworten.unfallart][1].find(([x]) => x === w) || [, w])[1];
+  if (f.art === "wahl") return (f.wahl.find(([x]) => x === w) || [, w])[1];
+  if (f.art === "auto") return STELLEN.filter(([x]) => w.split(",").includes(x)).map(([, t]) => t).join(", ");
+  return w;
+}
+
+function blase(wer, text, unter) {
+  const b = knoten("div", { class: "blase " + wer });
+  b.append(knoten("p", {}, text));
+  if (unter) b.append(knoten("p", { class: "klein" }, unter));
+  return b;
+}
+
+let tippt = null;
+function chat_zeigen(f, rueckwaerts) {
+  melden("");
+  const buehne = $("#buehne");
+  buehne.textContent = "";
+  const gespraech = knoten("div", { class: "gespraech" });
+  if (verlauf.length <= 1) gespraech.append(blase("bot", "Guten Tag! Ich stelle Ihnen ein paar kurze Fragen zu Ihrem Unfall. Was Sie nicht wissen, lassen Sie einfach aus – Sie können alles später nachreichen."));
+  for (const id of verlauf.slice(0, -1)) {
+    const g = FRAGEN.find((x) => x.id === id);
+    if (!g) continue;
+    const frage = blase("bot", frage_text(g));
+    const antwort = blase("ich", antwort_text(g));
+    antwort.title = "Antippen zum Ändern";
+    antwort.addEventListener("click", () => {
+      verlauf = verlauf.slice(0, verlauf.indexOf(id) + 1);
+      chat_zeigen(g, true);
+    });
+    gespraech.append(frage, antwort);
+  }
+  const eingabe = knoten("div", { class: "eingabe" });
+  const frage = blase("bot", frage_text(f), f.unter);
+  const punkte = knoten("div", { class: "blase bot tippt" });
+  punkte.append(knoten("span"), knoten("span"), knoten("span"));
+  buehne.append(gespraech, eingabe);
+  BAU[f.art](eingabe, f);
+  const fehler = fehler_vom_server[f.feld];
+  if (fehler) eingabe.append(knoten("p", { class: "fehler" }, fehler));
+  if (f.spaeter) {
+    const spaeter = knoten("button", { type: "button", class: "spaeter" }, f.spaeter);
+    spaeter.addEventListener("click", () => { antworten[f.feld] = ""; weiter(f); });
+    eingabe.append(spaeter);
+  }
+  kopf_setzen(f, rueckwaerts);
+  const fertig = () => {
+    punkte.remove();
+    gespraech.append(frage);
+    eingabe.hidden = false;
+    eingabe.classList.add("herein");
+    window.scrollTo(0, document.body.scrollHeight);
+  };
+  clearTimeout(tippt);
+  if (rueckwaerts || window.matchMedia("(prefers-reduced-motion: reduce)").matches) fertig();
+  else {
+    eingabe.hidden = true;
+    gespraech.append(punkte);
+    window.scrollTo(0, document.body.scrollHeight);
+    tippt = setTimeout(fertig, 450);
+  }
+}
+
 function zeigen(f, rueckwaerts = false) {
+  if (CHAT) return chat_zeigen(f, rueckwaerts);
   melden("");
   const buehne = $("#buehne");
   buehne.textContent = "";
@@ -363,6 +445,19 @@ function geschafft() {
   $("#zaehler").textContent = "";
   $("#zurueck").hidden = true;
   const buehne = $("#buehne");
+  if (CHAT) {
+    const gespraech = $(".gespraech", buehne);
+    const letzte = FRAGEN.find((x) => x.id === verlauf[verlauf.length - 1]);
+    if (gespraech && letzte) gespraech.append(blase("ich", antwort_text(letzte)),
+      blase("bot", "Vielen Dank – der schwierigste Teil ist geschafft! Jetzt noch Fotos (falls zur Hand), Ihre Kontaktdaten und die Unterschrift."));
+    const eingabe = $(".eingabe", buehne);
+    eingabe.textContent = "";
+    const k = knoten("button", { type: "button", class: "haupt" }, "Weiter zu den Fotos");
+    k.addEventListener("click", () => { location.href = "/#weiter"; });
+    eingabe.append(k);
+    window.scrollTo(0, document.body.scrollHeight);
+    return;
+  }
   buehne.textContent = "";
   const karte = knoten("section", { class: "frage geschafft" });
   karte.append(knoten("div", { class: "haken-gross" }, "✓"),
