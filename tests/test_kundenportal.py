@@ -255,7 +255,7 @@ def test_marke_der_kanzlei_und_sofortbeginn_fuer_die_kanzlei(ablage):
     client = TestClient(app_bauen(ablage.speicher, partner=Partnerliste(list(KONTEN)), jetzt=lambda: JETZT,
                                   eingang_melden=lambda b, t: gemeldet.append(t)))
     marke = client.get("/marke.json").json()
-    assert set(marke) == {"name", "unterzeile", "logo", "impressum", "datenschutz", "telefon"}
+    assert set(marke) == {"name", "kurzname", "unterzeile", "adresse", "logo", "schmuck", "impressum", "datenschutz", "telefon"}
     assert "--marke" in client.get("/marke.css").text
     assert client.get("/manifest.webmanifest").json()["start_url"] == "/"
     start = client.get("/api/start").json()

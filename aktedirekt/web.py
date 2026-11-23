@@ -115,6 +115,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     marke = {k: v for k, v in json.loads(_text("marke.json")).items() if not k.startswith("_")}
     logo = next((n for n in ("logo.svg", "logo.png", "logo.jpg")
                  if resources.files("aktedirekt").joinpath("texte", n).is_file()), "")
+    schmuck = "schmuck.svg" if resources.files("aktedirekt").joinpath("texte", "schmuck.svg").is_file() else ""
     unter = f" unter {telefon}" if telefon else ""
 
     def portaltext(text: str) -> str:
@@ -1025,19 +1026,48 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
 
     @app.get("/marke.json")
     async def marke_angaben() -> dict[str, Any]:
-        return {"name": marke.get("name", ""), "unterzeile": marke.get("unterzeile", ""), "logo": bool(logo),
+        return {"name": marke.get("name", ""), "kurzname": marke.get("kurzname", ""),
+                "unterzeile": marke.get("unterzeile", ""), "adresse": marke.get("adresse", ""),
+                "logo": bool(logo), "schmuck": bool(schmuck),
                 "impressum": marke.get("impressum", ""), "datenschutz": marke.get("datenschutz", ""),
                 "telefon": telefon or ""}
 
+    # Schriften, die das Portal selbst mitbringt (frei lizenziert, ohne Abruf bei Dritten).
+    SCHRIFTEN = {"Plus Jakarta Sans": "plus-jakarta-sans.woff2", "Fraunces": "fraunces.woff2"}
+
     @app.get("/marke.css")
     async def marke_farben() -> Response:
-        farbe = marke.get("farbe", "") if _farbe.fullmatch(marke.get("farbe", "")) else ""
-        akzent = marke.get("akzent", "") if _farbe.fullmatch(marke.get("akzent", "")) else ""
-        regeln = (f"--marke: {farbe}; --marke-schrift: #fff;" if farbe else "") + (f" --akzent: {akzent};" if akzent else "")
-        # Die Hauptfarbe nur im hellen Modus; im dunklen bleibt die lesbare helle Fassung.
-        css = (f"@media (prefers-color-scheme: light) {{ :root {{ {regeln} }} }}\n"
-               f":root {{ {'--akzent: ' + akzent + ';' if akzent else ''} }}\n")
-        return Response(css, media_type="text/css", headers={"Cache-Control": "max-age=300"})
+        def wert(name: str) -> str:
+            w = marke.get(name, "")
+            return w if _farbe.fullmatch(w) else ""
+        hell = {"--marke": wert("farbe"), "--akzent": wert("akzent"), "--grund": wert("grund"),
+                "--schrift": wert("text"), "--rand": wert("rand"), "--leise": wert("leise")}
+        regeln = " ".join(f"{k}: {v};" for k, v in hell.items() if v)
+        if hell["--marke"]:
+            regeln += " --marke-schrift: #fff;"
+        teile = []
+        for name in (marke.get("schrift", ""), marke.get("schrift_titel", "")):
+            if name in SCHRIFTEN:
+                teile.append(f"@font-face {{ font-family: '{name}'; font-style: normal; font-weight: 100 900; "
+                             f"font-display: swap; src: url('/schrift/{SCHRIFTEN[name]}') format('woff2'); }}")
+        if marke.get("schrift", "") in SCHRIFTEN:
+            teile.append(f"body {{ font-family: '{marke['schrift']}', system-ui, sans-serif; }}")
+        if marke.get("schrift_titel", "") in SCHRIFTEN:
+            teile.append(f"h1, h2, .blase.aktuell > p:first-child, .markenleiste .kanzlei strong, .fuss .fuss-name {{ "
+                         f"font-family: '{marke['schrift_titel']}', Georgia, serif; font-weight: 600; letter-spacing: -0.01em; }}")
+        # Die Farben der Kanzlei im hellen Modus; im dunklen bleibt die gut lesbare dunkle Fassung.
+        teile.append(f"@media (prefers-color-scheme: light) {{ :root {{ {regeln} }} }}")
+        if hell["--akzent"]:
+            teile.append(f":root {{ --akzent: {hell['--akzent']}; }}")
+        return Response("\n".join(teile) + "\n", media_type="text/css", headers={"Cache-Control": "max-age=300"})
+
+    @app.get("/marke/schmuck")
+    async def marke_schmuck() -> Response:
+        """Ein Zierbild der Kanzlei (etwa eine Skyline) für die Startseite - wenn es eines gibt."""
+        if not schmuck:
+            raise HTTPException(404, "Kein Bild.")
+        return Response(resources.files("aktedirekt").joinpath("texte", schmuck).read_bytes(),
+                        media_type="image/svg+xml", headers={"Cache-Control": "max-age=300"})
 
     @app.get("/marke/logo")
     async def marke_logo() -> Response:
@@ -1052,8 +1082,8 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         name = marke.get("name", "") or "Aktedirekt"
         daten = {"name": name, "short_name": name[:12], "start_url": "/", "display": "standalone",
                  "background_color": "#f4f5f7", "theme_color": marke.get("farbe", "#17324d"), "lang": "de",
-                 "icons": [{"src": "marke/logo" if logo and logo.endswith(".png") else "icon.svg",
-                            "sizes": "any", "type": "image/png" if logo and logo.endswith(".png") else "image/svg+xml"}]}
+                 "icons": [{"src": "marke/logo" if logo else "icon.svg", "sizes": "any",
+                            "type": "image/png" if logo.endswith(".png") else "image/jpeg" if logo.endswith(".jpg") else "image/svg+xml"}]}
         return Response(json.dumps(daten, ensure_ascii=False), media_type="application/manifest+json")
 
     @app.get("/")

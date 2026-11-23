@@ -160,3 +160,15 @@ form[data-seite="abschluss"] h2 { margin-top: 30px; }
 .nachfrage p { margin: 0 0 4px; font-weight: 600; }
 .nachfrage button.haupt { margin-top: 12px; }
 .gesperrt { background: var(--flaeche); border: 1px dashed var(--rand); border-radius: 10px; padding: 10px 12px; margin: 10px 0 0; }
+.markenleiste .logo { max-height: 40px; width: auto; }
+.fuss { margin-top: 32px; padding-top: 22px; padding-bottom: calc(26px + env(safe-area-inset-bottom));
+  background: var(--marke); color: var(--marke-schrift); max-width: none; }
+.fuss > * { max-width: 560px; margin-left: auto; margin-right: auto; }
+.fuss p { margin: 4px auto; opacity: .92; }
+.fuss .fuss-name { font-size: 18px; opacity: 1; }
+.fuss a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.fuss .klein { color: inherit; opacity: .75; font-size: 12px; margin-top: 10px; }
+@media (prefers-color-scheme: dark) { .fuss { background: var(--flaeche); color: var(--schrift); } }
+.schmuck { margin: 0 -16px 8px; }
+.schmuck img { display: block; width: 100%; height: auto; max-height: 150px; object-fit: cover; object-position: bottom; }
+button.haupt { border-radius: 999px; }

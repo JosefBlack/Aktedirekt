@@ -5,7 +5,7 @@
 
 const UNFALL_SEITEN = ["start", "unfall", "fahrzeug", "gegner", "fotos", "person", "abschluss", "fertig"];
 let SEITEN = UNFALL_SEITEN;
-const TITEL = { start: "Aktedirekt", unfall: "Der Unfall", fahrzeug: "Ihr Fahrzeug",
+const TITEL = { start: "Online-Aufnahme", unfall: "Der Unfall", fahrzeug: "Ihr Fahrzeug",
   gegner: "Das andere Fahrzeug", fotos: "Unterlagen", person: "Ihre Daten",
   abschluss: "Unterschrift", fertig: "Ihr Fall" };
 const START = {

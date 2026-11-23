@@ -149,7 +149,10 @@ stehen Angaben zum Fall. Die Texte stehen in `aktedirekt/texte/mail.json`
 Name, Unterzeile, Farben, Logo sowie die Adressen von Impressum und
 Datenschutzerklärung stehen in `aktedirekt/texte/marke.json` (neutral). Die
 Fassung der Kanzlei liegt beim Bau unter `kanzlei-texte/marke.json`, ein Logo als
-`kanzlei-texte/logo.svg`, `logo.png` oder `logo.jpg` - beides nicht im Repository.
+`kanzlei-texte/logo.svg`, `logo.png` oder `logo.jpg`, ein Zierbild für die
+Startseite als `kanzlei-texte/schmuck.svg` - nichts davon im Repository.
+Mitgebracht werden die frei lizenzierten Schriften Plus Jakarta Sans und Fraunces
+(`static/schrift/`, SIL Open Font License); sie werden nicht bei Google geladen.
 
 ## Zwei Stufen bei den Unterlagen
 
