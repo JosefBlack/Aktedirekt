@@ -359,7 +359,7 @@ const BAU = {
     karte.append(reihe, stand);
     zeigen_stand();
     knopf_weiter(karte, f, () => String(geladen[f.unterlage] || 0),
-      (w) => (f.mindestens && Number(w) < f.mindestens) ? "Bitte mindestens ein Foto – oder unten den Knopf darunter wählen." : "");
+      (w) => (f.mindestens && Number(w) < f.mindestens) ? "Bitte laden Sie mindestens ein Foto hoch – oder tippen Sie auf den Knopf darunter." : "");
   },
   skizze(karte, f) {
     const vorlage_wahl = { vorfahrt: "kreuzung", abbiegen: "kreuzung", parken: "parkplatz" }[antworten.unfallart] || "strasse";
