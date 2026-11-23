@@ -71,7 +71,7 @@ def test_statusseite_erklaert_den_stand_und_beantwortet_fragen(ablage):
     kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
     abschicken(client, kopf)
     zustand = client.get("/api/aufnahme", headers=kopf).json()
-    assert zustand["sachstand"] == "Aufgenommen" and "Unterlagen" in zustand["erklaerung"]["tun"]
+    assert zustand["sachstand"] == "Eingegangen – in Prüfung" and "Unterlagen" in zustand["erklaerung"]["tun"]
     assert any("Gutachter" in f["frage"] for f in zustand["fragen"])
     assert all("{telefon}" not in f["antwort"] for f in zustand["fragen"])
     ablage.speicher.sachstand_setzen(zustand_kennung(ablage, kopf), "abgeschlossen", date(2026, 11, 30))

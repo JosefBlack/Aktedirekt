@@ -315,6 +315,38 @@ const VORLAGEN = {
 };
 const STIFTE = [["#2f6fb0", "Ihr Fahrzeug"], ["#e8a33d", "das andere"], ["#1d2733", "Linie"]];
 
+// Fahrzeuge für die Skizze, von oben gesehen, Fahrtrichtung nach oben. Masse: Breite, Länge.
+function rund(c, x, y, b, h, r) {
+  c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + b, y, x + b, y + h, r); c.arcTo(x + b, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + b, y, r); c.closePath();
+}
+const FAHRZEUGE = {
+  pkw: { masse: [36, 66], malen(c, farbe, b, l) {
+    c.fillStyle = farbe; rund(c, -b / 2, -l / 2, b, l, 9); c.fill();
+    c.fillStyle = "rgba(255,255,255,.8)"; rund(c, -b / 2 + 5, -l / 2 + 13, b - 10, 11, 3); c.fill();
+    c.fillStyle = "rgba(255,255,255,.45)"; rund(c, -b / 2 + 5, l / 2 - 17, b - 10, 8, 3); c.fill();
+    c.fillStyle = "#1d2733"; c.beginPath(); c.moveTo(0, -l / 2 - 12); c.lineTo(-7, -l / 2 - 2); c.lineTo(7, -l / 2 - 2); c.fill();
+  } },
+  lkw: { masse: [42, 110], malen(c, farbe, b, l) {
+    c.fillStyle = farbe; rund(c, -b / 2, -l / 2, b, 28, 6); c.fill();
+    c.fillStyle = "rgba(255,255,255,.8)"; rund(c, -b / 2 + 5, -l / 2 + 4, b - 10, 9, 2); c.fill();
+    c.fillStyle = farbe; c.globalAlpha = .75; rund(c, -b / 2, -l / 2 + 32, b, l - 32, 4); c.fill(); c.globalAlpha = 1;
+    c.fillStyle = "#1d2733"; c.beginPath(); c.moveTo(0, -l / 2 - 12); c.lineTo(-7, -l / 2 - 2); c.lineTo(7, -l / 2 - 2); c.fill();
+  } },
+  motorrad: { masse: [16, 48], malen(c, farbe, b, l) {
+    c.fillStyle = "#1d2733"; rund(c, -4, -l / 2, 8, 12, 4); c.fill(); rund(c, -4, l / 2 - 12, 8, 12, 4); c.fill();
+    c.fillStyle = farbe; rund(c, -b / 2 + 2, -l / 2 + 10, b - 4, l - 20, 6); c.fill();
+    c.strokeStyle = "#1d2733"; c.lineWidth = 3; c.beginPath(); c.moveTo(-b / 2 - 4, -l / 2 + 12); c.lineTo(b / 2 + 4, -l / 2 + 12); c.stroke();
+  } },
+  fahrrad: { masse: [12, 46], malen(c, farbe, b, l) {
+    c.strokeStyle = farbe; c.lineWidth = 5; c.lineCap = "round";
+    c.beginPath(); c.moveTo(0, -l / 2); c.lineTo(0, l / 2); c.stroke();
+    c.beginPath(); c.moveTo(-b / 2 - 4, -l / 2 + 9); c.lineTo(b / 2 + 4, -l / 2 + 9); c.stroke();
+    c.fillStyle = farbe; c.beginPath(); c.arc(0, 4, 6, 0, Math.PI * 2); c.fill();
+  } },
+};
+const FAHRZEUG_TITEL = { pkw: "Pkw", lkw: "Lkw", motorrad: "Motorrad", fahrrad: "Fahrrad" };
+
 const BAU = {
   fotos(karte, f) {
     if (f.unterlage === "unfallort") {
@@ -362,54 +394,132 @@ const BAU = {
       (w) => (f.mindestens && Number(w) < f.mindestens) ? "Bitte laden Sie mindestens ein Foto hoch – oder tippen Sie auf den Knopf darunter." : "");
   },
   skizze(karte, f) {
+    // Die Skizze: Straße als Vorlage, fertige Fahrzeuge zum Verschieben und Drehen,
+    // dazu Linien mit dem Finger (Fahrtrichtung). Gezeichnet wird in 600 x 400.
     const vorlage_wahl = { vorfahrt: "kreuzung", abbiegen: "kreuzung", parken: "parkplatz" }[antworten.unfallart] || "strasse";
     let vorlage = vorlage_wahl, farbe = STIFTE[0][0];
-    const striche = [];
+    const teile = [];                 // Striche und Fahrzeuge, in der Reihenfolge des Hinzufügens
+    let gewaehlt = null;              // das Fahrzeug, das gerade verschoben oder gedreht wird
     const leinwand = knoten("canvas", { class: "skizze", width: "600", height: "400", "aria-label": "Zeichenfläche für die Skizze" });
     const c = leinwand.getContext("2d");
+    const fahrzeug_malen = (z, markiert) => {
+      const [b, l] = FAHRZEUGE[z.art].masse;
+      c.save();
+      c.translate(z.x, z.y);
+      c.rotate(z.winkel * Math.PI / 180);
+      FAHRZEUGE[z.art].malen(c, z.farbe, b, l);
+      if (markiert) {
+        c.setLineDash([6, 5]); c.strokeStyle = "#1d2733"; c.lineWidth = 2;
+        c.strokeRect(-b / 2 - 7, -l / 2 - 7, b + 14, l + 14); c.setLineDash([]);
+      }
+      c.restore();
+    };
     const malen = () => {
       c.fillStyle = "#fff"; c.fillRect(0, 0, 600, 400);
       VORLAGEN[vorlage](c);
-      c.lineCap = "round"; c.lineJoin = "round"; c.lineWidth = 7;
-      for (const s of striche) {
-        c.strokeStyle = s.farbe; c.beginPath();
-        s.punkte.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-        if (s.punkte.length === 1) c.lineTo(s.punkte[0][0] + 0.1, s.punkte[0][1]);
+      c.lineCap = "round"; c.lineJoin = "round";
+      for (const t of teile) {
+        if (t.typ === "fahrzeug") { fahrzeug_malen(t, t === gewaehlt); continue; }
+        c.lineWidth = 7; c.strokeStyle = t.farbe; c.beginPath();
+        t.punkte.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+        if (t.punkte.length === 1) c.lineTo(t.punkte[0][0] + 0.1, t.punkte[0][1]);
         c.stroke();
       }
+      werkzeug_fahrzeug.hidden = !gewaehlt;
     };
     const ort = (e) => { const r = leinwand.getBoundingClientRect(); return [(e.clientX - r.left) * 600 / r.width, (e.clientY - r.top) * 400 / r.height]; };
-    let aktiv = null;
-    leinwand.addEventListener("pointerdown", (e) => { leinwand.setPointerCapture(e.pointerId); aktiv = { farbe, punkte: [ort(e)] }; striche.push(aktiv); malen(); });
-    leinwand.addEventListener("pointermove", (e) => { if (aktiv) { aktiv.punkte.push(ort(e)); malen(); } });
-    for (const ende of ["pointerup", "pointercancel"]) leinwand.addEventListener(ende, () => { aktiv = null; });
+    // Getroffen ist ein Fahrzeug, wenn der Punkt - ins Fahrzeug zurückgedreht - in seinem Umriss liegt.
+    const getroffen = ([x, y]) => [...teile].reverse().find((t) => {
+      if (t.typ !== "fahrzeug") return false;
+      const w = -t.winkel * Math.PI / 180, dx = x - t.x, dy = y - t.y;
+      const rx = dx * Math.cos(w) - dy * Math.sin(w), ry = dx * Math.sin(w) + dy * Math.cos(w);
+      const [b, l] = FAHRZEUGE[t.art].masse;
+      return Math.abs(rx) <= b / 2 + 12 && Math.abs(ry) <= l / 2 + 12;
+    });
+    let strich = null, ziehen = null;
+    leinwand.addEventListener("pointerdown", (e) => {
+      leinwand.setPointerCapture(e.pointerId);
+      const p = ort(e);
+      const z = getroffen(p);
+      if (z) { gewaehlt = z; ziehen = { dx: p[0] - z.x, dy: p[1] - z.y }; malen(); return; }
+      gewaehlt = null;
+      strich = { typ: "strich", farbe, punkte: [p] };
+      teile.push(strich);
+      malen();
+    });
+    leinwand.addEventListener("pointermove", (e) => {
+      const p = ort(e);
+      if (ziehen && gewaehlt) {
+        gewaehlt.x = Math.max(10, Math.min(590, p[0] - ziehen.dx));
+        gewaehlt.y = Math.max(10, Math.min(390, p[1] - ziehen.dy));
+        malen();
+      } else if (strich) { strich.punkte.push(p); malen(); }
+    });
+    for (const ende of ["pointerup", "pointercancel"]) leinwand.addEventListener(ende, () => { strich = null; ziehen = null; });
+
     const vorlagen = knoten("div", { class: "werkzeug" });
     for (const [name, text] of [["strasse", "Straße"], ["kreuzung", "Kreuzung"], ["parkplatz", "Parkplatz"]]) {
       const k = knoten("button", { type: "button", class: "chip" + (name === vorlage ? " an" : "") }, text);
       k.addEventListener("click", () => { vorlage = name; for (const x of vorlagen.children) x.classList.toggle("an", x === k); malen(); });
       vorlagen.append(k);
     }
+    // Fahrzeuge zum Einsetzen: je Art einmal "Ihres" (blau) und einmal "das andere" (orange).
+    const einsetzen = knoten("div", { class: "fahrzeuge" });
+    for (const [farbwert, wer] of [[STIFTE[0][0], "Ihr Fahrzeug"], [STIFTE[1][0], "Das andere Fahrzeug"]]) {
+      const reihe = knoten("div", { class: "werkzeug" });
+      reihe.append(knoten("span", { class: "reihe-titel" }, wer + ":"));
+      for (const [art, titel] of Object.entries(FAHRZEUG_TITEL)) {
+        const k = knoten("button", { type: "button", class: "chip fahrzeug-knopf" });
+        k.append(knoten("i", { class: "punkt-" + (wer === "Ihr Fahrzeug" ? 0 : 1) }), titel);
+        k.addEventListener("click", () => {
+          // Jedes neue Fahrzeug an eine freie Stelle, damit sie nicht übereinander liegen.
+          const plaetze = [[300, 200], [170, 200], [430, 200], [300, 90], [300, 310], [90, 90], [510, 90], [90, 310], [510, 310]];
+          const n = teile.filter((t) => t.typ === "fahrzeug").length;
+          const [px, py] = plaetze[n % plaetze.length];
+          const neu = { typ: "fahrzeug", art, farbe: farbwert, x: px, y: py, winkel: 0 };
+          teile.push(neu);
+          gewaehlt = neu;
+          malen();
+        });
+        reihe.append(k);
+      }
+      einsetzen.append(reihe);
+    }
+    const werkzeug_fahrzeug = knoten("div", { class: "werkzeug", hidden: "" });
+    for (const [text, schritt] of [["↺ drehen", -45], ["↻ drehen", 45]]) {
+      const k = knoten("button", { type: "button", class: "chip" }, text);
+      k.addEventListener("click", () => { if (gewaehlt) { gewaehlt.winkel = (gewaehlt.winkel + schritt + 360) % 360; malen(); } });
+      werkzeug_fahrzeug.append(k);
+    }
+    const weg = knoten("button", { type: "button", class: "chip" }, "✕ entfernen");
+    weg.addEventListener("click", () => { if (gewaehlt) { teile.splice(teile.indexOf(gewaehlt), 1); gewaehlt = null; malen(); } });
+    werkzeug_fahrzeug.append(weg);
+
     const stifte = knoten("div", { class: "werkzeug" });
+    stifte.append(knoten("span", { class: "reihe-titel" }, "Linie:"));
     for (const [wert, text] of STIFTE) {
       const k = knoten("button", { type: "button", class: "chip stift" + (wert === farbe ? " an" : "") });
       k.append(knoten("i", { class: "punkt-" + STIFTE.findIndex(([w]) => w === wert) }), text);
-      k.addEventListener("click", () => { farbe = wert; for (const x of stifte.children) x.classList.toggle("an", x === k); });
+      k.addEventListener("click", () => { farbe = wert; for (const x of stifte.querySelectorAll(".stift")) x.classList.toggle("an", x === k); });
       stifte.append(k);
     }
     const zurueck = knoten("button", { type: "button", class: "chip" }, "↶ Rückgängig");
-    zurueck.addEventListener("click", () => { striche.pop(); malen(); });
+    zurueck.addEventListener("click", () => { const t = teile.pop(); if (t === gewaehlt) gewaehlt = null; malen(); });
     stifte.append(zurueck);
-    karte.append(vorlagen, leinwand, stifte);
+    karte.append(knoten("p", { class: "klein" }, "Tippen Sie auf ein Fahrzeug – es erscheint in der Mitte. Mit dem Finger verschieben, mit den Pfeilen drehen. Die Fahrtrichtung zeichnen Sie einfach ein."),
+      vorlagen, einsetzen, leinwand, werkzeug_fahrzeug, stifte);
     if (antworten._skizze) karte.append(knoten("p", { class: "gewaehlt-text" }, "✓ Ihre Skizze ist gespeichert. Sie können eine weitere zeichnen."));
     malen();
     const k = knoten("button", { type: "button", class: "haupt" }, "Skizze speichern und weiter");
     k.addEventListener("click", async () => {
-      if (!striche.length) {
+      if (!teile.length) {
         if (antworten._skizze) return weiter(f);
-        melden("Bitte zeichnen Sie etwas – oder wählen Sie unten „Lieber später“.");
+        melden("Bitte setzen Sie die Fahrzeuge ein oder zeichnen Sie etwas – oder wählen Sie unten „Lieber später“.");
         return;
       }
       k.disabled = true;
+      gewaehlt = null;
+      malen();                                  // ohne Markierung speichern
       try {
         const bild = await new Promise((fertig) => leinwand.toBlob(fertig, "image/png"));
         await datei_hochladen(bild, "Unfallskizze.png", "skizze");
@@ -722,8 +832,8 @@ function geschafft() {
     const letzte = FRAGEN.find((x) => x.id === verlauf[verlauf.length - 1]);
     if (gespraech && letzte) gespraech.append(blase("ich", antwort_text(letzte)),
       blase("bot", ART === "kuendigung"
-        ? "Vielen Dank – fast geschafft! Jetzt nur noch die Vollmacht und Ihre Unterschrift. Arbeitsvertrag und Lohnabrechnungen laden Sie hoch, sobald wir Ihren Fall geprüft haben."
-        : "Vielen Dank – der schwierigste Teil ist geschafft! Jetzt noch Ihre Kontaktdaten und die Unterschrift. Weitere Unterlagen wie Fahrzeugschein oder Rechnungen laden Sie hoch, sobald wir Ihren Fall geprüft haben."));
+        ? "Vielen Dank – fast geschafft! Jetzt nur noch Vollmacht und Unterschrift – danach prüfen wir Ihre Meldung und bestätigen Ihnen, ob wir den Fall übernehmen. Arbeitsvertrag und Lohnabrechnungen laden Sie hoch, sobald wir Ihren Fall geprüft haben."
+        : "Vielen Dank – der schwierigste Teil ist geschafft! Jetzt noch Ihre Kontaktdaten und die Unterschrift. Danach prüfen wir Ihre Meldung und bestätigen Ihnen, ob wir den Fall übernehmen."));
     const eingabe = $(".eingabe", buehne);
     eingabe.textContent = "";
     const k = knoten("button", { type: "button", class: "haupt" }, ART === "kuendigung" ? "Weiter zur Unterschrift" : "Weiter zu Kontaktdaten und Unterschrift");

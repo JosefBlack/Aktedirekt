@@ -109,7 +109,7 @@ def test_kanzlei_und_akte_sehen_was_erklaert_wurde(umgebung):
     teil = client.get(f"/api/kanzlei/eingaenge/{fall}", headers=k).json()["teile"][-1]
     assert teil["titel"] == "Erklärungen des Mandanten"
     assert teil["zeilen"] == [
-        ["Ich erteile den Auftrag und die Vollmacht.", "ja"],
+        [erklaerungen.liste("unfall")[0].haken, "ja"],
         ["Ich habe die Widerrufsbelehrung erhalten.", "ja"],
         [SOFORT, "nein"],
         ["Ich habe die Hinweise zur Datenverarbeitung zur Kenntnis genommen.", "ja"]]

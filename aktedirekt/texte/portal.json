@@ -8,7 +8,7 @@
   ],
   "sachstand": {
     "aufgenommen": {
-      "was": "Ihre Angaben sind bei uns eingegangen. Wir prüfen sie und entscheiden, ob wir das Mandat übernehmen.",
+      "was": "Ihre Meldung ist bei uns eingegangen und noch kein Mandat. Wir prüfen sie und bestätigen Ihnen, ob wir Ihren Fall übernehmen.",
       "tun": "Laden Sie die Unterlagen hoch, die in der Liste unten noch offen sind. Je vollständiger Ihre Angaben, desto schneller können wir für Sie tätig werden."
     },
     "nicht_uebernommen": {
@@ -16,7 +16,7 @@
       "tun": "Bei Fragen erreichen Sie uns telefonisch{telefon}."
     },
     "angenommen": {
-      "was": "Wir haben Ihr Mandat übernommen und bearbeiten Ihren Fall.",
+      "was": "Wir haben Ihr Mandat angenommen und bearbeiten Ihren Fall.",
       "tun": "Leiten Sie uns jedes Schreiben weiter, das Sie zu diesem Fall bekommen – einfach hier fotografieren und hochladen."
     },
     "unterlagen_fehlen": {
@@ -136,7 +136,8 @@
       "versprechen": [
         "In etwa fünf Minuten erledigt – direkt am Handy.",
         "Was Sie nicht wissen oder nicht zur Hand haben, lassen Sie einfach frei. Angaben, Fotos und Unterlagen können Sie jederzeit nachreichen.",
-        "Haben Sie den Unfall nicht verschuldet, muss in der Regel die gegnerische Versicherung auch unsere Kosten tragen."
+        "Haben Sie den Unfall nicht verschuldet, muss in der Regel die gegnerische Versicherung auch unsere Kosten tragen.",
+        "Ihre Meldung ist noch kein Mandat. Wir prüfen sie und bestätigen Ihnen, ob wir Ihren Fall übernehmen."
       ],
       "bereit": [
         "Kennzeichen des anderen Fahrzeugs",
@@ -148,7 +149,8 @@
       "versprechen": [
         "In etwa zehn Minuten erledigt – direkt am Handy.",
         "Wegen der kurzen Frist zählt jeder Tag: Fangen Sie heute an. Was fehlt, reichen Sie einfach später nach.",
-        "Ihre Angaben werden nach jedem Schritt gespeichert."
+        "Ihre Angaben werden nach jedem Schritt gespeichert.",
+        "Ihre Meldung ist noch kein Mandat. Wir prüfen sie und bestätigen Ihnen, ob wir Ihren Fall übernehmen."
       ],
       "bereit": [
         "das Kündigungsschreiben",
@@ -159,6 +161,6 @@
   },
   "nachreichen": {
     "fotos": "Nichts zur Hand? Einfach auf „Weiter“ – Fotos und Unterlagen können Sie auch nach dem Abschicken jederzeit nachreichen.",
-    "abschluss": "Auch nach dem Abschicken können Sie auf Ihrer persönlichen Seite jederzeit Unterlagen hochladen, Angaben ergänzen und uns schreiben."
+    "abschluss": "Mit Ihrer Unterschrift senden Sie Ihre Meldung zur Prüfung an uns. Das Mandat kommt erst zustande, wenn wir es Ihnen bestätigen. Unterlagen und Angaben können Sie auch danach jederzeit ergänzen."
   }
 }

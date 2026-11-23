@@ -143,7 +143,7 @@ def test_ganzer_ablauf_mit_werkstatt(umgebung):
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={
         "vollmacht": True, "datenschutz": True, "widerruf": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT})
     assert antwort.status_code == 200 and antwort.json()["abgeschlossen"] is True
-    assert antwort.json()["sachstand"] == "Aufgenommen"
+    assert antwort.json()["sachstand"] == "Eingegangen – in Prüfung"
 
     aufnahme = speicher.laden(zugang)
     assert aufnahme.einwilligung_partner is True and aufnahme.lead_kennung == "L-1"

@@ -575,7 +575,7 @@ function nachrichten_zeigen() {
 
 function fertig() {
   als_app_hinweis();
-  const neu = !zustand.sachstand || zustand.sachstand === "Aufgenommen";
+  const neu = !zustand.sachstand || zustand.sachstand === "Eingegangen – in Prüfung";
   $("#fertig-titel").textContent = neu ? "Vielen Dank" : "Ihr Fall";
   $("#fertig-dank").hidden = !neu;
   $("#sachstand-seit").textContent = zustand.sachstand_seit ? " seit " + datum_lesbar(zustand.sachstand_seit) : "";

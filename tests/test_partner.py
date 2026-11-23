@@ -211,7 +211,7 @@ def test_auskunft_wird_vermerkt(umgebung):
     faelle(client, partner)
     vermerke = speicher.auskuenfte(kennung)
     assert [(v.partner, v.sachstand) for v in vermerke] == [
-        ("werkstatt-a", "Aufgenommen"), ("werkstatt-a", "Teilweise reguliert")]
+        ("werkstatt-a", "Eingegangen – in Prüfung"), ("werkstatt-a", "Teilweise reguliert")]
     assert vermerke[0].erstmals_am == datetime(2026, 11, 19, 10, 0)
     assert vermerke[0].zuletzt_am == datetime(2026, 11, 19, 10, 30)
 

@@ -9,7 +9,7 @@
   ],
   "akteneigenschaft": "Sachstand",
   "stufen": [
-    {"schluessel": "aufgenommen", "bezeichnung": "Aufgenommen", "quelle": "jurnodes"},
+    {"schluessel": "aufgenommen", "bezeichnung": "Eingegangen – in Prüfung", "quelle": "jurnodes"},
     {"schluessel": "nicht_uebernommen", "bezeichnung": "Nicht übernommen", "quelle": "jurnodes"},
     {"schluessel": "angenommen", "bezeichnung": "Mandat angenommen", "quelle": "jurnodes"},
     {"schluessel": "unterlagen_fehlen", "bezeichnung": "Unterlagen fehlen", "quelle": "kanzlei"},

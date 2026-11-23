@@ -12,7 +12,7 @@
       "name": "vollmacht",
       "titel": "Auftrag und Vollmacht",
       "text": "vollmacht",
-      "haken": "Ich erteile den Auftrag und die Vollmacht.",
+      "haken": "Ich erteile Auftrag und Vollmacht. Mir ist bekannt, dass das Mandat erst zustande kommt, wenn die Kanzlei es mir bestätigt.",
       "pflicht": true
     },
     {
