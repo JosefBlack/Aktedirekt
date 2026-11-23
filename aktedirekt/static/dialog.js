@@ -83,6 +83,9 @@ const ABSCHNITTE = { unfall: "Der Unfall", fahrzeug: "Ihr Fahrzeug", gegner: "Di
 let ART = "unfall";
 let hinweise = [];           // Hinweise des Servers, etwa zur Klagefrist
 
+// Hat ein Gutachter den Schaden schon aufgenommen, braucht es keine eigenen Schadenfotos.
+const ohne_gutachten = () => !["ja", "beauftragt"].includes(antworten.gutachten);
+
 const FRAGEN = [
   // Unfall
   { id: "datum", schritt: "unfall", feld: "unfalldatum", art: "datum", frage: "Wann war der Unfall?" },
@@ -94,8 +97,9 @@ const FRAGEN = [
     unter: "Ein paar Sätze in Ihren eigenen Worten genügen. Wir haben schon einen Anfang vorbereitet." },
   { id: "skizze", schritt: "unfall", feld: "_skizze", art: "skizze", lokal: true, frage: "Zeichnen Sie eine kleine Skizze",
     unter: "Mit dem Finger: wo die Fahrzeuge waren und wie sie gefahren sind. Grob genügt völlig.", spaeter: "Lieber später – oder auf Papier und dann fotografieren" },
-  { id: "unfallfotos", schritt: "unfall", feld: "_unfallfotos", art: "fotos", lokal: true, unterlage: "unfallort",
-    frage: "Haben Sie Fotos vom Unfallort?", unter: "Zum Beispiel die Endstellung der Fahrzeuge, Spuren, Schilder oder Ampeln.", spaeter: "Habe ich nicht" },
+  { id: "unfallfotos", schritt: "unfall", feld: "_unfallfotos", art: "fotos", lokal: true, unterlage: "unfallort", mindestens: 1,
+    frage: "Laden Sie Ihre Fotos vom Unfall hoch", unter: "Sie sind besonders wichtig – sie zeigen, wie es passiert ist.",
+    spaeter: "Ich habe am Unfallort keine Fotos gemacht" },
   { id: "polizei", schritt: "unfall", feld: "polizei", art: "janein", frage: "War die Polizei vor Ort?" },
   { id: "polizei_az", schritt: "unfall", feld: "polizei_az", art: "text", frage: "Haben Sie ein Aktenzeichen der Polizei?",
     unter: "Steht auf dem Zettel, den die Polizei Ihnen gegeben hat.", spaeter: "Habe ich nicht", wenn: () => antworten.polizei === "ja" },
@@ -105,12 +109,12 @@ const FRAGEN = [
     spaeter: "Reiche ich später nach", wenn: () => antworten._zeugen === "ja" },
   // Fahrzeug
   { id: "kennzeichen", schritt: "fahrzeug", feld: "kennzeichen", art: "kennzeichen", frage: "Welches Kennzeichen hat Ihr Fahrzeug?" },
-  { id: "stellen", schritt: "fahrzeug", feld: "schadenstellen", art: "auto", frage: "Wo ist Ihr Fahrzeug beschädigt?", unter: "Tippen Sie auf die Stellen – auch mehrere. Dann sagen wir Ihnen, was Sie fotografieren sollen.", spaeter: "Weiß ich nicht genau" },
-  { id: "schadenfotos", schritt: "fahrzeug", feld: "_schadenfotos", art: "fotos", lokal: true, unterlage: "schaden", mindestens: 1,
-    frage: "Fotografieren Sie jetzt den Schaden", spaeter: "Das Fahrzeug ist gerade nicht bei mir – ich reiche die Fotos nach" },
   { id: "gutachten", schritt: "fahrzeug", feld: "gutachten", art: "wahl", frage: "Gibt es schon ein Gutachten?",
-    unter: "Alles zum Schaden selbst – Reparaturkosten, Wert, Ausstattung – steht dann im Gutachten. Das müssen Sie uns nicht noch einmal sagen.",
+    unter: "Dann steht alles zum Schaden – Fotos, Reparaturkosten, Wert – im Gutachten, und wir fragen danach nicht noch einmal.",
     wahl: [["ja", "Ja, das Gutachten liegt vor"], ["beauftragt", "Ein Gutachter ist beauftragt"], ["nein", "Nein, noch nicht"]], spaeter: "Weiß ich nicht" },
+  { id: "stellen", schritt: "fahrzeug", feld: "schadenstellen", art: "auto", wenn: ohne_gutachten, frage: "Wo ist Ihr Fahrzeug beschädigt?", unter: "Tippen Sie auf die Stellen – auch mehrere. Dann sagen wir Ihnen, was Sie fotografieren sollen.", spaeter: "Weiß ich nicht genau" },
+  { id: "schadenfotos", schritt: "fahrzeug", feld: "_schadenfotos", art: "fotos", lokal: true, unterlage: "schaden", mindestens: 1, wenn: ohne_gutachten,
+    frage: "Fotografieren Sie jetzt den Schaden", spaeter: "Das Fahrzeug ist gerade nicht bei mir – ich reiche die Fotos nach" },
   { id: "halter", schritt: "fahrzeug", feld: "halter_selbst", art: "janein", frage: "Ist das Fahrzeug auf Sie zugelassen?", unter: "So steht es im Fahrzeugschein." },
   { id: "halter_name", schritt: "fahrzeug", feld: "halter_name", art: "text", frage: "Auf wen ist es zugelassen?", wenn: () => antworten.halter_selbst === "nein" },
   { id: "finanzierung", schritt: "fahrzeug", feld: "finanzierung", art: "wahl", frage: "Ist das Fahrzeug finanziert oder geleast?",
@@ -132,7 +136,9 @@ function sichtbar() { return FRAGEN.filter((f) => !f.wenn || f.wenn()); }
 function kopf_setzen(f, rueckwaerts) {
   const liste = sichtbar();
   const nr = liste.indexOf(f) + 1;
-  $("#zaehler").textContent = nr ? `${nr} von ${liste.length}` : "";
+  const teile = [...new Set(liste.map((x) => ABSCHNITTE[x.schritt]))];
+  const teil = teile.indexOf(ABSCHNITTE[f.schritt]) + 1;
+  $("#zaehler").textContent = teil ? `Teil ${teil} von ${teile.length}` : "";
   $("#fortschritt").style.width = (100 * (nr - 1) / liste.length) + "%";
   $("#zurueck").hidden = verlauf.length < 2;
   $("#titel").textContent = ABSCHNITTE[f.schritt] || "";
@@ -311,6 +317,12 @@ const STIFTE = [["#2f6fb0", "Ihr Fahrzeug"], ["#e8a33d", "das andere"], ["#1d273
 
 const BAU = {
   fotos(karte, f) {
+    if (f.unterlage === "unfallort") {
+      const liste = knoten("ul", { class: "tipps" });
+      for (const t of ["beide Fahrzeuge, wie sie nach dem Unfall standen", "das Kennzeichen des anderen Fahrzeugs",
+        "die Schäden an beiden Fahrzeugen", "Spuren, Schilder, Ampeln und die Umgebung"]) liste.append(knoten("li", {}, t));
+      karte.append(knoten("p", { class: "unter" }, "Hilfreich sind vor allem:"), liste);
+    }
     if (f.unterlage === "schaden") {
       const stellen = STELLEN.filter(([w]) => (antworten.schadenstellen || "").split(",").includes(w)).map(([, t]) => t);
       const liste = knoten("ul", { class: "tipps" });
@@ -347,7 +359,7 @@ const BAU = {
     karte.append(reihe, stand);
     zeigen_stand();
     knopf_weiter(karte, f, () => String(geladen[f.unterlage] || 0),
-      (w) => (f.mindestens && Number(w) < f.mindestens) ? "Bitte mindestens ein Foto – oder unten „ich reiche die Fotos nach“ wählen." : "");
+      (w) => (f.mindestens && Number(w) < f.mindestens) ? "Bitte mindestens ein Foto – oder unten den Knopf darunter wählen." : "");
   },
   skizze(karte, f) {
     const vorlage_wahl = { vorfahrt: "kreuzung", abbiegen: "kreuzung", parken: "parkplatz" }[antworten.unfallart] || "strasse";
@@ -636,12 +648,28 @@ function entwurf_merken() {
   try { localStorage.setItem(ENTWURF + ":" + zugang.slice(0, 12), JSON.stringify(antworten)); } catch (e) { /* egal */ }
 }
 
+let fortsetzen = "";         // nach einer Korrektur: zurück zu dieser Frage
+
 async function weiter(f) {
   if (f.feld === "hergang") antworten._hergang_eigen = "1";
   delete fehler_vom_server[f.feld];
+  for (const g of f.felder || []) delete fehler_vom_server[g.name];
   entwurf_merken();
   const liste = sichtbar();
-  const naechste = liste[liste.indexOf(f) + 1];
+  let naechste = liste[liste.indexOf(f) + 1];
+  // War das eine Korrektur, die der Server verlangt hat? Dann gleich speichern und
+  // dorthin zurück, wo der Mandant war - nicht alle Fragen dazwischen noch einmal.
+  if (fortsetzen && !Object.keys(fehler_vom_server).length) {
+    const ok = await speichern(f.schritt);
+    if (!ok) return;
+    const ziel = liste.find((x) => x.id === fortsetzen);
+    fortsetzen = "";
+    if (ziel && ziel.schritt !== f.schritt) naechste = ziel;
+    else if (ziel) naechste = ziel;
+    if (!naechste) return geschafft();
+    verlauf.push(naechste.id);
+    return zeigen(naechste);
+  }
   // Abschnitt zu Ende: speichern, bevor es weitergeht.
   if (!naechste || naechste.schritt !== f.schritt) {
     const ok = await speichern(f.schritt);
@@ -668,7 +696,15 @@ async function speichern(schritt) {
     if (Object.keys(fehler).length) {
       fehler_vom_server = fehler;
       const erste = sichtbar().find((f) => fehler[f.feld] || (f.felder || []).some((g) => fehler[g.name]));
-      if (erste) { verlauf.push(erste.id); zeigen(erste, true); }
+      if (erste) {
+        // Merken, wohin es nach der Korrektur weitergeht: die Frage nach diesem Abschnitt.
+        const liste = sichtbar();
+        const danach = liste.slice(liste.findIndex((x) => x.schritt === schritt)).find((x) => x.schritt !== schritt);
+        fortsetzen = danach ? danach.id : "";
+        verlauf.push(erste.id);
+        zeigen(erste, true);
+        melden("Bitte prüfen Sie diese Angabe – danach geht es dort weiter, wo Sie waren.");
+      }
       else melden(Object.values(fehler)[0]);
       return false;
     }
@@ -731,6 +767,8 @@ $("#zurueck").addEventListener("click", () => {
       try { localStorage.setItem(MERKER, zugang); } catch (e) { /* privates Fenster */ }
     }
   } catch (e) { melden(e.message); return; }
+  const verlangt = new URLSearchParams(location.search).get("f");
+  if (verlangt && verlangt !== zustand.art) { location.href = "/?f=" + encodeURIComponent(verlangt); return; }
   if (zustand.abgeschlossen || !["unfall", "kuendigung"].includes(zustand.art)) { location.href = "/"; return; }
   ART = zustand.art;
   hinweise = zustand.hinweise || [];

@@ -237,7 +237,10 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 anzahl[u.schluessel] = anzahl.get(u.schluessel, 0) + 1
                 if seit and d.hochgeladen_am and d.hochgeladen_am.isoformat() >= seit:
                     neu.add(u.schluessel)
-        return [{"schluessel": u.schluessel, "titel": u.titel, "hinweis": u.hinweis, "wichtig": u.wichtig,
+        # Hat ein Gutachter den Schaden aufgenommen, sind eigene Schadenfotos nicht mehr nötig.
+        gutachten = (aufnahme.angaben.get("fahrzeug") or {}).get("gutachten", "") in ("ja", "beauftragt")
+        return [{"schluessel": u.schluessel, "titel": u.titel, "hinweis": u.hinweis,
+                 "wichtig": u.wichtig and not (gutachten and u.schluessel == "schaden"),
                  "vorab": u.vorab, "anzahl": anzahl.get(u.schluessel, 0), "angefordert": u.schluessel in gefragt,
                  "nachgereicht": u.schluessel in neu} for u in aufnahme.fallart.unterlagen]
 

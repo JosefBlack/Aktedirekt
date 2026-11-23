@@ -798,6 +798,19 @@ wieder.addEventListener("submit", async (e) => {
   if (zugang) {
     try {
       zustand = await aufruf("GET", "/api/aufnahme");
+      // Verlangt der Link ausdrücklich eine andere Fallart (?f=kuendigung), beginnt ein neuer
+      // Fall. Der bisherige Zugang bleibt auf dem Gerät aufbewahrt, nur nicht mehr vorne.
+      const verlangt = new URLSearchParams(location.search).get("f");
+      if (verlangt && START[verlangt] && zustand.art !== verlangt && location.hash !== "#weiter") {
+        try {
+          const frueher = JSON.parse(localStorage.getItem(MERKER + "-frueher") || "[]");
+          localStorage.setItem(MERKER + "-frueher", JSON.stringify([...frueher, zugang].slice(-10)));
+          localStorage.removeItem(MERKER);
+        } catch (e) { /* egal */ }
+        zugang = "";
+        zustand = null;
+        throw Object.assign(new Error(""), { neu: true });
+      }
       uebernehmen();
       if (zustand.abgeschlossen) return fertig();
       if (Object.keys(zustand.angaben).length) $("#los").textContent = "Weitermachen";
@@ -808,7 +821,8 @@ wieder.addEventListener("submit", async (e) => {
         return zeigen(offen || "abschluss");
       }
     } catch (fehler) {
-      if (fehler.status === 401) { zugang = ""; try { localStorage.removeItem(MERKER); } catch (e) { /* egal */ } }
+      if (fehler.neu) { /* neuer Fall der verlangten Art */ }
+      else if (fehler.status === 401) { zugang = ""; try { localStorage.removeItem(MERKER); } catch (e) { /* egal */ } }
       else melden(fehler.message);
     }
   }
