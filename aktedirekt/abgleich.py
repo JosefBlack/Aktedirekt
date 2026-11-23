@@ -19,6 +19,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from aktedirekt import akte_pdf, erklaerungen
+from aktedirekt import zeit as zeit_berlin
 from aktedirekt.aufnahme import Aufnahme, kurzrubrum
 from aktedirekt.domain import Einwilligung, Fall, Herkunft, Sachstand
 from aktedirekt.jurnodes import JurNodes, JurNodesFehler, OhneKennung, Ungewiss
@@ -250,7 +251,7 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
         return 0
     anzahl = 0
     if summe != stand["blatt"]:
-        zeit = datetime.now().strftime("%Y-%m-%d %H%M")
+        zeit = zeit_berlin.jetzt().strftime("%Y-%m-%d %H%M")
         jurnodes.datei_ablegen(ordner, f"Aufnahme Aktedirekt {zeit}.pdf", blatt, "application/pdf")
         stand["blatt"] = summe
         speicher.jurnodes_setzen(aufnahme.kennung, stand)
