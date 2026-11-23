@@ -19,7 +19,7 @@ def dateien_im_speicher(ablage) -> int:
 def eingang(client, ablage, art="kuendigung", einladung=""):
     kopf, daten = beginnen(client, art, einladung)
     assert hochladen(client, kopf, ablage, "anlage.pdf", b"%PDF-1.7 Geheimes Schreiben").status_code == 200
-    abschicken(client, kopf, ANGABEN) if art == "unfall" else abschicken(client, kopf)
+    abschicken(client, kopf, ANGABEN, ablage) if art == "unfall" else abschicken(client, kopf, ablage=ablage)
     return kopf, daten["zugang"]
 
 

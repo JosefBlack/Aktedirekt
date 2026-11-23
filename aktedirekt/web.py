@@ -216,6 +216,9 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         return {"punkte": [titel[p] for p in punkte if p in titel], "schluessel": punkte,
                 "text": a.get("text", ""), "am": a.get("am", "")}
 
+    def auftrag_am(aufnahme: Aufnahme) -> str:
+        return str(speicher.nachweis(aufnahme.kennung).get("auftrag_am", "")) if aufnahme.abgeschlossen_am else ""
+
     def freigegeben(aufnahme: Aufnahme) -> bool:
         """Darf der Mandant alle Unterlagen hochladen? Erst nach der Prüfung durch die Kanzlei:
         ausdrücklich freigegeben, Unterlagen angefordert oder das Mandat angenommen."""
@@ -249,6 +252,15 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         konto = partnerliste.konto(aufnahme.partner)
         name = konto.name if konto else ""
         art = aufnahme.fallart
+        # Solange jur|nodes noch "aufgenommen" meldet, sagt der Stand, wo die Anfrage steht:
+        # in Prüfung, übernommen (Auftrag offen) oder Auftrag erteilt.
+        stand_name = aufnahme.sachstand or "aufgenommen"
+        stand_titel = stufen.bezeichnung(aufnahme.sachstand)
+        if stand_name == "aufgenommen" and aufnahme.abgeschlossen_am:
+            if auftrag_am(aufnahme):
+                stand_name, stand_titel = "#auftrag_erteilt", "Auftrag erteilt – wir legen Ihre Akte an"
+            elif freigegeben(aufnahme):
+                stand_name, stand_titel = "#uebernommen", "Geprüft – bitte Auftrag erteilen"
         return {
             "art": art.name,
             "titel": art.titel,
@@ -256,6 +268,10 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "empfohlen": [u.titel for u in art.unterlagen if u.schluessel != "sonstiges"],
             "unterlagen": checkliste(aufnahme),
             "freigegeben": freigegeben(aufnahme),
+            # Zweite Stufe: Nach der Prüfung erteilt der Mandant den Auftrag.
+            "auftrag_am": auftrag_am(aufnahme),
+            "auftrag_offen": bool(aufnahme.abgeschlossen_am and freigegeben(aufnahme) and not auftrag_am(aufnahme)
+                                  and aufnahme.sachstand != "nicht_uebernommen"),
             "hinweise": hinweise(aufnahme),
             "angaben": {s: a for s, a in aufnahme.angaben.items() if not s.startswith((ERG, "#"))},
             "anforderung": anforderung(aufnahme),
@@ -269,11 +285,11 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "nachrichten": [{"am": d.hochgeladen_am.isoformat(timespec="minutes") if d.hochgeladen_am else ""}
                             for d in speicher.dateien(aufnahme.kennung) if d.von == NACHRICHT],
             "abgeschlossen": aufnahme.abgeschlossen_am is not None,
-            "sachstand": stufen.bezeichnung(aufnahme.sachstand),
+            "sachstand": stand_titel,
             "sachstand_seit": aufnahme.sachstand_seit.isoformat() if aufnahme.sachstand_seit else "",
             # Was der Stand bedeutet und was der Mandant tun kann - damit er nicht anrufen muss.
             "verlauf": verlauf(aufnahme),
-            "erklaerung": {k: portaltext(v) for k, v in portal["sachstand"].get(aufnahme.sachstand or "aufgenommen", {}).items()},
+            "erklaerung": {k: portaltext(v) for k, v in portal["sachstand"].get(stand_name, {}).items()},
             "fragen": [{"frage": f["frage"], "antwort": portaltext(f["antwort"])} for f in portal["fragen"].get(art.name, [])],
             "telefon": telefon or "",
             "partner": name,
@@ -281,7 +297,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                                     and aufnahme.einwilligung_widerrufen_am is None,
             # Was vor der Unterschrift zu erklären ist - Vollmacht, Widerrufsrecht, Datenverarbeitung.
             "erklaerungen": [{"name": e.name, "titel": e.titel, "text": e.text, "haken": e.haken, "pflicht": e.pflicht,
-                              "wichtig": e.wichtig}
+                              "wichtig": e.wichtig, "stufe": e.stufe}
                              for e in erklaerungen.liste(art.name)],
             "texte": {
                 "einwilligung_partner": texte["einwilligung_partner"].replace("{partner}", name) if name else "",
@@ -465,22 +481,13 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         fehlend = aufnahme.fehlende_schritte()
         if fehlend:
             fehler["_"] = "Es fehlen noch Angaben."
-        abzugeben = erklaerungen.liste(aufnahme.art)
+        # Erste Stufe (Anbahnung): nur was zur Anfrage gehört - die Datenschutzhinweise.
+        # Vollmacht, Widerrufsbelehrung und Unterschrift folgen mit dem Auftrag.
+        abzugeben = erklaerungen.liste(aufnahme.art, 1)
         abgegeben = {e.name: daten.get(e.name) is True for e in abzugeben}
         for e in abzugeben:
             if e.pflicht and not abgegeben[e.name]:
-                fehler[e.name] = ("Ohne Vollmacht kann die Kanzlei nicht tätig werden." if e.name == "vollmacht"
-                                  else "Bitte bestätigen.")
-        unterschrift = b""
-        roh = daten.get("unterschrift", "")
-        vorsatz = "data:image/png;base64,"
-        if isinstance(roh, str) and roh.startswith(vorsatz):
-            try:
-                unterschrift = base64.b64decode(roh[len(vorsatz):], validate=True)
-            except ValueError:
-                unterschrift = b""
-        if not (unterschrift.startswith(_PNG) and MIN_UNTERSCHRIFT <= len(unterschrift) <= MAX_UNTERSCHRIFT):
-            fehler["unterschrift"] = "Bitte im Feld unterschreiben."
+                fehler[e.name] = "Bitte bestätigen."
         if fehler:
             return JSONResponse({"fehler": fehler, "fehlend": fehlend}, status_code=422)
 
@@ -498,35 +505,30 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             "einwilligung_partner_sha256":
                 hashlib.sha256(zustand(aufnahme)["texte"]["einwilligung_partner"].encode()).hexdigest()
                 if einwilligung else "",
-            "unterschrift_sha256": hashlib.sha256(unterschrift).hexdigest(),
         }
-        speicher.abschliessen(aufnahme.kennung, zeitpunkt, einwilligung, nachweis, unterschrift)
+        speicher.abschliessen(aufnahme.kennung, zeitpunkt, einwilligung, nachweis, b"")
         fertig = speicher.nach_kennung(aufnahme.kennung)
         assert fertig is not None
         if jurnodes is not None:
             lead_anlegen(fertig, speicher, jurnodes, partnerliste, zeitpunkt.date())
         if post is not None and mail_von(fertig):
-            # Eingangsbestätigung mit den Erklärungen als PDF: So hat der Mandant
-            # die Widerrufsbelehrung auf einem dauerhaften Datenträger.
+            # Eingangsbestätigung der Anfrage, mit den Datenschutzhinweisen als PDF.
             try:
-                anlagen = [(e.titel + ".pdf", akte_pdf.erzeugen(e.titel, [], [{"titel": "", "zeilen": [["", e.text]]}], None),
-                            "application/pdf") for e in erklaerungen.liste(fertig.art) if e.text]
                 post.senden(mail_von(fertig), mails["eingang_betreff"], mails["eingang_text"].format(
-                    name=fertig.name(), portal=portal_adresse(request), telefon=unter, kanzlei=marke.get("name", "")), anlagen)
+                    name=fertig.name(), portal=portal_adresse(request), telefon=unter, kanzlei=marke.get("name", "")),
+                    erklaerungen_als_pdf(fertig.art, 1))
             except Exception:
                 pass                                   # gespeichert ist es; die E-Mail darf das nicht gefährden
         if eingang_melden is not None:
             # Ohne Namen und ohne Inhalt: Die Nachricht geht unverschlüsselt per E-Mail.
             frist = fertig.klagefrist()
-            betreff = f"Aktedirekt: neuer Eingang {fertig.fallart.betreff}"
+            betreff = f"Aktedirekt: neue Anfrage {fertig.fallart.betreff}"
             zeilen = [f"Art: {fertig.fallart.titel}", f"Eingegangen: {zeitpunkt.strftime('%d.%m.%Y %H:%M')} Uhr"]
             if frist is not None:
                 betreff += f" - Klagefrist bis {frist.strftime('%d.%m.%Y')}"
                 zeilen.append(f"Klagefrist nach Angabe des Mandanten spätestens: {frist.strftime('%d.%m.%Y')} "
                               "(drei Wochen ab Zugang, ohne Prüfung durch die Kanzlei)")
-            if not abgegeben.get("widerruf_sofort", True):
-                zeilen.append("Sofortiger Beginn NICHT verlangt: vor Ablauf der Widerrufsfrist ("
-                              + (zeitpunkt.date() + timedelta(days=14)).strftime("%d.%m.%Y") + ") nicht tätig werden.")
+            zeilen.append("Noch kein Mandat: Nach Ihrer Prüfung erteilt der Mandant den Auftrag mit Vollmacht und Unterschrift.")
             zeilen.append("Einzelheiten nach Anmeldung: " + (basis_url or str(request.base_url)).rstrip("/") + "/kanzlei")
             try:
                 eingang_melden(betreff, "\n".join(zeilen))
@@ -534,6 +536,75 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 # Die Aufnahme ist gespeichert; eine gescheiterte Nachricht darf sie nicht gefährden.
                 pass
         return JSONResponse({"fehler": {}, **zustand(fertig)})
+
+    def erklaerungen_als_pdf(art: str, stufe: int) -> list[tuple[str, bytes, str]]:
+        return [(e.titel + ".pdf", akte_pdf.erzeugen(e.titel, [], [{"titel": "", "zeilen": [["", e.text]]}], None),
+                 "application/pdf") for e in erklaerungen.liste(art, stufe) if e.text]
+
+    @app.post("/api/aufnahme/auftrag")
+    async def auftrag(request: Request) -> JSONResponse:
+        """Zweite Stufe: Nach der Prüfung durch die Kanzlei erteilt der Mandant den Auftrag -
+        mit Vollmacht, Widerrufsbelehrung, Hinweisen zur KI und Unterschrift."""
+        aufnahme = aufnahme_von(request)
+        if aufnahme.abgeschlossen_am is None:
+            raise HTTPException(409, "Bitte schicken Sie zuerst Ihre Anfrage ab.")
+        if not freigegeben(aufnahme):
+            raise HTTPException(409, "Wir prüfen Ihre Anfrage noch. Den Auftrag können Sie erteilen, sobald wir uns gemeldet haben.")
+        alt = speicher.nachweis(aufnahme.kennung)
+        if alt.get("auftrag_am"):
+            raise HTTPException(409, "Den Auftrag haben Sie bereits erteilt.")
+        daten = await json_lesen(request)
+        if not isinstance(daten, dict):
+            raise HTTPException(400, "Die Angaben konnten nicht gelesen werden.")
+        fehler: dict[str, str] = {}
+        abzugeben = erklaerungen.liste(aufnahme.art, 2)
+        abgegeben = {e.name: daten.get(e.name) is True for e in abzugeben}
+        for e in abzugeben:
+            if e.pflicht and not abgegeben[e.name]:
+                fehler[e.name] = ("Ohne Vollmacht kann die Kanzlei nicht tätig werden." if e.name == "vollmacht"
+                                  else "Bitte bestätigen.")
+        unterschrift = b""
+        roh = daten.get("unterschrift", "")
+        vorsatz = "data:image/png;base64,"
+        if isinstance(roh, str) and roh.startswith(vorsatz):
+            try:
+                unterschrift = base64.b64decode(roh[len(vorsatz):], validate=True)
+            except ValueError:
+                unterschrift = b""
+        if not (unterschrift.startswith(_PNG) and MIN_UNTERSCHRIFT <= len(unterschrift) <= MAX_UNTERSCHRIFT):
+            fehler["unterschrift"] = "Bitte im Feld unterschreiben."
+        if fehler:
+            return JSONResponse({"fehler": fehler}, status_code=422)
+        zeitpunkt = jetzt()
+        nachweis = {**alt,
+                    "erklaerungen": {**(alt.get("erklaerungen") or {}), **abgegeben},
+                    **{f"{e.name}_sha256": e.pruefsumme for e in abzugeben},
+                    "auftrag_am": zeitpunkt.isoformat(),
+                    "auftrag_geraet": request.headers.get("user-agent", "")[:300],
+                    "unterschrift_sha256": hashlib.sha256(unterschrift).hexdigest()}
+        speicher.auftrag_speichern(aufnahme.kennung, nachweis, unterschrift)
+        if post is not None and mail_von(aufnahme):
+            # Mit dem Auftrag: Vollmacht, Widerrufsbelehrung und KI-Hinweise als PDF -
+            # damit hat der Mandant die Belehrung auf einem dauerhaften Datenträger.
+            try:
+                post.senden(mail_von(aufnahme), mails["auftrag_betreff"], mails["auftrag_text"].format(
+                    name=aufnahme.name(), portal=portal_adresse(request), telefon=unter, kanzlei=marke.get("name", "")),
+                    erklaerungen_als_pdf(aufnahme.art, 2))
+            except Exception:
+                pass
+        if eingang_melden is not None:
+            zeilen = [f"Art: {aufnahme.fallart.titel}", f"Auftrag erteilt: {zeitpunkt.strftime('%d.%m.%Y %H:%M')} Uhr"]
+            if not abgegeben.get("widerruf_sofort", True):
+                zeilen.append("Sofortiger Beginn NICHT verlangt: vor Ablauf der Widerrufsfrist ("
+                              + (zeitpunkt.date() + timedelta(days=14)).strftime("%d.%m.%Y") + ") nicht tätig werden.")
+            zeilen.append("Einzelheiten nach Anmeldung: " + (basis_url or str(request.base_url)).rstrip("/") + "/kanzlei")
+            try:
+                eingang_melden(f"Aktedirekt: Auftrag erteilt ({aufnahme.fallart.betreff})", "\n".join(zeilen))
+            except Exception:
+                pass
+        frisch = speicher.nach_kennung(aufnahme.kennung)
+        assert frisch is not None
+        return JSONResponse({"fehler": {}, **zustand(frisch)})
 
     def mail_von(aufnahme: Aufnahme) -> str:
         return str(aufnahme.angaben.get(aufnahme.fallart.person, {}).get("email", "")).strip()
@@ -885,7 +956,9 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 "kurzrubrum": kurzrubrum(aufnahme),
                 # Ohne Verlangen des sofortigen Beginns erst nach Ablauf der Widerrufsfrist tätig werden.
                 "sofort": sofort_verlangt(aufnahme),
-                "widerrufsfrist_bis": (aufnahme.abgeschlossen_am.date() + timedelta(days=14)).isoformat(),
+                "auftrag_am": auftrag_am(aufnahme),
+                "widerrufsfrist_bis": (datetime.fromisoformat(auftrag_am(aufnahme)).date() + timedelta(days=14)).isoformat()
+                                      if auftrag_am(aufnahme) else "",
                 "sachstand": stufen.bezeichnung(aufnahme.sachstand),
                 # "unbekannt" heißt: gemeldet, aber noch nicht bestätigt gefunden.
                 "in_jurnodes": aufnahme.lead_kennung not in ("", "unbekannt"),
@@ -921,7 +994,8 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                             for d in speicher.dateien(aufnahme.kennung)],
                 "unterschrift": ("data:image/png;base64," + base64.b64encode(unterschrift).decode())
                                 if unterschrift else "",
-                "nachweis": {"zeitpunkt": nachweis.get("zeitpunkt", ""), "geraet": nachweis.get("geraet", "")},
+                "nachweis": {"zeitpunkt": nachweis.get("zeitpunkt", ""), "geraet": nachweis.get("geraet", ""),
+                             "auftrag_am": nachweis.get("auftrag_am", ""), "auftrag_geraet": nachweis.get("auftrag_geraet", "")},
                 "einwilligung_partner": aufnahme.einwilligung_partner
                                         and aufnahme.einwilligung_widerrufen_am is None,
                 "checkliste": checkliste(aufnahme), "anforderung": anforderung(aufnahme)}

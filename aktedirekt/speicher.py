@@ -287,12 +287,20 @@ class Speicher:
 
     def abschliessen(self, kennung: str, jetzt: datetime, einwilligung_partner: bool,
                      nachweis: dict[str, str], unterschrift: bytes) -> None:
-        (self._ordner / "dateien" / f"{kennung}-unterschrift.png").write_bytes(unterschrift)
+        if unterschrift:
+            (self._ordner / "dateien" / f"{kennung}-unterschrift.png").write_bytes(unterschrift)
         with closing(self._db()) as db, db:
             db.execute("UPDATE aufnahme SET abgeschlossen_am = ?, einwilligung_partner = ?, nachweis = ?, "
                        "sachstand_seit = ? WHERE kennung = ? AND abgeschlossen_am IS NULL",
                        (jetzt.isoformat(), int(einwilligung_partner),
                         json.dumps(nachweis, ensure_ascii=False), jetzt.date().isoformat(), kennung))
+
+    def auftrag_speichern(self, kennung: str, nachweis: dict[str, Any], unterschrift: bytes) -> None:
+        """Zweite Stufe: Unterschrift und der um den Auftrag ergänzte Nachweis."""
+        (self._ordner / "dateien" / f"{kennung}-unterschrift.png").write_bytes(unterschrift)
+        with closing(self._db()) as db, db:
+            db.execute("UPDATE aufnahme SET nachweis = ? WHERE kennung = ?",
+                       (json.dumps(nachweis, ensure_ascii=False), kennung))
 
     def nachweis(self, kennung: str) -> dict[str, str]:
         with closing(self._db()) as db:

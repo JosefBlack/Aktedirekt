@@ -832,11 +832,11 @@ function geschafft() {
     const letzte = FRAGEN.find((x) => x.id === verlauf[verlauf.length - 1]);
     if (gespraech && letzte) gespraech.append(blase("ich", antwort_text(letzte)),
       blase("bot", ART === "kuendigung"
-        ? "Vielen Dank – fast geschafft! Jetzt nur noch Vollmacht und Unterschrift – danach prüfen wir Ihre Meldung und bestätigen Ihnen, ob wir den Fall übernehmen. Arbeitsvertrag und Lohnabrechnungen laden Sie hoch, sobald wir Ihren Fall geprüft haben."
-        : "Vielen Dank – der schwierigste Teil ist geschafft! Jetzt noch Ihre Kontaktdaten und die Unterschrift. Danach prüfen wir Ihre Meldung und bestätigen Ihnen, ob wir den Fall übernehmen."));
+        ? "Vielen Dank – fast geschafft! Jetzt nur noch absenden – danach prüfen wir Ihre Anfrage. Übernehmen wir Ihren Fall, erteilen Sie den Auftrag mit Vollmacht und Unterschrift. Arbeitsvertrag und Lohnabrechnungen laden Sie hoch, sobald wir Ihren Fall geprüft haben."
+        : "Vielen Dank – der schwierigste Teil ist geschafft! Jetzt noch Ihre Kontaktdaten und absenden. Danach prüfen wir Ihre Anfrage. Übernehmen wir Ihren Fall, erteilen Sie den Auftrag mit Vollmacht und Unterschrift."));
     const eingabe = $(".eingabe", buehne);
     eingabe.textContent = "";
-    const k = knoten("button", { type: "button", class: "haupt" }, ART === "kuendigung" ? "Weiter zur Unterschrift" : "Weiter zu Kontaktdaten und Unterschrift");
+    const k = knoten("button", { type: "button", class: "haupt" }, ART === "kuendigung" ? "Weiter zum Absenden" : "Weiter zu Kontaktdaten und Absenden");
     k.addEventListener("click", () => { location.href = "/#weiter"; });
     eingabe.append(k);
     window.scrollTo(0, document.body.scrollHeight);
@@ -846,8 +846,8 @@ function geschafft() {
   const karte = knoten("section", { class: "frage geschafft" });
   karte.append(knoten("div", { class: "haken-gross" }, "✓"),
     knoten("h1", {}, "Geschafft – der schwierigste Teil ist erledigt"),
-    knoten("p", { class: "unter" }, "Jetzt noch Ihre Kontaktdaten und die Unterschrift. Weitere Unterlagen laden Sie hoch, sobald wir Ihren Fall geprüft haben."));
-  const k = knoten("button", { type: "button", class: "haupt" }, ART === "kuendigung" ? "Weiter zur Unterschrift" : "Weiter zu Kontaktdaten und Unterschrift");
+    knoten("p", { class: "unter" }, "Jetzt noch Ihre Kontaktdaten und absenden. Danach prüfen wir Ihre Anfrage."));
+  const k = knoten("button", { type: "button", class: "haupt" }, ART === "kuendigung" ? "Weiter zum Absenden" : "Weiter zu Kontaktdaten und Absenden");
   k.addEventListener("click", () => { location.href = "/#weiter"; });
   karte.append(k);
   buehne.append(karte);

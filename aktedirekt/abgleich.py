@@ -232,12 +232,14 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
     # Anlage dazukam (die kommt ja selbst in den Ordner). Verglichen wird deshalb
     # nur der Inhalt ohne Anlagenliste.
     summe = hashlib.sha256(json.dumps([aufnahme.fuer_die_akte(), aufnahme.einwilligung_partner,
-                                       aufnahme.einwilligung_widerrufen_am is None], ensure_ascii=False,
+                                       aufnahme.einwilligung_widerrufen_am is None,
+                                       speicher.nachweis(aufnahme.kennung).get("auftrag_am", "")], ensure_ascii=False,
                                       default=str).encode()).hexdigest()
     if stand["blatt"] and stand["blatt"] == hashlib.sha256(blatt).hexdigest():
         stand["blatt"] = summe                     # nach altem Verfahren abgelegt und unverändert
         speicher.jurnodes_setzen(aufnahme.kennung, stand)
-    if summe == stand["blatt"] and stand["unterschrift"] and not ausstehend:
+    hat_unterschrift = bool(stand["unterschrift"]) or not speicher.unterschrift(aufnahme.kennung)
+    if summe == stand["blatt"] and hat_unterschrift and not ausstehend:
         return 0                                   # nichts Neues - jur|nodes wird gar nicht erst gefragt
     # Wohin: in den Ordner der Akte, sobald es sie gibt, sonst in den des Leads.
     ordner = jurnodes.akte_ordner(aufnahme.akte_kennung) if aufnahme.akte_kennung else 0
@@ -254,12 +256,13 @@ def uebergeben(aufnahme: Aufnahme, speicher: Any, jurnodes: JurNodes, partner: P
         speicher.jurnodes_setzen(aufnahme.kennung, stand)
         anzahl += 1
     if not stand["unterschrift"]:
+        # Unterschrieben wird erst mit dem Auftrag (zweite Stufe) - bis dahin gibt es nichts abzulegen.
         bild = speicher.unterschrift(aufnahme.kennung)
         if bild:
             jurnodes.datei_ablegen(ordner, "Unterschrift Aktedirekt.png", bild, "image/png")
             anzahl += 1
-        stand["unterschrift"] = True
-        speicher.jurnodes_setzen(aufnahme.kennung, stand)
+            stand["unterschrift"] = True
+            speicher.jurnodes_setzen(aufnahme.kennung, stand)
     for d in ausstehend:
         inhalt = speicher.datei_inhalt(aufnahme.kennung, d.kennung)
         if inhalt is not None:

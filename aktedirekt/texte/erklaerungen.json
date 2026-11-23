@@ -5,22 +5,33 @@
     "'text' nennt die Datei mit dem Wortlaut (leer: kein eigener Text, nur das Kästchen).",
     "'vollmacht' gibt es je Fallart: vollmacht.txt und vollmacht_kuendigung.txt.",
     "'pflicht': Ohne dieses Kästchen lässt sich nicht abschicken.",
-    "'wichtig': hervorgehoben; fehlt der Haken, fragt die Seite vor dem Abschicken einmal nach."
+    "'wichtig': hervorgehoben; fehlt der Haken, fragt die Seite vor dem Abschicken einmal nach.",
+    "'stufe': 1 = mit der Anfrage (Anbahnung), 2 = mit dem Auftrag nach der Prüfung durch die Kanzlei."
   ],
   "erklaerungen": [
+    {
+      "name": "datenschutz",
+      "titel": "Datenverarbeitung",
+      "text": "datenschutz",
+      "haken": "Ich habe die Hinweise zur Datenverarbeitung zur Kenntnis genommen.",
+      "pflicht": true,
+      "stufe": 1
+    },
     {
       "name": "vollmacht",
       "titel": "Auftrag und Vollmacht",
       "text": "vollmacht",
       "haken": "Ich erteile Auftrag und Vollmacht. Mir ist bekannt, dass das Mandat erst zustande kommt, wenn die Kanzlei es mir bestätigt.",
-      "pflicht": true
+      "pflicht": true,
+      "stufe": 2
     },
     {
       "name": "widerruf",
       "titel": "Widerrufsrecht",
       "text": "widerruf",
       "haken": "Ich habe die Widerrufsbelehrung erhalten.",
-      "pflicht": true
+      "pflicht": true,
+      "stufe": 2
     },
     {
       "name": "widerruf_sofort",
@@ -28,14 +39,16 @@
       "text": "widerruf_sofort",
       "haken": "Ich verlange ausdrücklich, dass die Kanzlei sofort – vor Ablauf der Widerrufsfrist – mit ihrer Tätigkeit beginnt. Mir ist bekannt, dass ich bei einem Widerruf für die bis dahin erbrachten Leistungen Wertersatz schulde und mein Widerrufsrecht erlischt, wenn die Leistung vollständig erbracht ist.",
       "pflicht": false,
-      "wichtig": true
+      "wichtig": true,
+      "stufe": 2
     },
     {
-      "name": "datenschutz",
-      "titel": "Datenverarbeitung",
-      "text": "datenschutz",
-      "haken": "Ich habe die Hinweise zur Datenverarbeitung zur Kenntnis genommen.",
-      "pflicht": true
+      "name": "ki",
+      "titel": "Einsatz von KI",
+      "text": "ki",
+      "haken": "Ich habe die Hinweise zum Einsatz von KI in der Kanzlei zur Kenntnis genommen.",
+      "pflicht": true,
+      "stufe": 2
     }
   ]
 }

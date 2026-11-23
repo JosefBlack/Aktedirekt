@@ -172,3 +172,8 @@ form[data-seite="abschluss"] h2 { margin-top: 30px; }
 .schmuck { margin: 0 -16px 8px; }
 .schmuck img { display: block; width: 100%; height: auto; max-height: 150px; object-fit: cover; object-position: bottom; }
 button.haupt { border-radius: 999px; }
+.auftrag-offen { background: var(--flaeche); border: 2px solid var(--akzent); border-radius: 14px; padding: 14px 16px; margin: 6px 0 18px; }
+.auftrag-offen strong { font-size: 19px; }
+.auftrag-offen p { margin: 6px 0 0; }
+.auftrag-offen button.haupt { margin-top: 14px; }
+#auftrag-erteilt { margin: 0 0 12px; }

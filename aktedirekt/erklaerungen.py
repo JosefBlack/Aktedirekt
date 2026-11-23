@@ -22,6 +22,8 @@ class Erklaerung:
     pflicht: bool
     # Hervorgehoben; ohne Haken fragt die Seite vor dem Abschicken einmal nach.
     wichtig: bool = False
+    # 1: mit der Anfrage (Anbahnung), 2: mit dem Auftrag nach der Prüfung durch die Kanzlei.
+    stufe: int = 2
 
     @property
     def pruefsumme(self) -> str:
@@ -33,15 +35,17 @@ def _lesen(name: str) -> str:
     return resources.files("aktedirekt").joinpath("texte", name).read_text("utf-8").strip()
 
 
-def liste(art: str) -> list[Erklaerung]:
-    """Die Erklärungen für eine Fallart, in der Reihenfolge der Seite."""
+def liste(art: str, stufe: int | None = None) -> list[Erklaerung]:
+    """Die Erklärungen für eine Fallart, in der Reihenfolge der Seite - auf Wunsch nur einer Stufe."""
     ergebnis = []
     for e in json.loads(_lesen("erklaerungen.json"))["erklaerungen"]:
         datei = e["text"]
         if datei == "vollmacht" and art == "kuendigung":
             datei = "vollmacht_kuendigung"
-        ergebnis.append(Erklaerung(e["name"], e["titel"], _lesen(datei + ".txt") if datei else "",
-                                   e["haken"], bool(e["pflicht"]), bool(e.get("wichtig", False))))
+        erklaerung = Erklaerung(e["name"], e["titel"], _lesen(datei + ".txt") if datei else "",
+                                e["haken"], bool(e["pflicht"]), bool(e.get("wichtig", False)), int(e.get("stufe", 2)))
+        if stufe is None or erklaerung.stufe == stufe:
+            ergebnis.append(erklaerung)
     return ergebnis
 
 

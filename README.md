@@ -114,16 +114,32 @@ Kennwort gehört deshalb vor die erste Anmeldung.
 In AWS meldet außerdem eine E-Mail jeden Eingang: ohne Namen und ohne Inhalt,
 bei einer Kündigung mit der Klagefrist im Betreff.
 
-## Erklärungen vor der Unterschrift
+## Zwei Schritte: Anfrage, dann Auftrag
 
-Vor der Unterschrift erklärt der Mandant, in dieser Reihenfolge:
+Eine Meldung ist **noch kein Mandat**.
 
-| Erklärung | Pflicht |
-|---|---|
-| Auftrag und Vollmacht (je Fallart ein eigener Text) | ja |
-| Widerrufsbelehrung erhalten | ja |
-| Verlangen, dass die Kanzlei vor Ablauf der Widerrufsfrist tätig wird | nein |
-| Hinweise zur Datenverarbeitung zur Kenntnis genommen | ja |
+1. **Anfrage (Vertragsanbahnung).** Der Mandant beschreibt seinen Fall, lädt die
+   ersten Fotos hoch und schickt die Anfrage ab. Er bestätigt dabei nur die
+   Hinweise zur Datenverarbeitung – keine Vollmacht, keine Unterschrift. Stand:
+   „Eingegangen – in Prüfung“.
+2. **Prüfung durch die Kanzlei.** In der Kanzlei-Ansicht: „Fall übernehmen – um
+   Auftrag bitten“. Der Mandant bekommt eine E-Mail und sieht auf seiner Seite
+   „Jetzt Auftrag erteilen“.
+3. **Auftrag (Vertragsschluss).** Der Mandant liest und bestätigt Auftrag und
+   Vollmacht, Widerrufsbelehrung, ggf. den sofortigen Beginn und die Hinweise
+   zum Einsatz von KI und unterschreibt. Er erhält alle Texte als PDF per E-Mail.
+   Erst danach kann er alle Unterlagen hochladen; die Kanzlei sieht „Auftrag
+   erteilt am …“ und das Ende der Widerrufsfrist.
+
+| Erklärung | Schritt | Pflicht |
+|---|---|---|
+| Hinweise zur Datenverarbeitung zur Kenntnis genommen | Anfrage | ja |
+| Auftrag und Vollmacht (je Fallart ein eigener Text) | Auftrag | ja |
+| Widerrufsbelehrung erhalten | Auftrag | ja |
+| Verlangen, dass die Kanzlei vor Ablauf der Widerrufsfrist tätig wird | Auftrag | nein (wird einmal nachgefragt) |
+| Hinweise zum Einsatz von KI zur Kenntnis genommen | Auftrag | ja |
+
+Der Schritt steht in `erklaerungen.json` je Erklärung als `"stufe"` (1 oder 2).
 
 Jeden Text kann der Mandant als PDF speichern, vor der Unterschrift und danach
 auf seiner Statusseite. Festgehalten wird je Erklärung, ob sie abgegeben wurde,

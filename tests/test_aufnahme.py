@@ -143,16 +143,18 @@ def test_ganzer_ablauf_mit_werkstatt(umgebung):
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={
         "vollmacht": True, "datenschutz": True, "widerruf": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT})
     assert antwort.status_code == 200 and antwort.json()["abgeschlossen"] is True
-    assert antwort.json()["sachstand"] == "Eingegangen – in Prüfung"
+    # Der Testhelfer gibt den Fall beim Hochladen frei - die Kanzlei hat ihn also schon übernommen.
+    assert antwort.json()["sachstand"] == "Geprüft – bitte Auftrag erteilen"
 
     aufnahme = speicher.laden(zugang)
     assert aufnahme.einwilligung_partner is True and aufnahme.lead_kennung == "L-1"
     assert leads == [{"model": {"shortRubrum": "Muster ./. M-AB 4567 (Unfall 17.11.26)",
                                 "leadDate": "2026-11-19", "broker": "Autohaus Beispiel"}}]
     nachweis = speicher.nachweis(aufnahme.kennung)
-    assert nachweis["zeitpunkt"] == JETZT.isoformat() and len(nachweis["vollmacht_sha256"]) == 64
+    assert nachweis["zeitpunkt"] == JETZT.isoformat() and len(nachweis["datenschutz_sha256"]) == 64
+    assert "vollmacht_sha256" not in nachweis and speicher.unterschrift(aufnahme.kennung) is None    # erst mit dem Auftrag
     assert nachweis["einwilligung_partner_sha256"]
-    assert speicher.unterschrift(aufnahme.kennung) == PNG
+    assert speicher.unterschrift(aufnahme.kennung) is None
 
     # Danach ist nichts mehr zu ändern, aber nachzureichen.
     assert client.put("/api/aufnahme/schritt/unfall", json=ANGABEN["unfall"], headers=kopf).status_code == 409
@@ -176,7 +178,8 @@ def test_abschluss_verlangt_alles(umgebung):
     kopf, zugang = beginnen(client)
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={"unterschrift": "data:image/png;base64,AAAA"})
     assert antwort.status_code == 422
-    assert set(antwort.json()["fehler"]) == {"_", "vollmacht", "widerruf", "datenschutz", "unterschrift"}
+    # Mit der Anfrage nur die Datenschutzhinweise - Vollmacht und Unterschrift kommen mit dem Auftrag.
+    assert set(antwort.json()["fehler"]) == {"_", "datenschutz"}
     assert antwort.json()["fehlend"] == ["unfall", "fahrzeug", "gegner", "person"]
     assert speicher.laden(zugang).abgeschlossen_am is None and leads == []
 

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from aktedirekt.aufnahme import FALLARTEN, K_SCHRITTE
 from aktedirekt.partner import PartnerKonto, Partnerliste, kennwort_verschluesseln
 from aktedirekt.web import app_bauen
-from tests.conftest import hochladen
+from tests.conftest import auftrag_erteilen, hochladen
 from tests.test_aufnahme import ANGABEN, UNTERSCHRIFT
 
 KENNWORT = "Kanzlei-Kennwort-1"
@@ -46,13 +46,16 @@ def beginnen(client, art="kuendigung", einladung=""):
     return {"Authorization": "Bearer " + daten["zugang"]}, daten
 
 
-def abschicken(client, kopf, angaben=K_ANGABEN):
+def abschicken(client, kopf, angaben=K_ANGABEN, ablage=None):
     for schritt, daten in angaben.items():
         antwort = client.put(f"/api/aufnahme/schritt/{schritt}", json=daten, headers=kopf)
         assert antwort.status_code == 200, antwort.text
     antwort = client.post("/api/aufnahme/abschluss", headers=kopf, json={
         "vollmacht": True, "datenschutz": True, "widerruf": True, "unterschrift": UNTERSCHRIFT})
     assert antwort.status_code == 200, antwort.text
+    if ablage is not None:                              # auch die zweite Stufe: Auftrag mit Unterschrift
+        antwort = auftrag_erteilen(client, kopf, ablage)
+        assert antwort.status_code == 200, antwort.text
     return antwort.json()
 
 
@@ -75,9 +78,11 @@ def test_aufnahme_kennt_ihre_fallart(umgebung):
     _, daten = beginnen(client)
     assert daten["art"] == "kuendigung" and daten["ablauf"] == list(K_SCHRITTE)
     assert [a["abschnitt"] for a in daten["schritt_felder"]] == list(K_SCHRITTE)
-    assert "Kündigung" in daten["erklaerungen"][0]["text"] and daten["hinweise"] == []
+    vollmacht = next(e for e in daten["erklaerungen"] if e["name"] == "vollmacht")
+    assert "Kündigung" in vollmacht["text"] and vollmacht["stufe"] == 2 and daten["hinweise"] == []
     _, unfall = beginnen(client, "unfall")
-    assert unfall["art"] == "unfall" and unfall["schritt_felder"] == [] and "Verkehrsunfall" in unfall["erklaerungen"][0]["text"]
+    assert unfall["art"] == "unfall" and unfall["schritt_felder"] == [] and "Verkehrsunfall" in next(
+        e for e in unfall["erklaerungen"] if e["name"] == "vollmacht")["text"]
     assert beginnen(client, "erfunden")[1]["art"] == "unfall"
 
 
@@ -156,7 +161,7 @@ def test_ganzer_ablauf_mit_ergaenzung_und_meldung(umgebung):
     assert aufnahme.angaben["arbeitgeber"]["brutto"] == "3200,00" and aufnahme.name() == "Jonas Weber"
 
     betreff, text = meldungen[0]
-    assert betreff == "Aktedirekt: neuer Eingang Kuendigung - Klagefrist bis 01.12.2026" and betreff.isascii()
+    assert betreff == "Aktedirekt: neue Anfrage Kuendigung - Klagefrist bis 01.12.2026" and betreff.isascii()
     assert "https://portal.example/kanzlei" in text
     # In der Nachricht steht nichts, was den Mandanten oder den Arbeitgeber nennt.
     for geheim in ("Weber", "Jonas", "Logistik", "jonas@example.org", "Betriebsbedingt"):
@@ -206,7 +211,7 @@ def test_eingang_im_einzelnen_mit_anlage_und_unterschrift(umgebung):
     kopf, _ = beginnen(client)
     inhalt = b"%PDF-1.7 Kuendigungsschreiben"
     datei = hochladen(client, kopf, ablage, "kündigung.pdf", inhalt).json()
-    abschicken(client, kopf)
+    abschicken(client, kopf, ablage=ablage)
     client.put("/api/aufnahme/ergaenzung/unterlagen", json={"pkh": "ja"}, headers=kopf)
     k = kanzlei(client)
     fall = client.get("/api/kanzlei/eingaenge", headers=k).json()["eingaenge"][0]["fall"]

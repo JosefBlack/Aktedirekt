@@ -14,7 +14,7 @@ from aktedirekt.jurnodes import JurNodes
 from aktedirekt.partner import PartnerKonto, Partnerliste
 from aktedirekt.sachstand import Stufen
 from aktedirekt.web import app_bauen
-from tests.conftest import hochladen
+from tests.conftest import auftrag_erteilen, hochladen
 from tests.test_aufnahme import ANGABEN, PNG, UNTERSCHRIFT
 
 JETZT = datetime(2026, 11, 19, 10, 0)
@@ -119,6 +119,7 @@ def aufnehmen(client, ablage, einladung="ein-a"):
     assert hochladen(client, kopf, ablage, "Schaden <vorne>.jpg", b"\xff\xd8\xff\xe0 Schadenfoto").status_code == 200
     assert client.post("/api/aufnahme/abschluss", headers=kopf, json={
         "vollmacht": True, "datenschutz": True, "widerruf": True, "einwilligung_partner": True, "unterschrift": UNTERSCHRIFT}).status_code == 200
+    assert auftrag_erteilen(client, kopf, ablage).status_code == 200
     return kopf, zugang
 
 

@@ -8,7 +8,15 @@
   ],
   "sachstand": {
     "aufgenommen": {
-      "was": "Ihre Meldung ist bei uns eingegangen und noch kein Mandat. Wir prüfen sie und bestätigen Ihnen, ob wir Ihren Fall übernehmen.",
+      "was": "Ihre Anfrage ist bei uns eingegangen und noch kein Mandat. Wir prüfen sie; übernehmen wir Ihren Fall, bitten wir Sie hier, den Auftrag zu erteilen.",
+      "tun": "Haben Sie die ersten Unterlagen noch nicht hochgeladen – etwa Fotos oder das Kündigungsschreiben –, können Sie das jetzt tun. Alles Weitere laden Sie hoch, sobald wir Ihren Fall übernommen haben."
+    },
+    "#uebernommen": {
+      "was": "Wir haben Ihre Anfrage geprüft und übernehmen Ihren Fall gern. Das Mandat beginnt, sobald Sie uns hier den Auftrag erteilt haben.",
+      "tun": "Tippen Sie oben auf „Jetzt Auftrag erteilen“. Danach können Sie alle Unterlagen hochladen."
+    },
+    "#auftrag_erteilt": {
+      "was": "Vielen Dank für Ihren Auftrag. Wir legen Ihre Akte an und werden für Sie tätig.",
       "tun": "Laden Sie die Unterlagen hoch, die in der Liste unten noch offen sind. Je vollständiger Ihre Angaben, desto schneller können wir für Sie tätig werden."
     },
     "nicht_uebernommen": {
@@ -161,6 +169,6 @@
   },
   "nachreichen": {
     "fotos": "Nichts zur Hand? Einfach auf „Weiter“ – Fotos und Unterlagen können Sie auch nach dem Abschicken jederzeit nachreichen.",
-    "abschluss": "Mit Ihrer Unterschrift senden Sie Ihre Meldung zur Prüfung an uns. Das Mandat kommt erst zustande, wenn wir es Ihnen bestätigen. Unterlagen und Angaben können Sie auch danach jederzeit ergänzen."
+    "abschluss": "Mit dem Absenden schicken Sie uns Ihre Anfrage zur Prüfung – noch ohne Unterschrift. Sie ist noch kein Mandat: Übernehmen wir Ihren Fall, erteilen Sie uns danach hier den Auftrag mit Vollmacht und Unterschrift. Unterlagen und Angaben können Sie jederzeit ergänzen."
   }
 }

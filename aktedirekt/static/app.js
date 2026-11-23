@@ -7,7 +7,7 @@ const UNFALL_SEITEN = ["start", "unfall", "fahrzeug", "gegner", "fotos", "person
 let SEITEN = UNFALL_SEITEN;
 const TITEL = { start: "Online-Aufnahme", unfall: "Der Unfall", fahrzeug: "Ihr Fahrzeug",
   gegner: "Das andere Fahrzeug", fotos: "Unterlagen", person: "Ihre Daten",
-  abschluss: "Unterschrift", fertig: "Ihr Fall" };
+  abschluss: "Absenden", fertig: "Ihr Fall" };
 const START = {
   unfall: { titel: "Unfall melden", dauer: "In etwa fünf Minuten nehmen wir Ihren Unfall auf.",
     bereit: ["Kennzeichen des anderen Fahrzeugs", "Fotos vom Unfall"] },
@@ -80,15 +80,15 @@ function zeigen(name) {
   melden("");
   for (const s of $$("[data-seite]")) s.hidden = s.dataset.seite !== name;
   // Die Ergänzungen der zweiten Stufe hängen an der Statusseite, nicht am Ablauf.
-  const nebenan = name === "ergaenzung";
+  const nebenan = name === "ergaenzung" || name === "auftrag";
   const nr = nebenan ? SEITEN.length - 1 : SEITEN.indexOf(name);
   const mitten = nr > 0 && nr < SEITEN.length - 1;
-  $("#titel").textContent = nebenan ? "Ergänzen" : TITEL[name];
+  $("#titel").textContent = name === "auftrag" ? "Auftrag erteilen" : nebenan ? "Ergänzen" : TITEL[name];
   $("#zurueck").hidden = !(mitten || nebenan);
   $("#zaehler").textContent = mitten ? `${nr} von ${SEITEN.length - 2}` : "";
   $("#fortschritt").style.width = (100 * nr / (SEITEN.length - 1)) + "%";
   hinweise_zeigen();
-  if (name === "abschluss") flaeche.einrichten();
+  if (name === "auftrag") flaeche.einrichten();
   window.scrollTo(0, 0);
 }
 
@@ -423,21 +423,22 @@ for (const ende of ["pointerup", "pointercancel"]) {
 $("#loeschen").addEventListener("click", () => flaeche.leeren());
 
 const abschluss = $('form[data-seite="abschluss"]');
+const auftrag_form = $('form[data-seite="auftrag"]');
 let nachgefragt = false;
+
+function erklaert(form, stufe) {
+  return Object.fromEntries((zustand.erklaerungen || []).filter((e) => (e.stufe || 2) === stufe)
+    .map((e) => [e.name, $('[name="' + e.name + '"]', form).checked]));
+}
+
+// Erste Stufe: die Anfrage - noch ohne Vollmacht und ohne Unterschrift.
 abschluss.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const offen = (zustand.erklaerungen || []).find((x) => x.wichtig && !$('[name="' + x.name + '"]', abschluss).checked);
-  if (offen && !nachgefragt) {
-    const frage = $("#block-" + offen.name + " .nachfrage");
-    if (frage) { frage.hidden = false; frage.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
-  }
   sperren(abschluss, true);
   try {
     const antwort = await aufruf("POST", "/api/aufnahme/abschluss", {
-      ...Object.fromEntries((zustand.erklaerungen || []).map((e) => [e.name, $('[name="' + e.name + '"]', abschluss).checked])),
+      ...erklaert(abschluss, 1),
       einwilligung_partner: $('[name="einwilligung_partner"]', abschluss).checked,
-      // Ein paar Punkte sind keine Unterschrift.
-      unterschrift: flaeche.striche >= 12 ? flaeche.leinwand.toDataURL("image/png") : "",
     });
     const fehler = antwort.fehler || {};
     fehler_zeigen(abschluss, fehler);
@@ -446,6 +447,30 @@ abschluss.addEventListener("submit", async (e) => {
   } catch (fehler) { melden(fehler.message); }
   sperren(abschluss, false);
 });
+
+// Zweite Stufe: Nach der Prüfung durch die Kanzlei erteilt der Mandant den Auftrag.
+auftrag_form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const offen = (zustand.erklaerungen || []).find((x) => x.wichtig && (x.stufe || 2) === 2 && !$('[name="' + x.name + '"]', auftrag_form).checked);
+  if (offen && !nachgefragt) {
+    const frage = $("#block-" + offen.name + " .nachfrage");
+    if (frage) { frage.hidden = false; frage.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+  }
+  sperren(auftrag_form, true);
+  try {
+    const antwort = await aufruf("POST", "/api/aufnahme/auftrag", {
+      ...erklaert(auftrag_form, 2),
+      // Ein paar Punkte sind keine Unterschrift.
+      unterschrift: flaeche.striche >= 12 ? flaeche.leinwand.toDataURL("image/png") : "",
+    });
+    const fehler = antwort.fehler || {};
+    fehler_zeigen(auftrag_form, fehler);
+    if (!Object.keys(fehler).length) { zustand = { ...zustand, ...antwort }; fertig(); }
+  } catch (fehler) { melden(fehler.message); }
+  sperren(auftrag_form, false);
+});
+
+$("#auftrag-los").addEventListener("click", () => zeigen("auftrag"));
 
 $("#widerrufen").addEventListener("click", async () => {
   try {
@@ -458,9 +483,13 @@ $("#widerrufen").addEventListener("click", async () => {
 
 // Vollmacht, Widerrufsrecht, Datenverarbeitung: Text, Kästchen und der Text als PDF.
 function erklaerungen_bauen() {
-  const ziel = $("#erklaerungen");
+  erklaerungen_in($("#erklaerungen"), 1, abschluss);
+  erklaerungen_in($("#erklaerungen2"), 2, auftrag_form);
+}
+
+function erklaerungen_in(ziel, stufe, form) {
   ziel.textContent = "";
-  for (const e of zustand.erklaerungen || []) {
+  for (const e of (zustand.erklaerungen || []).filter((x) => (x.stufe || 2) === stufe)) {
     const huelle = e.wichtig ? knoten("div", { class: "wichtig-block", id: "block-" + e.name }) : null;
     if (huelle) { ziel.append(huelle); }
     const z = huelle || ziel;
@@ -479,10 +508,10 @@ function erklaerungen_bauen() {
       // Fehlt der Haken, fragt die Seite vor dem Abschicken einmal nach.
       const frage = knoten("div", { class: "nachfrage", hidden: "" });
       frage.append(knoten("p", {}, "Ohne diese Zustimmung dürfen wir erst nach Ablauf der Widerrufsfrist von 14 Tagen für Sie tätig werden – Fristen und Ansprüche können dann gefährdet sein."));
-      const ja = knoten("button", { type: "button", class: "haupt" }, "Zustimmen und abschicken");
-      const nein = knoten("button", { type: "button", class: "neben" }, "Ohne Zustimmung abschicken");
-      ja.addEventListener("click", () => { $('[name="' + e.name + '"]', abschluss).checked = true; nachgefragt = true; abschluss.requestSubmit(); });
-      nein.addEventListener("click", () => { nachgefragt = true; abschluss.requestSubmit(); });
+      const ja = knoten("button", { type: "button", class: "haupt" }, "Zustimmen und Auftrag erteilen");
+      const nein = knoten("button", { type: "button", class: "neben" }, "Ohne Zustimmung erteilen");
+      ja.addEventListener("click", () => { $('[name="' + e.name + '"]', form).checked = true; nachgefragt = true; form.requestSubmit(); });
+      nein.addEventListener("click", () => { nachgefragt = true; form.requestSubmit(); });
       frage.append(ja, nein);
       z.append(frage);
     }
@@ -575,9 +604,14 @@ function nachrichten_zeigen() {
 
 function fertig() {
   als_app_hinweis();
+  $("#auftrag-offen").hidden = !zustand.auftrag_offen;
+  $("#auftrag-erteilt").hidden = !zustand.auftrag_am;
+  $("#auftrag-erteilt").textContent = zustand.auftrag_am ? "✓ Auftrag erteilt am " + datum_lesbar(zustand.auftrag_am) : "";
   const neu = !zustand.sachstand || zustand.sachstand === "Eingegangen – in Prüfung";
   $("#fertig-titel").textContent = neu ? "Vielen Dank" : "Ihr Fall";
-  $("#fertig-dank").hidden = !neu;
+  // Nach der Übernahme stimmt "Wir prüfen sie" nicht mehr.
+  $("#fertig-dank").hidden = !neu || !!zustand.auftrag_offen || !!zustand.auftrag_am;
+  if (zustand.auftrag_offen) $("#fertig-titel").textContent = "Gute Nachricht";
   $("#sachstand-seit").textContent = zustand.sachstand_seit ? " seit " + datum_lesbar(zustand.sachstand_seit) : "";
   $("#stand-was").textContent = (zustand.erklaerung || {}).was || "";
   $("#stand-tun").textContent = (zustand.erklaerung || {}).tun || "";
@@ -671,7 +705,7 @@ $("#los").addEventListener("click", async () => {
 });
 
 $("#zurueck").addEventListener("click", () => {
-  if (seite === "ergaenzung") return fertig();
+  if (seite === "ergaenzung" || seite === "auftrag") return fertig();
   zeigen(SEITEN[Math.max(0, SEITEN.indexOf(seite) - 1)]);
 });
 

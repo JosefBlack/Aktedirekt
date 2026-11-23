@@ -175,8 +175,9 @@ class AwsSpeicher:
 
     def abschliessen(self, kennung: str, jetzt: datetime, einwilligung_partner: bool,
                      nachweis: dict[str, str], unterschrift: bytes) -> None:
-        self._s3.put_object(Bucket=self._bucket, Key=f"dateien/{kennung}/unterschrift.png",
-                            Body=unterschrift, ContentType="image/png")
+        if unterschrift:
+            self._s3.put_object(Bucket=self._bucket, Key=f"dateien/{kennung}/unterschrift.png",
+                                Body=unterschrift, ContentType="image/png")
         e = self._roh(kennung) or {}
         ausdruck = ("SET abgeschlossen_am = :z, einwilligung_partner = :e, nachweis = :n, sachstand_seit = :t")
         werte: dict[str, Any] = {":z": jetzt.isoformat(), ":e": einwilligung_partner, ":n": nachweis,
@@ -186,6 +187,12 @@ class AwsSpeicher:
             ausdruck += ", partner_liste = :p"
             werte[":p"] = e["partner"]
         self._aendern(kennung, ausdruck, werte, "attribute_exists(pk) AND attribute_not_exists(abgeschlossen_am)")
+
+    def auftrag_speichern(self, kennung: str, nachweis: dict[str, Any], unterschrift: bytes) -> None:
+        """Zweite Stufe: Unterschrift und der um den Auftrag ergänzte Nachweis."""
+        self._s3.put_object(Bucket=self._bucket, Key=f"dateien/{kennung}/unterschrift.png",
+                            Body=unterschrift, ContentType="image/png")
+        self._aendern(kennung, "SET nachweis = :n", {":n": nachweis})
 
     def nachweis(self, kennung: str) -> dict[str, str]:
         return dict((self._roh(kennung) or {}).get("nachweis", {}))

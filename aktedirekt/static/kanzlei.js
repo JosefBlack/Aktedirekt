@@ -84,7 +84,9 @@ async function liste_laden() {
     li.append(teil("span", "kfz", e.art + (e.vermittler ? " · über " + e.vermittler : "") + (e.in_jurnodes ? " · in jur|nodes" : " · noch nicht in jur|nodes")));
     if (e.eckdaten) li.append(teil("span", "eckdaten", e.eckdaten));
     if (e.quelle) li.append(teil("span", "quelle", "Gekommen über: " + e.quelle));
-    if (e.freigegeben === false) li.append(teil("span", "warnung-pruefung", "Wartet auf Ihre Prüfung – Unterlagen noch nicht freigegeben"));
+    if (e.freigegeben === false) li.append(teil("span", "warnung-pruefung", "Anfrage – wartet auf Ihre Prüfung"));
+    else if (!e.auftrag_am) li.append(teil("span", "warnung-pruefung", "Übernahme angeboten – Auftrag noch nicht erteilt"));
+    else li.append(teil("span", "quelle", "Auftrag erteilt am " + zeitpunkt(e.auftrag_am)));
     if (e.sofort === false) li.append(teil("span", "warnung-sofort", "Sofortiger Beginn nicht verlangt – Widerrufsfrist bis " + datum(e.widerrufsfrist_bis)));
     const n = (e.nachrichten || []).length;
     if (n) li.append(teil("span", "nachricht", (n === 1 ? "1 Nachricht" : n + " Nachrichten") + " des Mandanten, zuletzt " + zeitpunkt(e.nachrichten[n - 1])));
@@ -174,15 +176,18 @@ function zugang_bauen(fall) {
 // Vorprüfung: Erst nach der Freigabe darf der Mandant alle Unterlagen hochladen.
 function freigabe_bauen(fall, e) {
   const kasten = teil("div", "anfordern nicht-drucken");
-  kasten.append(teil("h2", "", "Prüfung und Freigabe"));
+  kasten.append(teil("h2", "", "Prüfung und Übernahme"));
   if (e.freigegeben) {
-    kasten.append(teil("p", "klein", "Freigegeben: Der Mandant kann alle Unterlagen hochladen."));
+    kasten.append(teil("p", "klein", e.auftrag_am
+      ? "Übernommen; der Mandant hat den Auftrag am " + zeitpunkt(e.auftrag_am) + " erteilt."
+      : "Übernahme angeboten: Der Mandant kann jetzt den Auftrag erteilen und alle Unterlagen hochladen."));
     return kasten;
   }
-  kasten.append(teil("p", "klein", "Bisher darf der Mandant nur Fotos vom Schaden und vom Unfall, die Skizze und Unterlagen der Gegenseite hochladen. "
-    + "Nach Ihrer Prüfung geben Sie alle Unterlagen frei; er bekommt dann – falls E-Mails eingerichtet sind – eine Nachricht. "
-    + "Mit der Annahme des Leads in jur|nodes geschieht das ebenfalls."));
-  const knopf = teil("button", "schlicht rand", "Geprüft – Unterlagen freigeben");
+  kasten.append(teil("p", "klein", "Das ist bisher nur eine Anfrage, noch kein Mandat. Wenn Sie den Fall übernehmen, bitten Sie den Mandanten hier, "
+    + "den Auftrag mit Vollmacht, Widerrufsbelehrung, KI-Hinweisen und Unterschrift zu erteilen; zugleich kann er alle Unterlagen hochladen. "
+    + "Er bekommt – falls E-Mails eingerichtet sind – eine Nachricht. Mit der Annahme des Leads in jur|nodes geschieht das ebenfalls. "
+    + "Lehnen Sie ab, lehnen Sie den Lead in jur|nodes ab."));
+  const knopf = teil("button", "schlicht rand", "Fall übernehmen – um Auftrag bitten");
   knopf.type = "button";
   knopf.addEventListener("click", async () => {
     knopf.disabled = true;
@@ -276,7 +281,9 @@ async function eingang_laden(fall) {
   blatt.append(zugang_bauen(fall));
 
   blatt.append(teil("h2", "", "Auftrag und Unterschrift"));
-  blatt.append(zeilen([["Unterschrieben am", zeitpunkt(e.nachweis.zeitpunkt)], ["Gerät", e.nachweis.geraet]]));
+  blatt.append(zeilen([["Anfrage abgeschickt am", zeitpunkt(e.nachweis.zeitpunkt)],
+    ["Auftrag erteilt und unterschrieben am", e.nachweis.auftrag_am ? zeitpunkt(e.nachweis.auftrag_am) : "noch nicht"],
+    ["Gerät", e.nachweis.auftrag_geraet || e.nachweis.geraet]]));
   if (e.unterschrift) {
     const rahmen = teil("div", "unterschrift");
     const bild = document.createElement("img");

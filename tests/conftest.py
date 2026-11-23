@@ -83,3 +83,16 @@ def ohne_kontakte(monkeypatch, request):
     from aktedirekt import abgleich
     monkeypatch.setattr(abgleich, "KONTAKTE_ANLEGEN", "kontakt" in request.node.name)
     monkeypatch.setattr(abgleich, "VERMERKE_ANLEGEN", "vermerk" in request.node.name)
+
+
+def auftrag_erteilen(client, kopf, ablage, **erklaerungen):
+    """Zweite Stufe für Prüfungen: die Kanzlei gibt frei, der Mandant erteilt den Auftrag mit Unterschrift."""
+    import base64
+    from aktedirekt.aufnahme import FREIGABE
+    aufnahme = ablage.speicher.laden(kopf["Authorization"][7:])
+    if not (aufnahme.angaben.get(FREIGABE) or {}).get("am"):
+        ablage.speicher.schritt_speichern(aufnahme.kennung, FREIGABE, {"am": "2000-01-01T00:00:00"})
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 1000
+    daten = {"vollmacht": True, "widerruf": True, "widerruf_sofort": True, "ki": True,
+             "unterschrift": "data:image/png;base64," + base64.b64encode(png).decode(), **erklaerungen}
+    return client.post("/api/aufnahme/auftrag", headers=kopf, json=daten)

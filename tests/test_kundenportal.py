@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from aktedirekt.web import app_bauen
-from tests.conftest import hochladen
+from tests.conftest import auftrag_erteilen, hochladen
 from tests.test_aufnahme import ANGABEN, UNTERSCHRIFT
 
 JETZT = datetime(2026, 11, 19, 10, 0)
@@ -195,11 +195,16 @@ def test_eingangsbestaetigung_per_email_mit_den_erklaerungen(ablage):
     assert len(post.gesendet) == 1
     m = post.gesendet[0]
     assert m["an"] == "erika@example.org" and "https://portal.example/" in m["text"] and "unter 040 1" in m["text"]
-    assert [a[0] for a in m["anlagen"]] == ["Auftrag und Vollmacht.pdf", "Widerrufsrecht.pdf",
-                                             "Sofortiger Beginn unserer Tätigkeit.pdf", "Datenverarbeitung.pdf"]
-    assert all(a[1].startswith(b"%PDF") for a in m["anlagen"])
+    # Mit der Anfrage nur die Datenschutzhinweise - noch kein Mandat.
+    assert [a[0] for a in m["anlagen"]] == ["Datenverarbeitung.pdf"] and "noch kein Mandat" in m["text"]
     # Keine Angaben zum Fall in der E-Mail.
     assert "Auffahrunfall" not in m["text"] and "B-XY" not in m["text"]
+    # Mit dem Auftrag: Vollmacht, Widerrufsbelehrung, sofortiger Beginn, KI-Hinweise - dauerhafter Datenträger.
+    assert auftrag_erteilen(client, kopf, ablage).status_code == 200
+    m = post.gesendet[1]
+    assert [a[0] for a in m["anlagen"]] == ["Auftrag und Vollmacht.pdf", "Widerrufsrecht.pdf",
+                                             "Sofortiger Beginn unserer Tätigkeit.pdf", "Einsatz von KI.pdf"]
+    assert all(a[1].startswith(b"%PDF") for a in m["anlagen"])
 
 
 def test_fall_wiederfinden_per_email(ablage):
@@ -261,8 +266,10 @@ def test_marke_der_kanzlei_und_sofortbeginn_fuer_die_kanzlei(ablage):
     start = client.get("/api/start").json()
     assert any("nachreichen" in v for v in start["start"]["unfall"]["versprechen"])
     kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
-    abschicken(client, kopf)                               # ohne den Haken für den sofortigen Beginn
-    assert "NICHT verlangt" in gemeldet[0] and "03.12.2026" in gemeldet[0]
+    abschicken(client, kopf)
+    assert "Noch kein Mandat" in gemeldet[0]
+    assert auftrag_erteilen(client, kopf, ablage, widerruf_sofort=False).status_code == 200   # ohne sofortigen Beginn
+    assert "NICHT verlangt" in gemeldet[1] and "03.12.2026" in gemeldet[1]
     eingang = client.get("/api/kanzlei/eingaenge", headers=kanzlei(client)).json()["eingaenge"][0]
     assert eingang["sofort"] is False and eingang["widerrufsfrist_bis"] == "2026-12-03"
 
@@ -303,7 +310,7 @@ def test_vorpruefung_durch_die_kanzlei_vor_den_unterlagen(ablage):
     assert eingang["freigegeben"] is False
     post.gesendet.clear()
     assert client.put(f"/api/kanzlei/eingaenge/{fall}/freigabe", headers=k).json() == {"freigegeben": True}
-    assert len(post.gesendet) == 1 and "Unterlagen" in post.gesendet[0]["betreff"]
+    assert len(post.gesendet) == 1 and "Auftrag" in post.gesendet[0]["betreff"]
     assert client.get("/api/aufnahme", headers=kopf).json()["freigegeben"] is True
     assert hochladen(client, kopf, ablage, "rechnung.pdf", b"%PDF-1.4", unterlage="rechnungen").status_code == 200
     # Ein zweites Freigeben schickt keine zweite E-Mail.
@@ -341,3 +348,32 @@ def test_bildfragebogen_kuendigung_bekommt_pflichtangaben_vom_server(ablage):
     felder = {f["name"]: f for a in zustand["schritt_felder"] for f in a["felder"]}
     assert felder["erhalten_am"]["pflicht"] is True and felder["arbeitsort"]["pflicht"] is False
     assert felder["rechtsschutz_versicherer"]["zeige_wenn"] == ["rechtsschutz", "ja"]
+
+
+def test_zwei_stufen_anfrage_dann_auftrag_nach_der_pruefung(ablage):
+    from aktedirekt.partner import Partnerliste
+    from tests.test_kuendigung import KONTEN, kanzlei
+    client = TestClient(app_bauen(ablage.speicher, partner=Partnerliste(list(KONTEN)), jetzt=lambda: JETZT))
+    kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
+    stufen = {e["name"]: e["stufe"] for e in client.get("/api/aufnahme", headers=kopf).json()["erklaerungen"]}
+    assert stufen == {"datenschutz": 1, "vollmacht": 2, "widerruf": 2, "widerruf_sofort": 2, "ki": 2}
+    zustand = abschicken(client, kopf) or client.get("/api/aufnahme", headers=kopf).json()
+    zustand = client.get("/api/aufnahme", headers=kopf).json()
+    assert zustand["abgeschlossen"] and not zustand["auftrag_offen"] and zustand["auftrag_am"] == ""
+    assert zustand["sachstand"] == "Eingegangen – in Prüfung" and "noch kein Mandat" in zustand["erklaerung"]["was"]
+    # Vor der Prüfung kein Auftrag.
+    assert client.post("/api/aufnahme/auftrag", headers=kopf, json={}).status_code == 409
+    fall = zustand_kennung(ablage, kopf)
+    client.put(f"/api/kanzlei/eingaenge/{fall}/freigabe", headers=kanzlei(client))
+    uebernommen = client.get("/api/aufnahme", headers=kopf).json()
+    assert uebernommen["auftrag_offen"] is True and uebernommen["sachstand"] == "Geprüft – bitte Auftrag erteilen"
+    fehlt = client.post("/api/aufnahme/auftrag", headers=kopf, json={"vollmacht": True})
+    assert fehlt.status_code == 422 and set(fehlt.json()["fehler"]) == {"widerruf", "ki", "unterschrift"}
+    erteilt = auftrag_erteilen(client, kopf, ablage)
+    assert erteilt.status_code == 200 and erteilt.json()["auftrag_am"] == JETZT.isoformat()
+    assert erteilt.json()["auftrag_offen"] is False
+    assert erteilt.json()["sachstand"] == "Auftrag erteilt – wir legen Ihre Akte an"
+    nachweis = ablage.speicher.nachweis(fall)
+    assert nachweis["erklaerungen"]["datenschutz"] and nachweis["erklaerungen"]["ki"] and len(nachweis["ki_sha256"]) == 64
+    assert ablage.speicher.unterschrift(fall)
+    assert auftrag_erteilen(client, kopf, ablage).status_code == 409          # nur einmal

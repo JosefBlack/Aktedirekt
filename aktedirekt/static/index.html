@@ -177,7 +177,7 @@
 </form>
 
 <form data-seite="abschluss" novalidate hidden>
-  <h1>Auftrag und Unterschrift</h1>
+  <h1>Anfrage absenden</h1>
   <p class="fehler" data-fehler="_"></p>
   <p class="hinweis ermutigung" data-nachreichen="abschluss"></p>
   <div id="erklaerungen"></div>
@@ -185,16 +185,30 @@
     <div class="text" id="text-partner"></div>
     <label class="haken"><input type="checkbox" name="einwilligung_partner"><span>Einverstanden <span class="frei">freiwillig</span></span></label>
   </div>
+  <button type="submit" class="haupt">Anfrage zur Prüfung senden</button>
+</form>
+
+<form data-seite="auftrag" novalidate hidden>
+  <h1>Auftrag erteilen</h1>
+  <p>Wir haben Ihre Anfrage geprüft und übernehmen Ihren Fall gern. Mit Ihrer Unterschrift erteilen Sie uns den Auftrag.
+     Bitte lesen Sie dazu die folgenden Unterlagen – Sie können jede auch als PDF speichern.</p>
+  <div id="erklaerungen2"></div>
   <p class="ueber">Ihre Unterschrift</p>
   <div class="unterschrift"><canvas id="unterschrift" aria-label="Feld für die Unterschrift"></canvas></div>
   <button type="button" class="neben" id="loeschen">Unterschrift löschen</button>
   <p class="fehler" data-fehler="unterschrift"></p>
-  <button type="submit" class="haupt">Unterschreiben und zur Prüfung senden</button>
+  <button type="submit" class="haupt">Auftrag erteilen</button>
 </form>
 
 <section data-seite="fertig" hidden>
   <h1 id="fertig-titel">Vielen Dank</h1>
-  <p id="fertig-dank">Ihre Meldung ist bei uns eingegangen. <strong>Sie ist noch kein Mandat:</strong> Wir prüfen sie und bestätigen Ihnen, ob wir Ihren Fall übernehmen. Erst mit dieser Bestätigung kommt das Mandat zustande.</p>
+  <p id="fertig-dank">Ihre Anfrage ist bei uns eingegangen. <strong>Sie ist noch kein Mandat:</strong> Wir prüfen sie. Übernehmen wir Ihren Fall, erteilen Sie uns hier den Auftrag mit Vollmacht und Unterschrift.</p>
+  <div id="auftrag-offen" class="auftrag-offen" hidden>
+    <strong>Wir übernehmen Ihren Fall gern.</strong>
+    <p>Bitte erteilen Sie uns jetzt den Auftrag – mit Vollmacht, Widerrufsbelehrung und Ihrer Unterschrift. Das dauert etwa zwei Minuten.</p>
+    <button type="button" class="haupt" id="auftrag-los">Jetzt Auftrag erteilen</button>
+  </div>
+  <p id="auftrag-erteilt" class="gut" hidden></p>
   <div class="stand"><span class="klein">Stand<span id="sachstand-seit"></span></span><strong id="sachstand"></strong>
     <p id="stand-was"></p><p id="stand-tun" class="tun"></p></div>
   <ol id="verlauf" class="verlauf" aria-label="Ablauf Ihres Falls"></ol>
