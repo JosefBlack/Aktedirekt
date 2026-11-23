@@ -202,8 +202,9 @@ def test_eingangsbestaetigung_per_email_mit_den_erklaerungen(ablage):
     # Mit dem Auftrag: Vollmacht, Widerrufsbelehrung, sofortiger Beginn, KI-Hinweise - dauerhafter Datenträger.
     assert auftrag_erteilen(client, kopf, ablage).status_code == 200
     m = post.gesendet[1]
-    assert [a[0] for a in m["anlagen"]] == ["Auftrag und Vollmacht.pdf", "Widerrufsrecht.pdf",
-                                             "Sofortiger Beginn unserer Tätigkeit.pdf", "Einsatz von KI.pdf"]
+    assert [a[0] for a in m["anlagen"]] == ["Auftrag und Vollmacht.pdf", "Kosten und Vergütung.pdf", "Widerrufsrecht.pdf",
+                                             "Sofortiger Beginn unserer Tätigkeit.pdf", "Einsatz von KI.pdf",
+                                             "Korrespondenz per E-Mail.pdf"]
     assert all(a[1].startswith(b"%PDF") for a in m["anlagen"])
 
 
@@ -260,7 +261,7 @@ def test_marke_der_kanzlei_und_sofortbeginn_fuer_die_kanzlei(ablage):
     client = TestClient(app_bauen(ablage.speicher, partner=Partnerliste(list(KONTEN)), jetzt=lambda: JETZT,
                                   eingang_melden=lambda b, t: gemeldet.append(t)))
     marke = client.get("/marke.json").json()
-    assert set(marke) == {"name", "kurzname", "unterzeile", "adresse", "logo", "schmuck", "impressum", "datenschutz", "telefon"}
+    assert set(marke) == {"name", "kurzname", "unterzeile", "adresse", "logo", "schmuck", "impressum", "datenschutz", "telefon", "logo_mit_name"}
     assert "--marke" in client.get("/marke.css").text
     assert client.get("/manifest.webmanifest").json()["start_url"] == "/"
     start = client.get("/api/start").json()
@@ -356,7 +357,7 @@ def test_zwei_stufen_anfrage_dann_auftrag_nach_der_pruefung(ablage):
     client = TestClient(app_bauen(ablage.speicher, partner=Partnerliste(list(KONTEN)), jetzt=lambda: JETZT))
     kopf = {"Authorization": "Bearer " + client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]}
     stufen = {e["name"]: e["stufe"] for e in client.get("/api/aufnahme", headers=kopf).json()["erklaerungen"]}
-    assert stufen == {"datenschutz": 1, "vollmacht": 2, "widerruf": 2, "widerruf_sofort": 2, "ki": 2}
+    assert stufen == {"datenschutz": 1, "vollmacht": 2, "verguetung": 2, "widerruf": 2, "widerruf_sofort": 2, "ki": 2, "email": 2}
     zustand = abschicken(client, kopf) or client.get("/api/aufnahme", headers=kopf).json()
     zustand = client.get("/api/aufnahme", headers=kopf).json()
     assert zustand["abgeschlossen"] and not zustand["auftrag_offen"] and zustand["auftrag_am"] == ""
@@ -368,7 +369,7 @@ def test_zwei_stufen_anfrage_dann_auftrag_nach_der_pruefung(ablage):
     uebernommen = client.get("/api/aufnahme", headers=kopf).json()
     assert uebernommen["auftrag_offen"] is True and uebernommen["sachstand"] == "Geprüft – bitte Auftrag erteilen"
     fehlt = client.post("/api/aufnahme/auftrag", headers=kopf, json={"vollmacht": True})
-    assert fehlt.status_code == 422 and set(fehlt.json()["fehler"]) == {"widerruf", "ki", "unterschrift"}
+    assert fehlt.status_code == 422 and set(fehlt.json()["fehler"]) == {"verguetung", "widerruf", "ki", "unterschrift"}
     erteilt = auftrag_erteilen(client, kopf, ablage)
     assert erteilt.status_code == 200 and erteilt.json()["auftrag_am"] == JETZT.isoformat()
     assert erteilt.json()["auftrag_offen"] is False

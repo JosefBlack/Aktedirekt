@@ -177,3 +177,4 @@ button.haupt { border-radius: 999px; }
 .auftrag-offen p { margin: 6px 0 0; }
 .auftrag-offen button.haupt { margin-top: 14px; }
 #auftrag-erteilt { margin: 0 0 12px; }
+.markenleiste .logo.voll { max-height: 56px; max-width: 200px; }

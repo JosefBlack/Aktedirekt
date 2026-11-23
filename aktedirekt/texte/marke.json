@@ -2,7 +2,8 @@
   "_hinweis": [
     "Das Erscheinungsbild des Portals. Diese Fassung ist neutral; die der Kanzlei liegt beim Bau",
     "unter kanzlei-texte/marke.json (nicht im Repository), ein Logo als kanzlei-texte/logo.svg, logo.png oder logo.jpg.",
-    "farbe: Hauptfarbe (Kopfzeile, Knöpfe), akzent: Hervorhebungen. impressum/datenschutz: Adressen der Seiten der Kanzlei."
+    "farbe: Hauptfarbe (Kopfzeile, Knöpfe), akzent: Hervorhebungen. impressum/datenschutz: Adressen der Seiten der Kanzlei.",
+    "logo_mit_name: true, wenn der Name der Kanzlei schon im Logo steht - die Kopfzeile zeigt dann nur das Logo. Ein symbol.svg (Bildzeichen ohne Schrift) wird zum Symbol auf dem Startbildschirm."
   ],
   "name": "Ihre Kanzlei",
   "unterzeile": "Rechtsanwälte",

@@ -116,6 +116,8 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     logo = next((n for n in ("logo.svg", "logo.png", "logo.jpg")
                  if resources.files("aktedirekt").joinpath("texte", n).is_file()), "")
     schmuck = "schmuck.svg" if resources.files("aktedirekt").joinpath("texte", "schmuck.svg").is_file() else ""
+    # Das Bildzeichen ohne Schrift - für das Symbol auf dem Startbildschirm und im Browser-Tab.
+    symbol = "symbol.svg" if resources.files("aktedirekt").joinpath("texte", "symbol.svg").is_file() else ""
     unter = f" unter {telefon}" if telefon else ""
 
     def portaltext(text: str) -> str:
@@ -298,7 +300,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             # Was vor der Unterschrift zu erklären ist - Vollmacht, Widerrufsrecht, Datenverarbeitung.
             "erklaerungen": [{"name": e.name, "titel": e.titel, "text": e.text, "haken": e.haken, "pflicht": e.pflicht,
                               "wichtig": e.wichtig, "stufe": e.stufe}
-                             for e in erklaerungen.liste(art.name)],
+                             for e in erklaerungen.liste(art.name, aufnahme=aufnahme)],
             "texte": {
                 "einwilligung_partner": texte["einwilligung_partner"].replace("{partner}", name) if name else "",
             },
@@ -344,7 +346,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     async def unterlage(name: str, request: Request) -> Response:
         """Vollmacht, Widerrufsbelehrung und Hinweise zur Datenverarbeitung als PDF zum Mitnehmen."""
         aufnahme = aufnahme_von(request)
-        e = next((e for e in erklaerungen.liste(aufnahme.art) if e.name == name and e.text), None)
+        e = next((e for e in erklaerungen.liste(aufnahme.art, aufnahme=aufnahme) if e.name == name and e.text), None)
         if e is None:
             raise HTTPException(404, "Diese Unterlage gibt es nicht.")
         pdf = akte_pdf.erzeugen(e.titel, [], [{"titel": "", "zeilen": [["", e.text]]}], None)
@@ -483,7 +485,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
             fehler["_"] = "Es fehlen noch Angaben."
         # Erste Stufe (Anbahnung): nur was zur Anfrage gehört - die Datenschutzhinweise.
         # Vollmacht, Widerrufsbelehrung und Unterschrift folgen mit dem Auftrag.
-        abzugeben = erklaerungen.liste(aufnahme.art, 1)
+        abzugeben = erklaerungen.liste(aufnahme.art, 1, aufnahme)
         abgegeben = {e.name: daten.get(e.name) is True for e in abzugeben}
         for e in abzugeben:
             if e.pflicht and not abgegeben[e.name]:
@@ -557,7 +559,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         if not isinstance(daten, dict):
             raise HTTPException(400, "Die Angaben konnten nicht gelesen werden.")
         fehler: dict[str, str] = {}
-        abzugeben = erklaerungen.liste(aufnahme.art, 2)
+        abzugeben = erklaerungen.liste(aufnahme.art, 2, aufnahme)
         abgegeben = {e.name: daten.get(e.name) is True for e in abzugeben}
         for e in abzugeben:
             if e.pflicht and not abgegeben[e.name]:
@@ -1103,6 +1105,8 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         return {"name": marke.get("name", ""), "kurzname": marke.get("kurzname", ""),
                 "unterzeile": marke.get("unterzeile", ""), "adresse": marke.get("adresse", ""),
                 "logo": bool(logo), "schmuck": bool(schmuck),
+                # Steht der Name schon im Logo, zeigt die Kopfzeile ihn nicht noch einmal daneben.
+                "logo_mit_name": bool(logo) and bool(marke.get("logo_mit_name", False)),
                 "impressum": marke.get("impressum", ""), "datenschutz": marke.get("datenschutz", ""),
                 "telefon": telefon or ""}
 
@@ -1151,13 +1155,20 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
         inhalt = resources.files("aktedirekt").joinpath("texte", logo).read_bytes()
         return Response(inhalt, media_type=art, headers={"Cache-Control": "max-age=300"})
 
+    @app.get("/icon.svg")
+    async def symbol_bild() -> Response:
+        if symbol:
+            inhalt = resources.files("aktedirekt").joinpath("texte", symbol).read_bytes()
+        else:
+            inhalt = statisch.joinpath("icon.svg").read_bytes()
+        return Response(inhalt, media_type="image/svg+xml", headers={"Cache-Control": "max-age=300"})
+
     @app.get("/manifest.webmanifest")
     async def manifest() -> Response:
         name = marke.get("name", "") or "Aktedirekt"
-        daten = {"name": name, "short_name": name[:12], "start_url": "/", "display": "standalone",
+        daten = {"name": name, "short_name": (marke.get("kurzname", "") or name)[:20], "start_url": "/", "display": "standalone",
                  "background_color": "#f4f5f7", "theme_color": marke.get("farbe", "#17324d"), "lang": "de",
-                 "icons": [{"src": "marke/logo" if logo else "icon.svg", "sizes": "any",
-                            "type": "image/png" if logo.endswith(".png") else "image/jpeg" if logo.endswith(".jpg") else "image/svg+xml"}]}
+                 "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml"}]}
         return Response(json.dumps(daten, ensure_ascii=False), media_type="application/manifest+json")
 
     @app.get("/")

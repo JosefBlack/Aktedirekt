@@ -135,11 +135,19 @@ Eine Meldung ist **noch kein Mandat**.
 |---|---|---|
 | Hinweise zur Datenverarbeitung zur Kenntnis genommen | Anfrage | ja |
 | Auftrag und Vollmacht (je Fallart ein eigener Text) | Auftrag | ja |
+| Hinweise zu Kosten und Vergütung (§ 49b Abs. 5 BRAO; bei Kündigung § 12a ArbGG) | Auftrag | ja |
 | Widerrufsbelehrung erhalten | Auftrag | ja |
 | Verlangen, dass die Kanzlei vor Ablauf der Widerrufsfrist tätig wird | Auftrag | nein (wird einmal nachgefragt) |
 | Hinweise zum Einsatz von KI zur Kenntnis genommen | Auftrag | ja |
+| Einwilligung in unverschlüsselte Korrespondenz per E-Mail | Auftrag | nein |
 
 Der Schritt steht in `erklaerungen.json` je Erklärung als `"stufe"` (1 oder 2).
+Texte eigens für eine Fallart heißen `<name>_<fallart>.txt` (etwa
+`verguetung_kuendigung.txt`). In der Vollmacht setzt das Portal `{mandant}`
+(Name und Anschrift) und `{wegen}` (Unfall mit Datum, Ort, Kennzeichen bzw.
+Kündigung durch den Arbeitgeber) ein; in den PDFs per E-Mail stehen dort keine
+Angaben zum Fall. Ein `logo.svg` der Kanzlei erscheint in der Kopfzeile und
+oben rechts auf jedem PDF.
 
 Jeden Text kann der Mandant als PDF speichern, vor der Unterschrift und danach
 auf seiner Statusseite. Festgehalten wird je Erklärung, ob sie abgegeben wurde,

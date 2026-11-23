@@ -3,7 +3,8 @@
     "Was der Mandant vor der Unterschrift erklärt - in dieser Reihenfolge.",
     "ENTWURF: Überschriften und Sätze neben den Kästchen bitte durch die Kanzlei prüfen.",
     "'text' nennt die Datei mit dem Wortlaut (leer: kein eigener Text, nur das Kästchen).",
-    "'vollmacht' gibt es je Fallart: vollmacht.txt und vollmacht_kuendigung.txt.",
+    "Gibt es einen Text eigens für eine Fallart (etwa vollmacht_kuendigung.txt, verguetung_kuendigung.txt), gilt der.",
+    "Platzhalter im Wortlaut: {mandant} (Name und Anschrift), {wegen} (Unfall mit Datum, Ort und Kennzeichen bzw. Kündigung durch den Arbeitgeber).",
     "'pflicht': Ohne dieses Kästchen lässt sich nicht abschicken.",
     "'wichtig': hervorgehoben; fehlt der Haken, fragt die Seite vor dem Abschicken einmal nach.",
     "'stufe': 1 = mit der Anfrage (Anbahnung), 2 = mit dem Auftrag nach der Prüfung durch die Kanzlei."
@@ -21,7 +22,15 @@
       "name": "vollmacht",
       "titel": "Auftrag und Vollmacht",
       "text": "vollmacht",
-      "haken": "Ich erteile Auftrag und Vollmacht. Mir ist bekannt, dass das Mandat erst zustande kommt, wenn die Kanzlei es mir bestätigt.",
+      "haken": "Ich erteile der Kanzlei Auftrag und Vollmacht wie oben beschrieben.",
+      "pflicht": true,
+      "stufe": 2
+    },
+    {
+      "name": "verguetung",
+      "titel": "Kosten und Vergütung",
+      "text": "verguetung",
+      "haken": "Ich habe die Hinweise zur Vergütung zur Kenntnis genommen.",
       "pflicht": true,
       "stufe": 2
     },
@@ -29,7 +38,7 @@
       "name": "widerruf",
       "titel": "Widerrufsrecht",
       "text": "widerruf",
-      "haken": "Ich habe die Widerrufsbelehrung erhalten.",
+      "haken": "Ich habe die Widerrufsbelehrung und das Muster-Widerrufsformular erhalten.",
       "pflicht": true,
       "stufe": 2
     },
@@ -37,7 +46,7 @@
       "name": "widerruf_sofort",
       "titel": "Sofortiger Beginn unserer Tätigkeit",
       "text": "widerruf_sofort",
-      "haken": "Ich verlange ausdrücklich, dass die Kanzlei sofort – vor Ablauf der Widerrufsfrist – mit ihrer Tätigkeit beginnt. Mir ist bekannt, dass ich bei einem Widerruf für die bis dahin erbrachten Leistungen Wertersatz schulde und mein Widerrufsrecht erlischt, wenn die Leistung vollständig erbracht ist.",
+      "haken": "In Kenntnis der Widerrufsbelehrung verlange ich ausdrücklich, dass die Kanzlei mit ihrer Leistung schon vor Ablauf der Widerrufsfrist beginnt. Mir ist bekannt, dass ich bei einem Widerruf die bis dahin erbrachten Leistungen anteilig zu bezahlen habe und mein Widerrufsrecht bei vollständiger Vertragserfüllung durch die Kanzlei verliere.",
       "pflicht": false,
       "wichtig": true,
       "stufe": 2
@@ -46,8 +55,16 @@
       "name": "ki",
       "titel": "Einsatz von KI",
       "text": "ki",
-      "haken": "Ich habe die Hinweise zum Einsatz von KI in der Kanzlei zur Kenntnis genommen.",
+      "haken": "Ich habe die Hinweise zum Einsatz von KI zur Kenntnis genommen.",
       "pflicht": true,
+      "stufe": 2
+    },
+    {
+      "name": "email",
+      "titel": "Korrespondenz per E-Mail",
+      "text": "email",
+      "haken": "Ich bin einverstanden, dass die Kanzlei mit mir über meine angegebene E-Mail-Adresse auch unverschlüsselt korrespondiert.",
+      "pflicht": false,
       "stufe": 2
     }
   ]

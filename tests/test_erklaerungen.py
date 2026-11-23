@@ -35,18 +35,34 @@ def test_reihenfolge_pflicht_und_stufe():
     for art in ("unfall", "kuendigung"):
         liste = erklaerungen.liste(art)
         assert [(e.name, e.pflicht, e.stufe) for e in liste] == [
-            ("datenschutz", True, 1), ("vollmacht", True, 2), ("widerruf", True, 2),
-            ("widerruf_sofort", False, 2), ("ki", True, 2)]
-        assert all(e.haken and e.text for e in liste) and liste[3].wichtig
+            ("datenschutz", True, 1), ("vollmacht", True, 2), ("verguetung", True, 2), ("widerruf", True, 2),
+            ("widerruf_sofort", False, 2), ("ki", True, 2), ("email", False, 2)]
+        assert all(e.haken and e.text for e in liste) and liste[4].wichtig
         assert [e.name for e in erklaerungen.liste(art, 1)] == ["datenschutz"]
     assert erklaerungen.liste("unfall", 2)[0].text != erklaerungen.liste("kuendigung", 2)[0].text
+    # Je Fallart eigene Texte, wo es sie gibt - etwa der Hinweis auf § 12a ArbGG nur bei der Kündigung.
+    assert "12a" in erklaerungen.liste("kuendigung")[2].text and "12a" not in erklaerungen.liste("unfall")[2].text
+
+
+def test_vollmacht_nennt_mandant_und_sache():
+    class A:
+        art = "unfall"
+        angaben = {"person": {"vorname": "Erika", "nachname": "Muster", "strasse": "Weg 1", "plz": "20095", "ort": "Hamburg"},
+                   "unfall": {"unfalldatum": "2026-11-20", "unfallort": "Hauptstr. 1"}, "fahrzeug": {"kennzeichen": "HH-AB 123"}}
+    text = next(e.text for e in erklaerungen.liste("unfall", 2, A()) if e.name == "vollmacht")
+    assert "Erika Muster, Weg 1, 20095 Hamburg" in text
+    assert "Verkehrsunfall vom 20.11.2026 in Hauptstr. 1 (Fahrzeug HH-AB 123)" in text
+    # Ohne Fall (etwa im PDF per E-Mail) stehen dort keine Angaben zum Fall.
+    ohne = next(e.text for e in erklaerungen.liste("unfall", 2) if e.name == "vollmacht")
+    assert "{" not in ohne and "Muster" not in ohne and erklaerungen.OHNE_ANGABE in ohne
 
 
 def test_seite_bekommt_alle_erklaerungen(umgebung):
     client, _ = umgebung
     _, daten = bereit(client)
-    assert [e["titel"] for e in daten["erklaerungen"]] == ["Datenverarbeitung", "Auftrag und Vollmacht", "Widerrufsrecht",
-                                                              "Sofortiger Beginn unserer Tätigkeit", "Einsatz von KI"]
+    assert [e["titel"] for e in daten["erklaerungen"]] == ["Datenverarbeitung", "Auftrag und Vollmacht", "Kosten und Vergütung",
+                                                              "Widerrufsrecht", "Sofortiger Beginn unserer Tätigkeit",
+                                                              "Einsatz von KI", "Korrespondenz per E-Mail"]
 
 
 def test_anfrage_nur_mit_den_datenschutzhinweisen(umgebung):
@@ -62,10 +78,11 @@ def auftrag(client, speicher, kopf, daten, **erklaert):
     assert client.post("/api/aufnahme/abschluss", headers=kopf, json={"datenschutz": True}).status_code == 200
     speicher.schritt_speichern(speicher.laden(daten["zugang"]).kennung, FREIGABE, {"am": "2026-11-19T10:00:00"})
     return client.post("/api/aufnahme/auftrag", headers=kopf, json={
-        "vollmacht": True, "widerruf": True, "ki": True, "widerruf_sofort": True, "unterschrift": UNTERSCHRIFT, **erklaert})
+        "vollmacht": True, "verguetung": True, "widerruf": True, "ki": True, "widerruf_sofort": True,
+        "unterschrift": UNTERSCHRIFT, **erklaert})
 
 
-@pytest.mark.parametrize("fehlt", ["vollmacht", "widerruf", "ki"])
+@pytest.mark.parametrize("fehlt", ["vollmacht", "verguetung", "widerruf", "ki"])
 def test_ohne_eine_pflichterklaerung_kein_auftrag(umgebung, fehlt):
     client, speicher = umgebung
     kopf, daten = bereit(client)
@@ -80,9 +97,9 @@ def test_sofortiges_taetigwerden_ist_freiwillig_und_wird_festgehalten(umgebung):
         kopf, daten = bereit(client)
         assert auftrag(client, speicher, kopf, daten, widerruf_sofort=sofort).status_code == 200
         nachweis = speicher.nachweis(speicher.laden(daten["zugang"]).kennung)
-        assert nachweis["erklaerungen"] == {"datenschutz": True, "vollmacht": True, "widerruf": True,
-                                            "widerruf_sofort": sofort, "ki": True}
-        for name in ("vollmacht", "widerruf", "widerruf_sofort", "datenschutz", "ki"):
+        assert nachweis["erklaerungen"] == {"datenschutz": True, "vollmacht": True, "verguetung": True, "widerruf": True,
+                                            "widerruf_sofort": sofort, "ki": True, "email": False}
+        for name in ("vollmacht", "verguetung", "widerruf", "widerruf_sofort", "datenschutz", "ki", "email"):
             assert len(nachweis[name + "_sha256"]) == 64
 
 
@@ -91,7 +108,8 @@ def test_nachweis_haelt_den_wortlaut_der_fallart_fest(umgebung):
     kopf, daten = bereit(client)
     auftrag(client, speicher, kopf, daten)
     nachweis = speicher.nachweis(speicher.laden(daten["zugang"]).kennung)
-    assert nachweis["vollmacht_sha256"] == erklaerungen.liste("unfall", 2)[0].pruefsumme
+    # Festgehalten wird der Wortlaut, wie ihn der Mandant gesehen hat - mit seinem Namen und seinem Fall.
+    assert nachweis["vollmacht_sha256"] == erklaerungen.liste("unfall", 2, speicher.laden(daten["zugang"]))[0].pruefsumme
     assert nachweis["vollmacht_sha256"] != erklaerungen.liste("kuendigung", 2)[0].pruefsumme
 
 
@@ -110,7 +128,7 @@ def test_unterlagen_als_pdf_fuer_den_mandanten(umgebung):
     assert client.get("/api/aufnahme/unterlagen/vollmacht").status_code == 401
 
 
-SOFORT = erklaerungen.liste("unfall")[3].haken
+SOFORT = erklaerungen.liste("unfall")[4].haken
 
 
 def test_kanzlei_und_akte_sehen_was_erklaert_wurde(umgebung):
@@ -125,9 +143,12 @@ def test_kanzlei_und_akte_sehen_was_erklaert_wurde(umgebung):
     assert teil["zeilen"] == [
         ["Ich habe die Hinweise zur Datenverarbeitung zur Kenntnis genommen.", "ja"],
         [erklaerungen.liste("unfall")[1].haken, "ja"],
-        ["Ich habe die Widerrufsbelehrung erhalten.", "ja"],
+        [erklaerungen.liste("unfall")[2].haken, "ja"],
+        [erklaerungen.liste("unfall")[3].haken, "ja"],
         [SOFORT, "nein"],
-        [erklaerungen.liste("unfall")[4].haken, "ja"]]
+        [erklaerungen.liste("unfall")[5].haken, "ja"],
+        [erklaerungen.liste("unfall")[6].haken, "nein"]]
     blatt = blatt_fuer_die_akte(speicher.laden(daten["zugang"]), speicher, KONTEN, Stufen.laden())
     text = "\n".join(s.extract_text() for s in PdfReader(io.BytesIO(blatt)).pages)
+    text = " ".join(text.split())
     assert "Erklärungen des Mandanten" in text and "vor Ablauf der Widerrufsfrist" in text

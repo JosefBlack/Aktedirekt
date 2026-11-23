@@ -93,6 +93,6 @@ def auftrag_erteilen(client, kopf, ablage, **erklaerungen):
     if not (aufnahme.angaben.get(FREIGABE) or {}).get("am"):
         ablage.speicher.schritt_speichern(aufnahme.kennung, FREIGABE, {"am": "2000-01-01T00:00:00"})
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 1000
-    daten = {"vollmacht": True, "widerruf": True, "widerruf_sofort": True, "ki": True,
+    daten = {"vollmacht": True, "verguetung": True, "widerruf": True, "widerruf_sofort": True, "ki": True,
              "unterschrift": "data:image/png;base64," + base64.b64encode(png).decode(), **erklaerungen}
     return client.post("/api/aufnahme/auftrag", headers=kopf, json=daten)

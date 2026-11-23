@@ -1,9 +1,11 @@
-ENTWURF – bitte durch die Kanzlei prüfen und an ihre tatsächliche Praxis anpassen.
-
 Hinweise zum Einsatz von künstlicher Intelligenz (KI)
 
-Wir setzen in der Kanzlei Programme mit künstlicher Intelligenz ein, etwa um Unterlagen zu ordnen, Texte zu entwerfen, zu übersetzen oder zusammenzufassen. Diese Programme unterstützen uns – sie entscheiden nicht. Jedes Ergebnis wird von einer Anwältin oder einem Anwalt geprüft und verantwortet; eine automatisierte Entscheidung über Sie findet nicht statt.
+Wir setzen in unserer Kanzlei KI-gestützte Programme als Hilfsmittel ein – etwa, um Unterlagen zu ordnen und auszuwerten, Texte zu entwerfen, zusammenzufassen oder zu übersetzen und um zu recherchieren.
 
-Wir nutzen nur Anbieter, mit denen ein Vertrag über die Verarbeitung personenbezogener Daten besteht und die die Daten nicht für eigene Zwecke, insbesondere nicht zum Training ihrer Systeme, verwenden. Die anwaltliche Schweigepflicht gilt auch hierbei.
+Die KI unterstützt, sie entscheidet nicht. Jedes Ergebnis prüft und verantwortet eine Rechtsanwältin oder ein Rechtsanwalt unserer Kanzlei. Eine ausschließlich automatisierte Entscheidung (Art. 22 DSGVO) findet nicht statt.
 
-Möchten Sie nicht, dass bei Ihrem Mandat KI-Programme eingesetzt werden, sagen Sie es uns – wir richten uns danach.
+Ihre Daten bleiben geschützt. Wir nutzen nur Anbieter, die wir nach § 43e BRAO zur Verschwiegenheit verpflichtet haben und mit denen ein Vertrag über die Verarbeitung personenbezogener Daten (Art. 28 DSGVO) besteht. Diese Anbieter dürfen Ihre Daten nicht für eigene Zwecke verwenden, insbesondere nicht zum Training ihrer KI-Modelle. Wo es möglich ist, geben wir Namen und andere persönliche Angaben nicht oder nur unkenntlich gemacht ein. Die anwaltliche Schweigepflicht (§ 43a Abs. 2 BRAO, § 203 StGB) gilt uneingeschränkt.
+
+Wer bei uns KI nutzt, ist im Umgang damit geschult (Art. 4 KI-Verordnung). Der Einsatz von KI wird Ihnen nicht gesondert berechnet.
+
+Ihre Wahl: Möchten Sie nicht, dass bei Ihrem Mandat KI eingesetzt wird, sagen Sie es uns – formlos, etwa per E-Mail. Wir bearbeiten Ihr Mandat dann ohne KI; Nachteile entstehen Ihnen dadurch nicht.

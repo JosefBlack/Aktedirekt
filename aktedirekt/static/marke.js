@@ -15,9 +15,11 @@
       const bild = document.createElement("img");
       bild.src = "/marke/logo";
       bild.alt = m.name || "Logo";
-      bild.className = "logo";
+      bild.className = m.logo_mit_name ? "logo voll" : "logo";
       leiste.append(bild);
     }
+    if (m.logo && m.logo_mit_name) { leiste.hidden = false; }
+    else {
     const text = document.createElement("span");
     text.className = "kanzlei";
     const name = document.createElement("strong");
@@ -30,6 +32,7 @@
     }
     if (name.textContent || m.unterzeile) leiste.append(text);
     leiste.hidden = false;
+    }
   }
   if (m.name) document.title = m.name + " – " + document.title;
   // Ein Zierbild der Kanzlei (etwa die Hamburger Skyline) auf der Startseite.
