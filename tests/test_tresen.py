@@ -69,7 +69,7 @@ def test_kunde_uebernimmt_mit_vorbelegten_angaben(umgebung):
     zustand = antwort.json()
     assert zustand["partner"] == "Autohaus Beispiel" and zustand["angaben"] == {}
     assert zustand["vorbelegt"] == {
-        "unfall": {"unfalldatum": "2026-11-17"}, "fahrzeug": {"kennzeichen": "B-XY 123"},
+        "unfall": {"unfalldatum": "2026-11-17", "unfallort": ""}, "fahrzeug": {"kennzeichen": "B-XY 123"},
         "person": {"vorname": "Erika", "nachname": "Muster"}}
     # Vorbelegt heißt nicht ausgefüllt: Der Kunde muss jeden Schritt selbst bestätigen.
     assert speicher.laden(zustand["zugang"]).fehlende_schritte() == ["unfall", "fahrzeug", "gegner", "person"]
@@ -155,3 +155,27 @@ def test_mit_einwilligung_erscheint_der_sachstand(umgebung):
     client.delete("/api/aufnahme/einwilligung", headers=mandant)
     eintrag = faelle(client, kopf)[0]
     assert (eintrag["sachstand"], eintrag["mandant"]) == ("", "Erika Muster")
+
+
+def test_unfallort_und_kennzeichen_des_anderen_vom_tresen(umgebung):
+    client = umgebung[0]
+    kopf = anmelden(client)
+    fall = anlegen(client, kopf, unfallort="Hauptstraße 5, Hamburg", gegner_kennzeichen="hh-xy 99")
+    zustand = einloesen(client, fall["link"]).json()
+    assert zustand["vorbelegt"]["unfall"]["unfallort"] == "Hauptstraße 5, Hamburg"
+    assert zustand["vorbelegt"]["gegner"] == {"gegner_bekannt": "ja", "gegner_kennzeichen": "HH-XY 99"}
+    ohne = einloesen(client, anlegen(client, kopf)["link"]).json()
+    assert "gegner" not in ohne["vorbelegt"] and ohne["vorbelegt"]["unfall"]["unfallort"] == ""
+
+
+def test_eckdaten_des_unfalls_in_der_liste_der_kanzlei(umgebung):
+    from tests.test_kuendigung import KONTEN, kanzlei
+    from aktedirekt.partner import Partnerliste
+    from aktedirekt.web import app_bauen
+    from fastapi.testclient import TestClient
+    from tests.test_aufnahme import JETZT
+    client = TestClient(app_bauen(umgebung[1], partner=Partnerliste(list(KONTEN)), jetzt=lambda: JETZT))
+    zugang = client.post("/api/aufnahme", json={"art": "unfall"}).json()["zugang"]
+    abschicken(client, zugang, True)
+    eingang = client.get("/api/kanzlei/eingaenge", headers=kanzlei(client)).json()["eingaenge"][0]
+    assert eingang["eckdaten"] == "B-XY 123 ./. M-AB 4567 · Unfall 17.11.2026 · Hauptstr. 1, Berlin"

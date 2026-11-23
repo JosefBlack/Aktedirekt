@@ -36,8 +36,8 @@ def test_checkliste_zaehlt_hochgeladenes_je_punkt(mandant):
     client, kopf, ablage = mandant
     zustand = client.get("/api/aufnahme", headers=kopf).json()
     assert punkt(zustand, "fahrzeugschein") == {"schluessel": "fahrzeugschein", "titel": "Fahrzeugschein",
-                                                "hinweis": "Zulassungsbescheinigung Teil I – Vorder- und Rückseite.",
-                                                "wichtig": True, "vorab": False, "anzahl": 0, "angefordert": False,
+                                                "hinweis": "Zulassungsbescheinigung Teil I – nur, wenn kein Gutachter beauftragt ist; sonst hat er ihn.",
+                                                "wichtig": False, "vorab": False, "anzahl": 0, "angefordert": False,
                                                 "nachgereicht": False}
     # Vor der Prüfung durch die Kanzlei: nur Fotos vom Schaden, Unfallort, Skizze, Gegenseite.
     assert hochladen(client, kopf, ablage, "IMG_0.jpg", JPG, unterlage="fahrzeugschein").status_code == 403

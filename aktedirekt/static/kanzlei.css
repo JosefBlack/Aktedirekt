@@ -47,3 +47,4 @@
 .eingang .warnung-sofort { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--fehler); }
 .eingang .warnung-pruefung { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--akzent); }
 .eingang .quelle { display: block; margin-top: 4px; font-size: 13px; color: var(--leise); }
+.eingang .eckdaten { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; }

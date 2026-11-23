@@ -862,6 +862,16 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
     def sofort_verlangt(aufnahme: Aufnahme) -> bool:
         return bool((speicher.nachweis(aufnahme.kennung) or {}).get("erklaerungen", {}).get("widerruf_sofort"))
 
+    def eckdaten(aufnahme: Aufnahme) -> str:
+        """Beim Unfall das Wichtigste auf einen Blick: Kennzeichen, Tag und Ort."""
+        if aufnahme.art != "unfall":
+            return ""
+        u, f, g = (aufnahme.angaben.get(k) or {} for k in ("unfall", "fahrzeug", "gegner"))
+        kz = f.get("kennzeichen", "") + (" ./. " + g["gegner_kennzeichen"] if g.get("gegner_kennzeichen") else "")
+        tag = u.get("unfalldatum", "")
+        tag = f"{tag[8:10]}.{tag[5:7]}.{tag[:4]}" if len(tag) == 10 else tag
+        return " · ".join(x for x in (kz, ("Unfall " + tag) if tag else "", u.get("unfallort", "")) if x)
+
     def kopfdaten(aufnahme: Aufnahme) -> dict[str, Any]:
         konto = partnerliste.konto(aufnahme.partner)
         frist = aufnahme.klagefrist()
@@ -880,6 +890,7 @@ def app_bauen(speicher: Any, *, partner: Partnerliste | None = None,
                 "in_jurnodes": aufnahme.lead_kennung not in ("", "unbekannt"),
                 "freigegeben": freigegeben(aufnahme),
                 "quelle": (aufnahme.angaben.get(QUELLE) or {}).get("quelle", ""),
+                "eckdaten": eckdaten(aufnahme),
                 "nachrichten": [d.hochgeladen_am.isoformat(timespec="minutes") for d in speicher.dateien(aufnahme.kennung)
                                 if d.von == NACHRICHT and d.hochgeladen_am]}
 

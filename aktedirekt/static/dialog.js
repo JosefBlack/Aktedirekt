@@ -89,8 +89,8 @@ const ohne_gutachten = () => !["ja", "beauftragt"].includes(antworten.gutachten)
 const FRAGEN = [
   // Unfall
   { id: "datum", schritt: "unfall", feld: "unfalldatum", art: "datum", frage: "Wann war der Unfall?" },
-  { id: "zeit", schritt: "unfall", feld: "unfallzeit", art: "zeit", frage: "Um wie viel Uhr ungefähr?", spaeter: "Weiß ich nicht mehr" },
   { id: "ort", schritt: "unfall", feld: "unfallort", art: "text", frage: "Wo ist es passiert?", unter: "Straße und Ort genügen, zum Beispiel „Kreuzung Hauptstraße / Bahnhofstraße, Hamburg“." },
+  { id: "zeit", schritt: "unfall", feld: "unfallzeit", art: "zeit", frage: "Um wie viel Uhr ungefähr?", spaeter: "Weiß ich nicht mehr" },
   { id: "art", schritt: "unfall", feld: "unfallart", art: "unfallart", frage: "Was ist passiert?", unter: "Tippen Sie auf das Bild, das am besten passt." },
   { id: "rolle", schritt: "unfall", feld: "verursacher", art: "rolle", wenn: () => !!ROLLEN[antworten.unfallart] },
   { id: "hergang", schritt: "unfall", feld: "hergang", art: "lang", frage: "Erzählen Sie kurz, wie es dazu kam",
@@ -107,6 +107,13 @@ const FRAGEN = [
   { id: "zeugen_ja", schritt: "unfall", feld: "_zeugen", art: "janein", frage: "Gab es Zeugen?", lokal: true },
   { id: "zeugen", schritt: "unfall", feld: "zeugen", art: "lang", frage: "Wer hat es gesehen?", unter: "Name und, wenn bekannt, Telefon oder Anschrift.",
     spaeter: "Reiche ich später nach", wenn: () => antworten._zeugen === "ja" },
+  // Gegenseite
+  { id: "gegner", schritt: "gegner", feld: "gegner_bekannt", art: "janein", frage: "Kennen Sie das Kennzeichen des anderen Fahrzeugs?" },
+  { id: "gegner_kz", schritt: "gegner", feld: "gegner_kennzeichen", art: "kennzeichen", frage: "Wie lautet das Kennzeichen des anderen?", wenn: () => antworten.gegner_bekannt === "ja" },
+  { id: "gegner_vers", schritt: "gegner", feld: "gegner_versicherung", art: "text", frage: "Wissen Sie, wo der andere versichert ist?",
+    unter: "Falls Sie Daten ausgetauscht haben. Sonst finden wir es heraus.", spaeter: "Weiß ich nicht", wenn: () => antworten.gegner_bekannt === "ja" },
+  { id: "gegnerfotos", schritt: "gegner", feld: "_gegnerfotos", art: "fotos", lokal: true, unterlage: "gegner",
+    frage: "Haben Sie ein Foto vom Kennzeichen oder vom Unfallbericht?", unter: "Auch ausgetauschte Zettel mit Namen und Versicherung helfen.", spaeter: "Habe ich nicht" },
   // Fahrzeug
   { id: "kennzeichen", schritt: "fahrzeug", feld: "kennzeichen", art: "kennzeichen", frage: "Welches Kennzeichen hat Ihr Fahrzeug?" },
   { id: "gutachten", schritt: "fahrzeug", feld: "gutachten", art: "wahl", frage: "Gibt es schon ein Gutachten?",
@@ -120,13 +127,6 @@ const FRAGEN = [
   { id: "finanzierung", schritt: "fahrzeug", feld: "finanzierung", art: "wahl", frage: "Ist das Fahrzeug finanziert oder geleast?",
     wahl: [["nein", "Nein, es gehört mir"], ["finanziert", "Finanziert"], ["geleast", "Geleast"]] },
   { id: "vorsteuer", schritt: "fahrzeug", feld: "vorsteuer", art: "janein", frage: "Ist es ein Firmenfahrzeug mit Vorsteuerabzug?", unter: "Im Zweifel: Nein." },
-  // Gegenseite
-  { id: "gegner", schritt: "gegner", feld: "gegner_bekannt", art: "janein", frage: "Kennen Sie das Kennzeichen des anderen Fahrzeugs?" },
-  { id: "gegner_kz", schritt: "gegner", feld: "gegner_kennzeichen", art: "kennzeichen", frage: "Wie lautet das Kennzeichen des anderen?", wenn: () => antworten.gegner_bekannt === "ja" },
-  { id: "gegner_vers", schritt: "gegner", feld: "gegner_versicherung", art: "text", frage: "Wissen Sie, wo der andere versichert ist?",
-    unter: "Falls Sie Daten ausgetauscht haben. Sonst finden wir es heraus.", spaeter: "Weiß ich nicht", wenn: () => antworten.gegner_bekannt === "ja" },
-  { id: "gegnerfotos", schritt: "gegner", feld: "_gegnerfotos", art: "fotos", lokal: true, unterlage: "gegner",
-    frage: "Haben Sie ein Foto vom Kennzeichen oder vom Unfallbericht?", unter: "Auch ausgetauschte Zettel mit Namen und Versicherung helfen.", spaeter: "Habe ich nicht" },
 ];
 
 // ---- Anzeige --------------------------------------------------------------

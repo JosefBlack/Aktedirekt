@@ -101,6 +101,8 @@ TRESEN: tuple[Feld, ...] = (
     Feld("nachname", "text", pflicht=True, laenge=60),
     Feld("kennzeichen", "kennzeichen", pflicht=True),
     Feld("unfalldatum", "datum", pflicht=True),
+    Feld("unfallort", "text", laenge=200),
+    Feld("gegner_kennzeichen", "kennzeichen"),
 )
 
 @dataclass(frozen=True)
@@ -310,7 +312,7 @@ U_UNFALL: tuple[Unterlage, ...] = (
               "Rundum aus etwa drei Metern, dann jede beschädigte Stelle nah. Auch Innenraum und Gegenstände.", True, True),
     Unterlage("skizze", "Unfallskizze", "Skizze", "Gezeichnet oder als Foto einer Skizze auf Papier.", False, True),
     Unterlage("fahrzeugschein", "Fahrzeugschein", "Fahrzeugschein",
-              "Zulassungsbescheinigung Teil I – Vorder- und Rückseite.", True),
+              "Zulassungsbescheinigung Teil I – nur, wenn kein Gutachter beauftragt ist; sonst hat er ihn."),
     Unterlage("unfallort", "Fotos vom Unfall", "Unfallort",
               "Beide Fahrzeuge in ihrer Endstellung, das Kennzeichen des anderen, Spuren, Schilder und Ampeln.", True, True),
     Unterlage("gegner", "Kennzeichen und Unterlagen der Gegenseite", "Gegenseite",
@@ -538,9 +540,12 @@ class Aufnahme:
         v = self.vom_partner
         if not v:
             return {}
-        return {"unfall": {"unfalldatum": v.get("unfalldatum", "")},
-                "fahrzeug": {"kennzeichen": v.get("kennzeichen", "")},
-                "person": {"vorname": v.get("vorname", ""), "nachname": v.get("nachname", "")}}
+        vorbelegt = {"unfall": {"unfalldatum": v.get("unfalldatum", ""), "unfallort": v.get("unfallort", "")},
+                     "fahrzeug": {"kennzeichen": v.get("kennzeichen", "")},
+                     "person": {"vorname": v.get("vorname", ""), "nachname": v.get("nachname", "")}}
+        if v.get("gegner_kennzeichen"):
+            vorbelegt["gegner"] = {"gegner_bekannt": "ja", "gegner_kennzeichen": v["gegner_kennzeichen"]}
+        return vorbelegt
 
     @property
     def fallart(self) -> Fallart:

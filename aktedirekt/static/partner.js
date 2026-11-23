@@ -217,7 +217,8 @@ $("#tresen").addEventListener("submit", async (e) => {
       method: "POST",
       headers: { Authorization: "Bearer " + sitzung, "Content-Type": "application/json" },
       body: JSON.stringify({ vorname: form.vorname.value, nachname: form.nachname.value,
-        kennzeichen: form.kennzeichen.value, unfalldatum: form.unfalldatum.value }),
+        kennzeichen: form.kennzeichen.value, unfalldatum: form.unfalldatum.value,
+        unfallort: form.unfallort.value, gegner_kennzeichen: form.gegner_kennzeichen.value }),
     });
     const daten = await antwort.json();
     if (antwort.status === 401) abgemeldet("Bitte erneut anmelden.");

@@ -70,6 +70,10 @@
   <p class="fehler" data-fehler="kennzeichen"></p>
   <label>Wann war der Unfall?<input type="date" name="unfalldatum"></label>
   <p class="fehler" data-fehler="unfalldatum"></p>
+  <label>Wo war der Unfall? <span class="frei">falls bekannt</span><input type="text" name="unfallort" maxlength="200" autocomplete="off" placeholder="Straße, Ort"></label>
+  <p class="fehler" data-fehler="unfallort"></p>
+  <label>Kennzeichen des anderen Fahrzeugs <span class="frei">falls bekannt</span><input type="text" name="gegner_kennzeichen" maxlength="12" autocapitalize="characters" autocomplete="off"></label>
+  <p class="fehler" data-fehler="gegner_kennzeichen"></p>
   <button type="submit" class="haupt">Code für den Kunden erzeugen</button>
   <button type="button" class="neben" data-zur-liste>Abbrechen</button>
 </form>

@@ -10,7 +10,7 @@ const TITEL = { start: "Aktedirekt", unfall: "Der Unfall", fahrzeug: "Ihr Fahrze
   abschluss: "Unterschrift", fertig: "Ihr Fall" };
 const START = {
   unfall: { titel: "Unfall melden", dauer: "In etwa fünf Minuten nehmen wir Ihren Unfall auf.",
-    bereit: ["Kennzeichen des anderen Fahrzeugs", "Fotos vom Schaden und vom Unfallort", "Ihren Fahrzeugschein"] },
+    bereit: ["Kennzeichen des anderen Fahrzeugs", "Fotos vom Unfall"] },
   kuendigung: { titel: "Kündigung erhalten", dauer: "In etwa zehn Minuten nehmen wir Ihre Angaben auf.",
     bereit: ["das Kündigungsschreiben", "Ihren Arbeitsvertrag", "die letzten Lohnabrechnungen"] },
 };
